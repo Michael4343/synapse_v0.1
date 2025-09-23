@@ -1,192 +1,260 @@
-'use client';
+'use client'
 
-import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import Link from 'next/link';
+import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 
-interface SearchResult {
-  id: string;
-  title: string;
-  authors: string[];
-  source: string;
-  date: string;
-  abstract: string;
-  url: string;
+interface ApiSearchResult {
+  id: string
+  title: string
+  abstract: string | null
+  authors: string[]
+  year: number | null
+  venue: string | null
+  citationCount: number | null
+  semanticScholarId: string
+  arxivId: string | null
+  doi: string | null
+  url: string | null
+  source: string
 }
 
-function SearchPageContent() {
-  const searchParams = useSearchParams();
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [mounted, setMounted] = useState(false);
+const SKELETON_ITEMS = Array.from({ length: 6 })
+const TILE_ACTIONS = [
+  { id: 'compile', short: 'Compile', label: 'Compile related research' },
+  { id: 'favorite', short: 'Save', label: 'Favourite' },
+  { id: 'like', short: 'Appreciate', label: 'Appreciate' },
+  { id: 'share', short: 'Share', label: 'Share' },
+]
+
+function formatAuthors(authors: string[]) {
+  if (!authors.length) return 'Author information unavailable'
+  if (authors.length <= 3) return authors.join(', ')
+  return `${authors.slice(0, 3).join(', ')} +${authors.length - 3}`
+}
+
+function formatMeta(result: ApiSearchResult) {
+  const items: string[] = []
+
+  if (result.venue) {
+    items.push(result.venue)
+  }
+
+  if (result.year) {
+    items.push(String(result.year))
+  }
+
+  return items.join(' · ')
+}
+
+export default function SearchPage() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+
+  const [inputValue, setInputValue] = useState('')
+  const [activeQuery, setActiveQuery] = useState('')
+  const [results, setResults] = useState<ApiSearchResult[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [cached, setCached] = useState(false)
+
+  const performSearch = useCallback(async (term: string) => {
+    const trimmed = term.trim()
+
+    if (!trimmed) {
+      setActiveQuery('')
+      setResults([])
+      setCached(false)
+      return
+    }
+
+    setLoading(true)
+    setError('')
+    setCached(false)
+    setActiveQuery(trimmed)
+
+    try {
+      const response = await fetch('/api/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query: trimmed }),
+      })
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        const message = typeof payload.error === 'string' ? payload.error : 'Unable to fetch results right now.'
+        setError(message)
+        setCached(false)
+        return
+      }
+
+      const payload = await response.json()
+      setResults(Array.isArray(payload.results) ? payload.results : [])
+      setCached(Boolean(payload.cached))
+    } catch (networkError) {
+      console.error('Search request failed', networkError)
+      setError('We could not reach the search service. Please try again.')
+      setCached(false)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    setMounted(true);
-    const q = searchParams.get('q') || '';
-    setQuery(q);
-  }, [searchParams]);
+    const param = searchParams.get('q') ?? ''
+    setInputValue(param)
 
-  const mockResults: SearchResult[] = [
-    {
-      id: '1',
-      title: 'Attention Is All You Need',
-      authors: ['Ashish Vaswani', 'Noam Shazeer', 'Niki Parmar'],
-      source: 'arXiv',
-      date: '2017-06-12',
-      abstract: 'The dominant sequence transduction models are based on complex recurrent or convolutional neural networks...',
-      url: 'https://arxiv.org/abs/1706.03762'
+    if (param && param !== activeQuery) {
+      performSearch(param)
+    }
+  }, [searchParams, activeQuery, performSearch])
+
+  const handleSubmit = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      const trimmed = inputValue.trim()
+
+      if (!trimmed) {
+        setError('Enter a topic, paper title, or keywords to search.')
+        return
+      }
+
+      setError('')
+      router.replace(`/search?q=${encodeURIComponent(trimmed)}`, { scroll: false })
+      performSearch(trimmed)
     },
-    {
-      id: '2',
-      title: 'Deep Residual Learning for Image Recognition',
-      authors: ['Kaiming He', 'Xiangyu Zhang', 'Shaoqing Ren'],
-      source: 'arXiv',
-      date: '2015-12-10',
-      abstract: 'Deeper neural networks are more difficult to train. We present a residual learning framework...',
-      url: 'https://arxiv.org/abs/1512.03385'
-    }
-  ];
-
-  useEffect(() => {
-    if (query) {
-      setLoading(true);
-      setError('');
-
-      // Simulate API call delay
-      setTimeout(() => {
-        setResults(mockResults);
-        setLoading(false);
-      }, 1000);
-    }
-  }, [query]);
+    [inputValue, performSearch, router]
+  )
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Header */}
-      <header className="border-b border-gray-200">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-8">
-            <Link href="/" className="text-lg font-medium text-gray-900">
-              ←
-            </Link>
-
-            {/* Search Bar */}
-            <div className="flex-1">
-              <form className="flex" onSubmit={(e) => {
-                e.preventDefault();
-                const formData = new FormData(e.currentTarget);
-                const newQuery = formData.get('query') as string;
-                if (newQuery?.trim()) {
-                  window.location.href = `/search?q=${encodeURIComponent(newQuery.trim())}`;
-                }
-              }}>
-                <input
-                  type="text"
-                  name="query"
-                  key={query}
-                  defaultValue={query}
-                  placeholder="Search..."
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <button
-                  type="submit"
-                  className="px-6 py-2 bg-blue-600 text-white rounded-r-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  Search
-                </button>
-              </form>
-            </div>
+    <div className="min-h-screen bg-slate-50">
+      <header className="border-b border-slate-200 bg-white/80 backdrop-blur">
+        <div className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-4 sm:gap-6">
+          <Link
+            href="/"
+            className="rounded-full border border-slate-200 p-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+          >
+            ←
+          </Link>
+          <div>
+            <p className="text-sm font-medium text-slate-500">Synapse Explorer</p>
+            <h1 className="text-lg font-semibold text-slate-900">Search academic literature</h1>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        {!mounted ? (
-          <div className="text-center py-12">
-            <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-          </div>
-        ) : (
-          <div className="mb-6">
-            <p className="text-sm text-gray-600 mb-4">
-              {!loading && results.length > 0 && `${results.length} results for "${query}"`}
-            </p>
-          </div>
-        )}
+      <main className="mx-auto max-w-5xl px-4 py-8">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 sm:flex-row sm:items-center">
+          <input
+            type="text"
+            value={inputValue}
+            onChange={(event) => setInputValue(event.target.value)}
+            placeholder="Search papers, topics, or researchers"
+            className="w-full flex-1 rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+          />
+          <button
+            type="submit"
+            className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-100"
+          >
+            Search
+          </button>
+        </form>
 
-        {mounted && (
-          <>
-            {/* Loading State */}
-            {loading && (
-              <div className="text-center py-12">
-                <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-              </div>
-            )}
+        <section className="mt-6 space-y-3">
+          {activeQuery && (
+            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+              <span>
+                Showing results for <span className="font-medium text-slate-700">“{activeQuery}”</span>
+              </span>
+              {cached && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs uppercase tracking-wide text-slate-600">Cached</span>}
+            </div>
+          )}
 
-            {/* Error State */}
-            {error && (
-              <div className="text-red-600 text-sm mb-6">
-                {error}
-              </div>
-            )}
+          {error && (
+            <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
+              {error}
+            </div>
+          )}
+        </section>
 
-            {/* Results */}
-            {!loading && results.length > 0 && (
-              <div className="space-y-4">
-                {results.map((result) => (
-                  <div key={result.id} className="border-b border-gray-200 pb-4">
-                    <h3 className="text-lg font-medium text-blue-600 hover:text-blue-800 mb-1">
-                      <a href={result.url} target="_blank" rel="noopener noreferrer">
-                        {result.title}
-                      </a>
-                    </h3>
-                    <div className="text-sm text-gray-600 mb-2">
-                      {result.authors.join(', ')} · {result.date}
-                    </div>
-                    <p className="text-gray-700 text-sm">
-                      {result.abstract}
-                    </p>
+        <section className="mt-6">
+          {loading ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {SKELETON_ITEMS.map((_, index) => (
+                <div
+                  key={index}
+                  className="h-48 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+                >
+                  <div className="h-6 w-3/4 animate-pulse rounded bg-slate-200" />
+                  <div className="mt-3 h-4 w-1/2 animate-pulse rounded bg-slate-200" />
+                  <div className="mt-6 space-y-2">
+                    <div className="h-3 w-full animate-pulse rounded bg-slate-100" />
+                    <div className="h-3 w-5/6 animate-pulse rounded bg-slate-100" />
+                    <div className="h-3 w-2/3 animate-pulse rounded bg-slate-100" />
                   </div>
-                ))}
-              </div>
-            )}
+                </div>
+              ))}
+            </div>
+          ) : results.length > 0 ? (
+            <div className="space-y-4">
+              {results.map((result) => (
+                <article
+                  key={result.id}
+                  className="group flex h-full flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <div>
+                    <a
+                      href={result.url ?? '#'}
+                      target={result.url ? '_blank' : undefined}
+                      rel={result.url ? 'noopener noreferrer' : undefined}
+                      className="block text-base font-semibold text-slate-900 transition group-hover:text-blue-700"
+                    >
+                      {result.title}
+                    </a>
+                    <p className="mt-3 text-sm text-slate-600">
+                      {formatAuthors(result.authors)}
+                    </p>
+                    {formatMeta(result) && (
+                      <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-500">
+                        {formatMeta(result)}
+                      </p>
+                    )}
+                    {/* Abstract hidden for list layout */}
+                  </div>
 
-            {/* No Results */}
-            {!loading && results.length === 0 && query && (
-              <div className="text-center py-12">
-                <p className="text-gray-600">No results found</p>
-              </div>
-            )}
-          </>
-        )}
+                  <div className="mt-4 grid w-full gap-2 sm:grid-cols-2">
+                    {TILE_ACTIONS.map((action) => (
+                      <button
+                        key={action.id}
+                        type="button"
+                        className="flex items-center justify-between rounded-xl border border-slate-200/70 bg-white px-4 py-2 text-xs font-semibold text-slate-900 shadow-[0px_4px_12px_rgba(71,85,105,0.12)] transition hover:-translate-y-0.5 hover:border-slate-300"
+                        onClick={() => {
+                          console.log(`${action.label} clicked for`, result.id)
+                        }}
+                      >
+                        <span>{action.short}</span>
+                        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-medium tracking-wide text-slate-600">
+                          beta
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : activeQuery ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center text-sm text-slate-500">
+              No results yet. Try refining your keywords or searching for a different topic.
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center text-sm text-slate-500">
+              Start by entering a topic above to explore the latest papers.
+            </div>
+          )}
+        </section>
       </main>
     </div>
-  );
-}
-
-export default function SearchPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-white">
-        <header className="border-b border-gray-200">
-          <div className="max-w-4xl mx-auto px-4 py-4">
-            <div className="flex items-center gap-8">
-              <Link href="/" className="text-lg font-medium text-gray-900">
-                ←
-              </Link>
-            </div>
-          </div>
-        </header>
-        <main className="max-w-4xl mx-auto px-4 py-8">
-          <div className="text-center py-12">
-            <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-          </div>
-        </main>
-      </div>
-    }>
-      <SearchPageContent />
-    </Suspense>
-  );
+  )
 }

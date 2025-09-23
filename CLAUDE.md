@@ -140,17 +140,29 @@ Building a Next.js + Supabase academic research aggregation platform that allows
 ### Current Directory Structure
 ```
 /synapse v0.1/
-├── CLAUDE.md                  # This file - project guidance
-├── academic_repos.md          # API availability reference
-└── /plan/                     # Stage-based development plan
-    ├── README.md              # Plan overview and progress tracking
-    ├── stage-1-foundation.md  # Project setup and infrastructure
-    ├── stage-2-search-core.md # Basic search implementation
-    ├── stage-3-user-interface.md # Frontend and UX
-    ├── stage-4-user-features.md # Authentication and saved searches
-    ├── stage-5-notifications.md # Email updates system
-    ├── stage-6-optimization.md # Performance and multi-API
-    └── acceptance-criteria.md  # Testing requirements
+├── AGENTS.md                     # Collaboration guardrails for all agents
+├── CLAUDE.md                     # This file - project guidance
+├── academic_repos.md             # API availability reference
+├── semantic_scholar.md           # Semantic Scholar endpoint quick reference
+├── /plan/                        # Stage-based development plan
+│   ├── README.md                 # Plan overview and progress tracking
+│   ├── stage-1-foundation.md     # Project setup and infrastructure
+│   ├── stage-2-search-core.md    # Basic search implementation
+│   ├── stage-3-user-interface.md # Frontend and UX
+│   ├── stage-4-user-features.md  # Authentication and saved searches
+│   ├── stage-5-notifications.md  # Email updates system
+│   ├── stage-6-optimization.md   # Performance and multi-API
+│   └── acceptance-criteria.md    # Testing requirements
+└── /simple-search/               # Next.js + Supabase application
+    ├── database/schema.sql       # Supabase schema (search queries/results)
+    ├── package.json              # App dependencies and scripts
+    └── src/
+        ├── app/
+        │   ├── api/search/route.ts   # Supabase-backed Semantic Scholar proxy
+        │   └── search/page.tsx       # Keyword search UI with live tiles
+        └── lib/
+            ├── supabase.ts           # Browser client
+            └── supabase-server.ts    # Service-role client for server routes
 ```
 
 ### Development Approach
@@ -162,6 +174,13 @@ Building a Next.js + Supabase academic research aggregation platform that allows
 4. **Stage 4: User Features** - Authentication and saved searches
 5. **Stage 5: Notifications** - Email update system
 6. **Stage 6: Optimization** - Multi-API integration and performance
+
+### Search Backend Integration (v0.1)
+- `/api/search` proxies Semantic Scholar through Supabase: it checks cached entries, fetches fresh data when needed, and persists responses for reuse.
+- Environment variables required: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, optional `SEMANTIC_SCHOLAR_API_KEY` for higher request quotas, and optional `SEMANTIC_SCHOLAR_USER_AGENT` (defaults to a generic contact string).
+- Cached results remain fresh for 6 hours; stale data is returned if the upstream API fails so the UI always renders something.
+- Tile feed renders in `simple-search/src/app/search/page.tsx`, using `/api/search` to populate cards under the search bar.
+- Supabase schema lives in `simple-search/database/schema.sql`; keep RLS policies aligned with anonymous read/write expectations until auth lands.
 
 ### API Integration Priority
 1. **arXiv** (Stage 2): Free, no auth, 3s rate limit
