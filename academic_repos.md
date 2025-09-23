@@ -1,0 +1,19 @@
+# Table 2: API Availability Across Major Academic and Patent Platforms
+
+The following table provides a strategic overview to guide the phased integration of additional platforms. It helps identify low-hanging fruit (open APIs) and long-term challenges (subscription-based APIs), enabling a data-driven development roadmap.
+
+| Platform       | Official API Availability | Access Model                           | Data Type Available                                | Key Challenge/Consideration                                                                 |
+|----------------|----------------------------|----------------------------------------|----------------------------------------------------|---------------------------------------------------------------------------------------------|
+| Google Scholar | No                         | Third-Party "Scraping API" (Paid)       | Metadata, Abstracts, Citations                     | High cost, reliance on third-party provider.                                                |
+| bioRxiv        | Yes                        | Free/Open, S3 (Requester Pays)          | Metadata, Abstracts, Full-Text (TDM)               | Requires building a custom ingestion pipeline.                                              |
+| medRxiv        | Yes                        | Free/Open, S3 (Requester Pays)          | Metadata, Abstracts, Full-Text (TDM)               | Shares infrastructure with bioRxiv; requires custom ingestion pipeline.                     |
+| arXiv          | Yes                        | Free/Open (No API Key)                  | Metadata, Abstracts, Full-Text                     | Respecting the 3-second delay between requests is crucial.                                   |
+| PubMed         | Yes (E-utilities)          | Free (API Key for higher rates)         | Metadata, Abstracts, Full-Text (PMC)               | Complex API structure; requires careful adherence to usage policies.                        |
+| Scopus (Elsevier) | Yes                     | Institutional Subscription Required     | Metadata, Abstracts, Citations                     | Access is a significant cost barrier; requires institutional partnership.                   |
+| IEEE Xplore    | Yes                        | Free (API Key Required)                 | Metadata, Abstracts, Full-Text (OA)                | Rate limits are specified during registration and must be adhered to.                       |
+| Springer Nature | Yes                       | Free Tier (Rate Limited), Paid Tiers    | Metadata, Abstracts, Full-Text (OA)                | Free tier is limited to 500 requests/day.                                                   |
+| JSTOR          | Deprecated/Limited         | No public search API; data via email    | Metadata, Usage Data                               | No direct API for searching content; requires manual setup of email reports.                |
+| Google Patents | No                         | Third-Party "Scraping API" (Paid)       | Metadata, Abstracts, Citations, Full Documents     | High cost, reliance on third-party provider.                                                |
+| USPTO          | Yes                        | Free (API Key Required)                 | Full patent data (metadata, file wrapper, assignments) | Multiple distinct APIs for different data types.                                            |
+| EPO (Open Patent Services) | Yes            | Freemium (Free tier up to 4GB/week)     | Bibliographic data, legal status, full-text, images | Requires OAuth2 authentication; usage-based tier system.                                    |
+| WIPO           | Yes (as a catalog)         | Varies by IP Office (Often Free w/ API Key) | Varies (Bibliographic, Legal Status, etc.)       | Portal to many national APIs, each with its own rules.                                      |
