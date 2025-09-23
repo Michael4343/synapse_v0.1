@@ -48,7 +48,7 @@ const SAMPLE_PAPERS: ApiSearchResult[] = [
     citationCount: 42156,
     semanticScholarId: 'sample-2',
     arxivId: '2005.14165',
-    doi: null,
+    doi: '10.48550/arXiv.2005.14165',
     url: 'https://arxiv.org/abs/2005.14165',
     source: 'sample_data'
   },
@@ -76,21 +76,26 @@ const SAMPLE_PAPERS: ApiSearchResult[] = [
     citationCount: 68431,
     semanticScholarId: 'sample-4',
     arxivId: '1810.04805',
-    doi: null,
+    doi: '10.48550/arXiv.1810.04805',
     url: 'https://arxiv.org/abs/1810.04805',
     source: 'sample_data'
   }
 ]
 const TILE_ACTIONS: Array<{
-  id: 'compile' | 'save' | 'rate' | 'share'
+  id: 'compile-methods' | 'compile-claims' | 'save' | 'rate' | 'share'
   label: string
   disabled?: boolean
   description?: string
 }> = [
   {
-    id: 'compile',
-    label: 'Compile',
-    description: 'Bundle this paper with supporting literature.',
+    id: 'compile-methods',
+    label: 'Compile Similar Methods',
+    description: 'Discover and bundle papers that share methodological approaches.',
+  },
+  {
+    id: 'compile-claims',
+    label: 'Compile Similar Research Claims',
+    description: 'Collect papers that make comparable findings or claims.',
   },
   {
     id: 'save',
@@ -124,7 +129,6 @@ const ACTION_ITEM_INTERACTIVE_CLASSES = 'cursor-pointer hover:-translate-y-0.5 h
 const ACTION_ITEM_DISABLED_CLASSES = 'cursor-not-allowed opacity-70';
 const ACTION_LABEL_CLASSES = 'text-sm font-semibold text-slate-900';
 const ACTION_DESCRIPTION_CLASSES = 'text-xs leading-relaxed text-slate-500';
-const ACTION_STATUS_CLASSES = 'text-[10px] font-medium uppercase tracking-wide text-slate-400';
 const FEED_LOADING_WRAPPER_CLASSES = 'relative flex flex-col gap-3';
 const FEED_SPINNER_CLASSES = 'inline-block h-5 w-5 animate-spin rounded-full border-2 border-sky-500 border-t-transparent';
 const FEED_LOADING_PILL_CLASSES = 'inline-flex items-center gap-2 self-start rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-600 shadow-sm';
@@ -406,7 +410,7 @@ export default function Home() {
                   />
                   <span>Research</span>
                 </label>
-                <label className={FILTER_CHECKBOX_DISABLED_LABEL_CLASSES}>
+                <label className={FILTER_CHECKBOX_DISABLED_LABEL_CLASSES} title="Coming soon">
                   <input
                     type="checkbox"
                     checked={grantsChecked}
@@ -417,7 +421,7 @@ export default function Home() {
                   />
                   <span>Grants</span>
                 </label>
-                <label className={FILTER_CHECKBOX_DISABLED_LABEL_CLASSES}>
+                <label className={FILTER_CHECKBOX_DISABLED_LABEL_CLASSES} title="Coming soon">
                   <input
                     type="checkbox"
                     checked={patentsChecked}
@@ -507,7 +511,7 @@ export default function Home() {
                 <div className="space-y-4">
                   <div className="rounded-xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-4 text-center">
                     <p className="text-sm font-semibold text-sky-700">Featured Research</p>
-                    <p className="text-xs text-sky-600 mt-1">Explore groundbreaking papers to get started</p>
+                    <p className="text-xs text-sky-600 mt-1">Explore groundbreaking papers to get started. Register to get your personalised resaerch feed!</p>
                   </div>
                   <div className="space-y-3">
                     {SAMPLE_PAPERS.map((result) => {
@@ -530,9 +534,6 @@ export default function Home() {
                           <div className="space-y-2">
                             <div className="flex items-center justify-between">
                               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Featured Paper</p>
-                              <span className="text-[10px] font-medium uppercase tracking-wide text-sky-600 bg-sky-50 px-2 py-1 rounded-full">
-                                Sign up to save
-                              </span>
                             </div>
                             <h3 className="text-lg font-semibold text-slate-900">{result.title}</h3>
                             <p className="text-sm text-slate-600">{formatAuthors(result.authors)}</p>
@@ -575,9 +576,10 @@ export default function Home() {
                     <div className="flex h-full flex-col gap-2">
                       <span className={ACTION_LABEL_CLASSES}>{action.label}</span>
                       {action.description && (
-                        <span className={ACTION_DESCRIPTION_CLASSES}>{action.description}</span>
+                        <span className={`${ACTION_DESCRIPTION_CLASSES} ${isDisabled ? 'text-slate-400' : ''}`}>
+                          {action.description}
+                        </span>
                       )}
-                      {isDisabled && <span className={ACTION_STATUS_CLASSES}>Coming soon</span>}
                     </div>
                   )
 
@@ -587,6 +589,7 @@ export default function Home() {
                         key={action.id}
                         className={`${ACTION_ITEM_BASE_CLASSES} ${ACTION_ITEM_DISABLED_CLASSES}`}
                         aria-disabled="true"
+                        title="Coming soon"
                       >
                         {content}
                       </div>
@@ -599,7 +602,7 @@ export default function Home() {
                       type="button"
                       className={`${ACTION_ITEM_BASE_CLASSES} ${ACTION_ITEM_INTERACTIVE_CLASSES}`}
                       onClick={() => {
-                        if (action.id === 'compile') {
+                        if (action.id === 'compile-methods' || action.id === 'compile-claims') {
                           setShowOnboarding(true)
                           return
                         }
@@ -638,12 +641,6 @@ export default function Home() {
                       >
                         DOI: {selectedPaper.doi}
                       </a>
-                    </p>
-                  )}
-                  {selectedPaper.arxivId && (
-                    <p className="flex flex-wrap items-baseline gap-2">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">arXiv</span>
-                      <span className="text-sm font-semibold text-slate-700">{selectedPaper.arxivId}</span>
                     </p>
                   )}
                 </div>

@@ -11,6 +11,8 @@ interface UseAuthFormState {
   academicWebsite?: string
   loading: boolean
   error: string
+  success: string
+  isPasswordResetMode?: boolean
 }
 
 interface UseAuthFormActions {
@@ -20,7 +22,10 @@ interface UseAuthFormActions {
   setOrcidId?: (orcidId: string) => void
   setAcademicWebsite?: (website: string) => void
   setError: (error: string) => void
+  setSuccess: (success: string) => void
   clearError: () => void
+  clearSuccess: () => void
+  clearMessages: () => void
   handleEmailPasswordLogin: (e: React.FormEvent) => Promise<void>
   handleEmailPasswordSignup: (e: React.FormEvent) => Promise<void>
   handleGoogleAuth: () => Promise<void>
@@ -37,8 +42,44 @@ export function useAuthForm(mode: 'login' | 'signup' = 'login'): [UseAuthFormSta
   const [academicWebsite, setAcademicWebsite] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
 
   const clearError = () => setError('')
+  const clearSuccess = () => setSuccess('')
+  const clearMessages = () => {
+    setError('')
+    setSuccess('')
+  }
+
+  // Helper function to create user-friendly error messages
+  const getErrorMessage = (error: any): string => {
+    const message = error?.message || error || 'An unexpected error occurred'
+
+    // Convert common Supabase errors to user-friendly messages
+    if (message.includes('Invalid login credentials')) {
+      return 'Invalid email or password. Please check your credentials and try again.'
+    }
+    if (message.includes('Email not confirmed')) {
+      return 'Please check your email and click the confirmation link before signing in.'
+    }
+    if (message.includes('User already registered')) {
+      return 'An account with this email already exists. Try signing in instead.'
+    }
+    if (message.includes('Password should be at least')) {
+      return 'Password must be at least 6 characters long.'
+    }
+    if (message.includes('Unable to validate email address')) {
+      return 'Please enter a valid email address.'
+    }
+    if (message.includes('signups not allowed')) {
+      return 'New registrations are temporarily disabled. Please try again later.'
+    }
+    if (message.includes('Email rate limit exceeded')) {
+      return 'Too many emails sent. Please wait a few minutes before trying again.'
+    }
+
+    return message
+  }
 
   const handleEmailPasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -48,15 +89,17 @@ export function useAuthForm(mode: 'login' | 'signup' = 'login'): [UseAuthFormSta
     }
 
     setLoading(true)
-    setError('')
+    clearMessages()
 
     const { error: authError } = await signIn(email, password)
 
     if (authError) {
-      setError(authError.message || 'Failed to sign in')
+      setError(getErrorMessage(authError))
+      setLoading(false)
+    } else {
+      setSuccess('Successfully signed in! Welcome back.')
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   const handleEmailPasswordSignup = async (e: React.FormEvent) => {
@@ -77,7 +120,7 @@ export function useAuthForm(mode: 'login' | 'signup' = 'login'): [UseAuthFormSta
     }
 
     setLoading(true)
-    setError('')
+    clearMessages()
 
     const profileData = {
       orcidId: orcidId.trim() || null,
@@ -87,9 +130,9 @@ export function useAuthForm(mode: 'login' | 'signup' = 'login'): [UseAuthFormSta
     const { error: authError } = await signUp(email, password, profileData)
 
     if (authError) {
-      setError(authError.message || 'Failed to create account')
+      setError(getErrorMessage(authError))
     } else {
-      setError('')
+      setSuccess('Account created successfully! You can now start exploring academic research.')
     }
 
     setLoading(false)
@@ -97,12 +140,12 @@ export function useAuthForm(mode: 'login' | 'signup' = 'login'): [UseAuthFormSta
 
   const handleGoogleAuth = async () => {
     setLoading(true)
-    setError('')
+    clearMessages()
 
     const { error: authError } = await signInWithGoogle()
 
     if (authError) {
-      setError(authError.message || 'Failed to sign in with Google')
+      setError(getErrorMessage(authError))
       setLoading(false)
     }
     // Note: Don't set loading to false for Google OAuth as it redirects
@@ -115,15 +158,14 @@ export function useAuthForm(mode: 'login' | 'signup' = 'login'): [UseAuthFormSta
     }
 
     setLoading(true)
-    setError('')
+    clearMessages()
 
     const { error: authError } = await resetPassword(email)
 
     if (authError) {
-      setError(authError.message || 'Failed to send reset email')
+      setError(getErrorMessage(authError))
     } else {
-      setError('')
-      // You can add success handling here
+      setSuccess(`Password reset link sent to ${email}. Please check your inbox and spam folder.`)
     }
 
     setLoading(false)
@@ -138,7 +180,8 @@ export function useAuthForm(mode: 'login' | 'signup' = 'login'): [UseAuthFormSta
       academicWebsite
     }),
     loading,
-    error
+    error,
+    success
   }
 
   const actions: UseAuthFormActions = {
@@ -150,7 +193,10 @@ export function useAuthForm(mode: 'login' | 'signup' = 'login'): [UseAuthFormSta
       setAcademicWebsite
     }),
     setError,
+    setSuccess,
     clearError,
+    clearSuccess,
+    clearMessages,
     handleEmailPasswordLogin,
     handleEmailPasswordSignup,
     handleGoogleAuth,
