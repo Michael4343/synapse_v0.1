@@ -167,12 +167,33 @@ export default function SearchPage() {
           </button>
         </form>
 
+        <div className="mt-4 flex flex-wrap gap-3">
+          <span className="text-sm text-slate-500">Include:</span>
+          <button
+            type="button"
+            className="text-sm font-medium text-blue-600 underline decoration-blue-600/30 decoration-2 underline-offset-4 transition hover:decoration-blue-600"
+          >
+            Research
+          </button>
+          <button
+            type="button"
+            className="text-sm font-medium text-slate-400 transition hover:text-slate-600"
+          >
+            Grants
+          </button>
+          <button
+            type="button"
+            className="text-sm font-medium text-slate-400 transition hover:text-slate-600"
+          >
+            Patents
+          </button>
+        </div>
+
         <section className="mt-6 space-y-3">
           {activeQuery && (
-            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
-              <span>
-                Showing results for <span className="font-medium text-slate-700">“{activeQuery}”</span>
-              </span>
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-lg font-semibold text-slate-900">{activeQuery}</h2>
+              <span className="text-sm text-slate-500">{results.length} results</span>
               {cached && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs uppercase tracking-wide text-slate-600">Cached</span>}
             </div>
           )}
