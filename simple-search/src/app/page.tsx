@@ -1,6 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useAuth } from '../lib/auth-context';
+import { useAuthModal, getUserDisplayName } from '../lib/auth-hooks';
+import { AuthModal } from '../components/auth-modal';
 
 interface ApiSearchResult {
   id: string
@@ -18,16 +21,95 @@ interface ApiSearchResult {
 }
 
 const FEED_SKELETON_ITEMS = Array.from({ length: 6 })
+
+// Sample papers to show in default feed
+const SAMPLE_PAPERS: ApiSearchResult[] = [
+  {
+    id: 'sample-1',
+    title: 'Attention Is All You Need',
+    abstract: 'The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.',
+    authors: ['Ashish Vaswani', 'Noam Shazeer', 'Niki Parmar', 'Jakob Uszkoreit'],
+    year: 2017,
+    venue: 'NeurIPS',
+    citationCount: 89247,
+    semanticScholarId: 'sample-1',
+    arxivId: '1706.03762',
+    doi: '10.48550/arXiv.1706.03762',
+    url: 'https://arxiv.org/abs/1706.03762',
+    source: 'sample_data'
+  },
+  {
+    id: 'sample-2',
+    title: 'Language Models are Few-Shot Learners',
+    abstract: 'Recent work has demonstrated substantial gains on many NLP tasks and benchmarks by pre-training on a large corpus of text followed by fine-tuning on a specific task. While typically task-agnostic in architecture, this method still requires task-specific fine-tuning datasets of thousands or tens of thousands of examples.',
+    authors: ['Tom B. Brown', 'Benjamin Mann', 'Nick Ryder', 'Melanie Subbiah'],
+    year: 2020,
+    venue: 'NeurIPS',
+    citationCount: 42156,
+    semanticScholarId: 'sample-2',
+    arxivId: '2005.14165',
+    doi: null,
+    url: 'https://arxiv.org/abs/2005.14165',
+    source: 'sample_data'
+  },
+  {
+    id: 'sample-3',
+    title: 'Deep Residual Learning for Image Recognition',
+    abstract: 'Deeper neural networks are more difficult to train. We present a residual learning framework to ease the training of networks that are substantially deeper than those used previously. We explicitly reformulate the layers as learning residual functions with reference to the layer inputs, instead of learning unreferenced functions.',
+    authors: ['Kaiming He', 'Xiangyu Zhang', 'Shaoqing Ren', 'Jian Sun'],
+    year: 2016,
+    venue: 'CVPR',
+    citationCount: 156892,
+    semanticScholarId: 'sample-3',
+    arxivId: '1512.03385',
+    doi: '10.1109/CVPR.2016.90',
+    url: 'https://arxiv.org/abs/1512.03385',
+    source: 'sample_data'
+  },
+  {
+    id: 'sample-4',
+    title: 'BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding',
+    abstract: 'We introduce a new language representation model called BERT, which stands for Bidirectional Encoder Representations from Transformers. Unlike recent language representation models, BERT is designed to pre-train deep bidirectional representations from unlabeled text by jointly conditioning on both left and right context in all layers.',
+    authors: ['Jacob Devlin', 'Ming-Wei Chang', 'Kenton Lee', 'Kristina Toutanova'],
+    year: 2019,
+    venue: 'NAACL',
+    citationCount: 68431,
+    semanticScholarId: 'sample-4',
+    arxivId: '1810.04805',
+    doi: null,
+    url: 'https://arxiv.org/abs/1810.04805',
+    source: 'sample_data'
+  }
+]
 const TILE_ACTIONS: Array<{
-  id: 'compile' | 'favorite' | 'like' | 'share'
+  id: 'compile' | 'save' | 'rate' | 'share'
   label: string
-  icon?: string
   disabled?: boolean
+  description?: string
 }> = [
-  { id: 'compile', label: 'Compile', icon: '⚡' },
-  { id: 'favorite', label: 'Favourite', icon: '★', disabled: true },
-  { id: 'like', label: 'Like', icon: '👍', disabled: true },
-  { id: 'share', label: 'Share', icon: '↗', disabled: true },
+  {
+    id: 'compile',
+    label: 'Compile',
+    description: 'Bundle this paper with supporting literature.',
+  },
+  {
+    id: 'save',
+    label: 'Save to List',
+    disabled: true,
+    description: 'Keep papers in personal reading lists.',
+  },
+  {
+    id: 'rate',
+    label: 'Rate',
+    disabled: true,
+    description: 'Give papers a 1–5 rating to triage quickly.',
+  },
+  {
+    id: 'share',
+    label: 'Share',
+    disabled: true,
+    description: 'Send papers to collaborators in one click.',
+  },
 ]
 
 const SHELL_CLASSES = 'min-h-screen bg-slate-50 text-slate-900';
@@ -36,19 +118,33 @@ const DETAIL_SHELL_CLASSES = 'w-full rounded-3xl border border-slate-200 bg-whit
 const DETAIL_HERO_CLASSES = 'rounded-3xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-6 shadow-inner';
 const TILE_BASE_CLASSES = 'group relative flex cursor-pointer flex-col gap-5 overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 transition duration-200 hover:border-sky-300 hover:bg-sky-50 hover:shadow-[0_0_20px_rgba(2,132,199,0.15)]';
 const TILE_SELECTED_CLASSES = 'border-sky-400 bg-sky-50 shadow-[0_0_30px_rgba(2,132,199,0.2)]';
-const ACTION_ACTIVE_CLASSES = 'flex items-center gap-2 rounded-2xl border border-sky-300 bg-sky-100 px-4 py-2 text-xs font-semibold text-sky-700 transition hover:-translate-y-0.5 hover:bg-sky-200';
-const ACTION_DISABLED_CLASSES = 'flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-400';
+const ACTION_LIST_CLASSES = 'grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-4';
+const ACTION_ITEM_BASE_CLASSES = 'flex h-full flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition';
+const ACTION_ITEM_INTERACTIVE_CLASSES = 'cursor-pointer hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-[0_12px_30px_rgba(56,189,248,0.12)]';
+const ACTION_ITEM_DISABLED_CLASSES = 'cursor-not-allowed opacity-70';
+const ACTION_LABEL_CLASSES = 'text-sm font-semibold text-slate-900';
+const ACTION_DESCRIPTION_CLASSES = 'text-xs leading-relaxed text-slate-500';
+const ACTION_STATUS_CLASSES = 'text-[10px] font-medium uppercase tracking-wide text-slate-400';
+const FEED_LOADING_WRAPPER_CLASSES = 'relative flex flex-col gap-3';
+const FEED_SPINNER_CLASSES = 'inline-block h-5 w-5 animate-spin rounded-full border-2 border-sky-500 border-t-transparent';
+const FEED_LOADING_PILL_CLASSES = 'inline-flex items-center gap-2 self-start rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-600 shadow-sm';
 const SEARCH_CONTAINER_CLASSES = 'relative flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm';
 const SEARCH_INPUT_CLASSES = 'w-full bg-transparent px-5 py-3.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none';
 const SEARCH_BUTTON_CLASSES = 'mr-2 inline-flex items-center rounded-xl bg-sky-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-sky-400';
-const FILTER_ACTIVE_CLASSES = 'rounded-full border border-sky-300 bg-sky-100 px-4 py-2 text-xs font-semibold text-sky-700 shadow-[0_0_20px_rgba(56,189,248,0.15)]';
-const FILTER_INACTIVE_CLASSES = 'rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-500 transition hover:border-slate-300 hover:text-slate-700';
-const FILTER_DISABLED_CLASSES = 'flex items-center rounded-full border border-slate-200 bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-500';
-const DETAIL_PRIMARY_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-2xl bg-sky-500 px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(56,189,248,0.2)] transition hover:-translate-y-0.5 hover:bg-sky-400';
+const FILTER_BAR_CLASSES = 'flex flex-wrap gap-3 border-t border-slate-200 pt-4';
+const FILTER_CHECKBOX_LABEL_CLASSES = 'inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900';
+const FILTER_CHECKBOX_DISABLED_LABEL_CLASSES = 'inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-sm font-medium text-slate-400 opacity-80 cursor-not-allowed';
+const FILTER_CHECKBOX_INPUT_CLASSES = 'h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500';
+const FILTER_CHECKBOX_INPUT_DISABLED_CLASSES = 'text-slate-300 focus:ring-0';
+const RESULT_SUMMARY_CLASSES = 'flex flex-wrap items-baseline gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600';
+const DETAIL_METADATA_CLASSES = 'space-y-3 text-sm text-slate-600';
+const DOI_LINK_CLASSES = 'text-lg font-semibold text-sky-600 underline decoration-sky-300 underline-offset-4 transition hover:text-sky-700';
 const SIDEBAR_CARD_CLASSES = 'flex h-full flex-col gap-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
 const SIDEBAR_PRIMARY_BUTTON_CLASSES = 'flex items-center justify-center rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(56,189,248,0.2)] transition hover:-translate-y-0.5 hover:bg-sky-400';
 const SIDEBAR_SECONDARY_BUTTON_CLASSES = 'flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900';
-const LAYOUT_TOGGLE_BUTTON_CLASSES = 'inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900';
+const SIDEBAR_TOGGLE_BUTTON_CLASSES = 'inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900';
+const SIDEBAR_FLOAT_BUTTON_CLASSES = 'absolute left-0 top-0 -translate-x-1/2 -translate-y-1/2 z-20 hidden xl:inline-flex';
+const SEARCH_SPINNER_CLASSES = 'inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent';
 const ONBOARDING_SCRIM_CLASSES = 'absolute inset-0 bg-slate-900/40 backdrop-blur-sm';
 const ONBOARDING_PANEL_CLASSES = 'relative z-10 w-full max-w-2xl rounded-3xl border border-slate-200 bg-white p-8 shadow-[0_30px_80px_rgba(15,23,42,0.25)]';
 const ONBOARDING_CARD_CLASSES = 'rounded-2xl border border-slate-200 bg-slate-50 p-4';
@@ -76,6 +172,9 @@ function formatMeta(result: ApiSearchResult) {
 }
 
 export default function Home() {
+  const { user, signOut } = useAuth();
+  const authModal = useAuthModal();
+
   const [keywordQuery, setKeywordQuery] = useState('');
   const [researchChecked, setResearchChecked] = useState(true);
   const [grantsChecked, setGrantsChecked] = useState(false);
@@ -87,6 +186,17 @@ export default function Home() {
   const [selectedPaper, setSelectedPaper] = useState<ApiSearchResult | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(true);
+
+  // Set initial selected paper based on authentication status
+  useEffect(() => {
+    if (!user && !selectedPaper && keywordResults.length === 0 && !lastKeywordQuery) {
+      // Non-authenticated users start with first sample paper selected
+      setSelectedPaper(SAMPLE_PAPERS[0]);
+    } else if (user && selectedPaper?.source === 'sample_data' && keywordResults.length === 0) {
+      // Authenticated users don't start with sample papers selected
+      setSelectedPaper(null);
+    }
+  }, [user, selectedPaper, keywordResults.length, lastKeywordQuery]);
 
   const metaSummary = selectedPaper
     ? [
@@ -108,7 +218,7 @@ export default function Home() {
     if (!trimmed) {
       setKeywordError('Enter keywords to explore the literature feed.');
       setKeywordResults([]);
-      setSelectedPaper(null);
+      setSelectedPaper(!user ? SAMPLE_PAPERS[0] : null); // Return to default for non-auth users
       setLastKeywordQuery('');
       return;
     }
@@ -116,7 +226,7 @@ export default function Home() {
     if (!atLeastOneFilter) {
       setKeywordError('Select at least one source before searching.');
       setKeywordResults([]);
-      setSelectedPaper(null);
+      setSelectedPaper(!user ? SAMPLE_PAPERS[0] : null); // Return to default for non-auth users
       setLastKeywordQuery('');
       return;
     }
@@ -148,7 +258,7 @@ export default function Home() {
         const message = typeof payload.error === 'string' ? payload.error : 'Unable to fetch results right now.';
         setKeywordError(message);
         setKeywordResults([]);
-        setSelectedPaper(null);
+        setSelectedPaper(!user ? SAMPLE_PAPERS[0] : null); // Return to default for non-auth users
         return;
       }
 
@@ -165,7 +275,7 @@ export default function Home() {
       console.error('Keyword search failed', error);
       setKeywordError('We could not reach the search service. Please try again.');
       setKeywordResults([]);
-      setSelectedPaper(null);
+      setSelectedPaper(!user ? SAMPLE_PAPERS[0] : null); // Return to default for non-auth users
     } finally {
       setKeywordLoading(false);
     }
@@ -174,61 +284,90 @@ export default function Home() {
   return (
     <div className={SHELL_CLASSES}>
       <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-6 py-10">
-        <div className="flex justify-end xl:hidden">
+        <div className="relative flex flex-col gap-6 xl:flex-row">
           <button
             type="button"
             onClick={() => setSidebarVisible((prev) => !prev)}
             aria-pressed={sidebarVisible}
-            className={LAYOUT_TOGGLE_BUTTON_CLASSES}
+            aria-label={sidebarVisible ? 'Collapse library sidebar' : 'Expand library sidebar'}
+            className={`${SIDEBAR_TOGGLE_BUTTON_CLASSES} ${SIDEBAR_FLOAT_BUTTON_CLASSES}`}
           >
-            {sidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
+            {sidebarVisible ? '<' : '>'}
           </button>
-        </div>
-
-        <div className="relative flex flex-col gap-6 xl:flex-row">
           <aside
             className={`relative ${sidebarVisible ? 'flex' : 'hidden'} flex-col transition-all duration-300 ease-in-out xl:flex xl:overflow-visible ${sidebarVisible ? 'xl:basis-[20%] xl:max-w-[20%]' : 'xl:basis-0 xl:max-w-[0%]'}`}
           >
             <div
               className={`${SIDEBAR_CARD_CLASSES} ${sidebarVisible ? '' : 'hidden'} xl:flex xl:transition-all xl:duration-300 xl:ease-out ${sidebarVisible ? 'xl:translate-x-0 xl:opacity-100' : 'xl:pointer-events-none xl:-translate-x-full xl:opacity-0'}`}
             >
-              <div className="space-y-1">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">Account</span>
-                <h2 className="text-xl font-semibold text-slate-900">Your Library</h2>
-              </div>
-              <p className="text-sm text-slate-600">
-                Sign in to save research you want to revisit. Once favourites launch, they’ll live here by category.
-              </p>
-              <div className="flex flex-col gap-3">
-                <button type="button" className={SIDEBAR_PRIMARY_BUTTON_CLASSES}>
-                  Log in
-                </button>
-                <button type="button" className={SIDEBAR_SECONDARY_BUTTON_CLASSES}>
-                  Register
-                </button>
-              </div>
-              <p className="text-xs text-slate-500">
-                After we wire up the backend, your saved items will show up in custom categories in this sidebar.
-              </p>
+              {user ? (
+                <>
+                  <div className="space-y-1">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">Account</span>
+                    <h2 className="text-xl font-semibold text-slate-900">Welcome back</h2>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-semibold text-slate-900">{getUserDisplayName(user)}</p>
+                    <p className="text-xs text-slate-600 mt-1">{user.email}</p>
+                  </div>
+                  <p className="text-sm text-slate-600">
+                    Your saved research and preferences are ready. Favourites will appear here once available.
+                  </p>
+                  <div className="flex flex-col gap-3">
+                    <button
+                      type="button"
+                      onClick={signOut}
+                      className={SIDEBAR_SECONDARY_BUTTON_CLASSES}
+                    >
+                      Sign out
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-1">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">Account</span>
+                    <h2 className="text-xl font-semibold text-slate-900">Your Library</h2>
+                  </div>
+                <div className="flex flex-col gap-3">
+                  <button
+                    type="button"
+                    onClick={authModal.openLogin}
+                    className={SIDEBAR_PRIMARY_BUTTON_CLASSES}
+                  >
+                    Log in
+                  </button>
+                  <button
+                    type="button"
+                    onClick={authModal.openSignup}
+                    className={SIDEBAR_PRIMARY_BUTTON_CLASSES}
+                  >
+                    Register
+                  </button>
+                </div>
+                </>
+              )}
             </div>
-
-            <button
-              type="button"
-              onClick={() => setSidebarVisible((prev) => !prev)}
-              className="absolute top-1/2 right-[-18px] hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 xl:flex"
-              aria-label={sidebarVisible ? 'Collapse sidebar' : 'Expand sidebar'}
-            >
-              {sidebarVisible ? '<' : '>'}
-            </button>
           </aside>
 
           <section
             className={`min-w-0 transition-all duration-300 ${sidebarVisible ? 'xl:basis-[40%]' : 'xl:basis-[50%]'} xl:grow-0 ${FEED_CARD_CLASSES}`}
           >
             <header className="flex flex-col gap-6">
-              <div className="flex flex-col gap-1">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">Synapse</span>
-                <h1 className="text-3xl font-semibold text-slate-900">Research Feed</h1>
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">Synapse</span>
+                  <h1 className="text-3xl font-semibold text-slate-900">Research Feed</h1>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSidebarVisible((prev) => !prev)}
+                  aria-pressed={sidebarVisible}
+                  aria-label={sidebarVisible ? 'Hide library sidebar' : 'Show library sidebar'}
+                  className={`${SIDEBAR_TOGGLE_BUTTON_CLASSES} xl:hidden`}
+                >
+                  {sidebarVisible ? '<' : '>'}
+                </button>
               </div>
 
               <form onSubmit={handleKeywordSearch} className="relative">
@@ -242,36 +381,63 @@ export default function Home() {
                   />
                   <button
                     type="submit"
-                    className={SEARCH_BUTTON_CLASSES}
+                    className={`${SEARCH_BUTTON_CLASSES} ${keywordLoading ? 'cursor-not-allowed opacity-70' : ''}`}
+                    disabled={keywordLoading}
                   >
-                    Search
+                    {keywordLoading ? (
+                      <span className="flex items-center gap-2">
+                        <span className={SEARCH_SPINNER_CLASSES} aria-hidden="true" />
+                        <span>Loading</span>
+                      </span>
+                    ) : (
+                      'Search'
+                    )}
                   </button>
                 </div>
               </form>
 
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setResearchChecked((prev) => !prev)}
-                  aria-pressed={researchChecked}
-                  className={researchChecked ? FILTER_ACTIVE_CLASSES : FILTER_INACTIVE_CLASSES}
-                >
-                  Research
-                </button>
-                <span className={FILTER_DISABLED_CLASSES}>Grants</span>
-                <span className={FILTER_DISABLED_CLASSES}>Patents</span>
+              <div className={FILTER_BAR_CLASSES}>
+                <label className={FILTER_CHECKBOX_LABEL_CLASSES}>
+                  <input
+                    type="checkbox"
+                    checked={researchChecked}
+                    onChange={() => setResearchChecked((prev) => !prev)}
+                    className={FILTER_CHECKBOX_INPUT_CLASSES}
+                  />
+                  <span>Research</span>
+                </label>
+                <label className={FILTER_CHECKBOX_DISABLED_LABEL_CLASSES}>
+                  <input
+                    type="checkbox"
+                    checked={grantsChecked}
+                    onChange={() => setGrantsChecked((prev) => !prev)}
+                    disabled
+                    aria-disabled
+                    className={`${FILTER_CHECKBOX_INPUT_CLASSES} ${FILTER_CHECKBOX_INPUT_DISABLED_CLASSES}`}
+                  />
+                  <span>Grants</span>
+                </label>
+                <label className={FILTER_CHECKBOX_DISABLED_LABEL_CLASSES}>
+                  <input
+                    type="checkbox"
+                    checked={patentsChecked}
+                    onChange={() => setPatentsChecked((prev) => !prev)}
+                    disabled
+                    aria-disabled
+                    className={`${FILTER_CHECKBOX_INPUT_CLASSES} ${FILTER_CHECKBOX_INPUT_DISABLED_CLASSES}`}
+                  />
+                  <span>Patents</span>
+                </label>
               </div>
             </header>
 
             <div className="space-y-4">
               {lastKeywordQuery && !keywordError && (
-                <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.25em] text-slate-500">
-                  <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                    {lastKeywordQuery}
-                  </span>
-                  <span>
-                    {keywordResults.length} result{keywordResults.length === 1 ? '' : 's'}
-                  </span>
+                <div className={RESULT_SUMMARY_CLASSES}>
+                  <span>Showing</span>
+                  <span className="text-base font-semibold text-slate-900">{keywordResults.length}</span>
+                  <span>result{keywordResults.length === 1 ? '' : 's'} for</span>
+                  <span className="text-base font-semibold text-slate-900">"{lastKeywordQuery}"</span>
                 </div>
               )}
 
@@ -282,15 +448,24 @@ export default function Home() {
               )}
 
               {keywordLoading ? (
-                <div className="space-y-3">
-                  <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-slate-200/60 to-transparent animate-[shimmer_1.6s_infinite]" />
-                    <div className="px-6 py-8">
-                      <div className="h-5 w-1/3 rounded-full bg-slate-200/80" />
-                      <div className="mt-4 h-4 w-2/3 rounded-full bg-slate-200/60" />
-                      <div className="mt-3 h-3 w-1/2 rounded-full bg-slate-200/50" />
+                <div className={FEED_LOADING_WRAPPER_CLASSES}>
+                  <span className={FEED_LOADING_PILL_CLASSES}>
+                    <span className={FEED_SPINNER_CLASSES} aria-hidden="true" />
+                    <span>Fetching results…</span>
+                  </span>
+                  {FEED_SKELETON_ITEMS.slice(0, 3).map((_, index) => (
+                    <div
+                      key={index}
+                      className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white"
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-slate-200/60 to-transparent animate-[shimmer_1.6s_infinite]" />
+                      <div className="px-6 py-8">
+                        <div className="h-5 w-1/3 rounded-full bg-slate-200/80" />
+                        <div className="mt-4 h-4 w-2/3 rounded-full bg-slate-200/60" />
+                        <div className="mt-3 h-3 w-1/2 rounded-full bg-slate-200/50" />
+                      </div>
                     </div>
-                  </div>
+                  ))}
                 </div>
               ) : keywordResults.length > 0 ? (
                 <div className="space-y-3">
@@ -328,9 +503,52 @@ export default function Home() {
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-100 px-6 py-10 text-center text-sm text-slate-600">
                   Nothing surfaced for this query yet. Try refining keywords or toggling a different source.
                 </div>
+              ) : !user ? (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-4 text-center">
+                    <p className="text-sm font-semibold text-sky-700">Featured Research</p>
+                    <p className="text-xs text-sky-600 mt-1">Explore groundbreaking papers to get started</p>
+                  </div>
+                  <div className="space-y-3">
+                    {SAMPLE_PAPERS.map((result) => {
+                      const isSelected = selectedPaper?.id === result.id
+
+                      return (
+                        <article
+                          key={result.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setSelectedPaper(result)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              setSelectedPaper(result)
+                            }
+                          }}
+                          className={`${TILE_BASE_CLASSES} ${isSelected ? TILE_SELECTED_CLASSES : ''}`}
+                        >
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Featured Paper</p>
+                              <span className="text-[10px] font-medium uppercase tracking-wide text-sky-600 bg-sky-50 px-2 py-1 rounded-full">
+                                Sign up to save
+                              </span>
+                            </div>
+                            <h3 className="text-lg font-semibold text-slate-900">{result.title}</h3>
+                            <p className="text-sm text-slate-600">{formatAuthors(result.authors)}</p>
+                            {formatMeta(result) && (
+                              <p className="text-xs text-slate-500">{formatMeta(result)}</p>
+                            )}
+                          </div>
+                        </article>
+                      )
+                    })}
+                  </div>
+                </div>
               ) : (
                 <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">
-                  Start by searching for a topic above. You can drill into any result on the right-hand panel.
+                  <h3 className="text-lg font-semibold text-slate-700 mb-2">Your Personal Feed</h3>
+                  <p>Search for topics above to discover research papers. Your saved papers and preferences will appear here.</p>
                 </div>
               )}
             </div>
@@ -349,18 +567,38 @@ export default function Home() {
                 )}
               </div>
 
-              <div className="flex flex-wrap gap-3">
+
+              <div className={ACTION_LIST_CLASSES}>
                 {TILE_ACTIONS.map((action) => {
-                  const actionClass = action.disabled ? ACTION_DISABLED_CLASSES : ACTION_ACTIVE_CLASSES
+                  const isDisabled = Boolean(action.disabled)
+                  const content = (
+                    <div className="flex h-full flex-col gap-2">
+                      <span className={ACTION_LABEL_CLASSES}>{action.label}</span>
+                      {action.description && (
+                        <span className={ACTION_DESCRIPTION_CLASSES}>{action.description}</span>
+                      )}
+                      {isDisabled && <span className={ACTION_STATUS_CLASSES}>Coming soon</span>}
+                    </div>
+                  )
+
+                  if (isDisabled) {
+                    return (
+                      <div
+                        key={action.id}
+                        className={`${ACTION_ITEM_BASE_CLASSES} ${ACTION_ITEM_DISABLED_CLASSES}`}
+                        aria-disabled="true"
+                      >
+                        {content}
+                      </div>
+                    )
+                  }
 
                   return (
                     <button
                       key={action.id}
                       type="button"
-                      disabled={action.disabled}
-                      className={`flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-semibold transition ${actionClass}`}
+                      className={`${ACTION_ITEM_BASE_CLASSES} ${ACTION_ITEM_INTERACTIVE_CLASSES}`}
                       onClick={() => {
-                        if (action.disabled) return
                         if (action.id === 'compile') {
                           setShowOnboarding(true)
                           return
@@ -368,9 +606,7 @@ export default function Home() {
                         console.log(`${action.label} clicked for`, selectedPaper.id)
                       }}
                     >
-                      {action.icon && <span className="text-base">{action.icon}</span>}
-                      <span>{action.label}</span>
-                      {action.disabled && <span className="text-[10px] font-medium tracking-wide opacity-70">Soon</span>}
+                      {content}
                     </button>
                   )
                 })}
@@ -391,39 +627,27 @@ export default function Home() {
                   </p>
                 </div>
 
-                <div className="space-y-2 text-xs text-slate-600">
+                <div className={DETAIL_METADATA_CLASSES}>
                   {selectedPaper.doi && (
                     <p>
-                      <strong className="font-semibold text-slate-700">DOI:</strong> {selectedPaper.doi}
+                      <a
+                        href={`https://doi.org/${selectedPaper.doi}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={DOI_LINK_CLASSES}
+                      >
+                        DOI: {selectedPaper.doi}
+                      </a>
                     </p>
                   )}
                   {selectedPaper.arxivId && (
-                    <p>
-                      <strong className="font-semibold text-slate-700">arXiv:</strong> {selectedPaper.arxivId}
+                    <p className="flex flex-wrap items-baseline gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">arXiv</span>
+                      <span className="text-sm font-semibold text-slate-700">{selectedPaper.arxivId}</span>
                     </p>
                   )}
-                  <p>
-                    <strong className="font-semibold text-slate-700">Source:</strong> {selectedPaper.source.replace(/_/g, ' ')}
-                  </p>
                 </div>
               </section>
-
-              <div className="mt-auto">
-                {selectedPaper.url ? (
-                  <a
-                    href={selectedPaper.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={DETAIL_PRIMARY_BUTTON_CLASSES}
-                  >
-                    Open full paper
-                  </a>
-                ) : (
-                  <p className="text-sm text-slate-500">
-                    No external link available for this paper yet.
-                  </p>
-                )}
-              </div>
             </div>
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-slate-500">
@@ -506,6 +730,14 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={authModal.isOpen}
+        mode={authModal.mode}
+        onClose={authModal.close}
+        onSwitchMode={authModal.switchMode}
+      />
     </div>
   )
 }

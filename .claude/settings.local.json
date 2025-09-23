@@ -5,7 +5,10 @@
       "Bash(npm run dev:*)",
       "Bash(npm install)",
       "Bash(npx next dev:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Read(//mnt/c/Users/mickl/Desktop/synapse/**)",
+      "Bash(grep:*)",
+      "Bash(supabase db:*)"
     ],
     "deny": [],
     "ask": []
