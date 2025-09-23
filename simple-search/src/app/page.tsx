@@ -82,7 +82,7 @@ const SAMPLE_PAPERS: ApiSearchResult[] = [
   }
 ]
 const TILE_ACTIONS: Array<{
-  id: 'compile-methods' | 'compile-claims' | 'save' | 'rate' | 'share'
+  id: 'compile-methods' | 'compile-claims' | 'rate' | 'share'
   label: string
   disabled?: boolean
   description?: string
@@ -94,14 +94,8 @@ const TILE_ACTIONS: Array<{
   },
   {
     id: 'compile-claims',
-    label: 'Compile Similar Research Claims',
+    label: 'Compile Similar Claims',
     description: 'Collect papers that make comparable findings or claims.',
-  },
-  {
-    id: 'save',
-    label: 'Save to List',
-    disabled: true,
-    description: 'Keep papers in personal reading lists.',
   },
   {
     id: 'rate',
@@ -123,7 +117,7 @@ const DETAIL_SHELL_CLASSES = 'w-full rounded-3xl border border-slate-200 bg-whit
 const DETAIL_HERO_CLASSES = 'rounded-3xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-6 shadow-inner';
 const TILE_BASE_CLASSES = 'group relative flex cursor-pointer flex-col gap-5 overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 transition duration-200 hover:border-sky-300 hover:bg-sky-50 hover:shadow-[0_0_20px_rgba(2,132,199,0.15)]';
 const TILE_SELECTED_CLASSES = 'border-sky-400 bg-sky-50 shadow-[0_0_30px_rgba(2,132,199,0.2)]';
-const ACTION_LIST_CLASSES = 'grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-4';
+const ACTION_LIST_CLASSES = 'grid w-full gap-3 sm:grid-cols-2';
 const ACTION_ITEM_BASE_CLASSES = 'flex h-full flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition';
 const ACTION_ITEM_INTERACTIVE_CLASSES = 'cursor-pointer hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-[0_12px_30px_rgba(56,189,248,0.12)]';
 const ACTION_ITEM_DISABLED_CLASSES = 'cursor-not-allowed opacity-70';
@@ -135,9 +129,9 @@ const FEED_LOADING_PILL_CLASSES = 'inline-flex items-center gap-2 self-start rou
 const SEARCH_CONTAINER_CLASSES = 'relative flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm';
 const SEARCH_INPUT_CLASSES = 'w-full bg-transparent px-5 py-3.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none';
 const SEARCH_BUTTON_CLASSES = 'mr-2 inline-flex items-center rounded-xl bg-sky-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-sky-400';
-const FILTER_BAR_CLASSES = 'flex flex-wrap gap-3 border-t border-slate-200 pt-4';
-const FILTER_CHECKBOX_LABEL_CLASSES = 'inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900';
-const FILTER_CHECKBOX_DISABLED_LABEL_CLASSES = 'inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-sm font-medium text-slate-400 opacity-80 cursor-not-allowed';
+const FILTER_BAR_CLASSES = 'flex gap-2 border-t border-slate-200 pt-4 overflow-x-auto';
+const FILTER_CHECKBOX_LABEL_CLASSES = 'inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 whitespace-nowrap';
+const FILTER_CHECKBOX_DISABLED_LABEL_CLASSES = 'inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-100 px-2.5 py-2 text-xs font-medium text-slate-400 opacity-80 cursor-not-allowed whitespace-nowrap';
 const FILTER_CHECKBOX_INPUT_CLASSES = 'h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500';
 const FILTER_CHECKBOX_INPUT_DISABLED_CLASSES = 'text-slate-300 focus:ring-0';
 const RESULT_SUMMARY_CLASSES = 'flex flex-wrap items-baseline gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600';
@@ -149,11 +143,7 @@ const SIDEBAR_SECONDARY_BUTTON_CLASSES = 'flex items-center justify-center round
 const SIDEBAR_TOGGLE_BUTTON_CLASSES = 'inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900';
 const SIDEBAR_FLOAT_BUTTON_CLASSES = 'absolute left-0 top-0 -translate-x-1/2 -translate-y-1/2 z-20 hidden xl:inline-flex';
 const SEARCH_SPINNER_CLASSES = 'inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent';
-const ONBOARDING_SCRIM_CLASSES = 'absolute inset-0 bg-slate-900/40 backdrop-blur-sm';
-const ONBOARDING_PANEL_CLASSES = 'relative z-10 w-full max-w-2xl rounded-3xl border border-slate-200 bg-white p-8 shadow-[0_30px_80px_rgba(15,23,42,0.25)]';
-const ONBOARDING_CARD_CLASSES = 'rounded-2xl border border-slate-200 bg-slate-50 p-4';
-const ONBOARDING_DISMISS_CLASSES = 'rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900';
-const ONBOARDING_PRIMARY_CLASSES = 'rounded-xl bg-sky-500 px-4 py-2 text-xs font-semibold text-white shadow-[0_10px_25px_rgba(56,189,248,0.25)] transition hover:bg-sky-400';
+const DETAIL_SAVE_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-lg bg-sky-500 px-6 sm:px-8 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-[0_12px_30px_rgba(56,189,248,0.2)] transition hover:-translate-y-0.5 hover:bg-sky-400';
 
 function formatAuthors(authors: string[]) {
   if (!authors.length) return 'Author information unavailable'
@@ -183,12 +173,13 @@ export default function Home() {
   const [researchChecked, setResearchChecked] = useState(true);
   const [grantsChecked, setGrantsChecked] = useState(false);
   const [patentsChecked, setPatentsChecked] = useState(false);
+  const [newsChecked, setNewsChecked] = useState(false);
+  const [communityChecked, setCommunityChecked] = useState(false);
   const [keywordResults, setKeywordResults] = useState<ApiSearchResult[]>([]);
   const [keywordLoading, setKeywordLoading] = useState(false);
   const [keywordError, setKeywordError] = useState('');
   const [lastKeywordQuery, setLastKeywordQuery] = useState('');
   const [selectedPaper, setSelectedPaper] = useState<ApiSearchResult | null>(null);
-  const [showOnboarding, setShowOnboarding] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(true);
 
   // Set initial selected paper based on authentication status
@@ -213,6 +204,28 @@ export default function Home() {
         .filter(Boolean)
         .join(' • ')
     : '';
+
+  const handleSaveSelectedPaper = () => {
+    if (!selectedPaper) return;
+
+    if (!user) {
+      authModal.openSignup();
+      return;
+    }
+
+    console.log('Save to List clicked for', selectedPaper.id);
+  };
+
+  const handleCompileAction = (actionLabel: string) => {
+    if (!selectedPaper) return;
+
+    if (!user) {
+      authModal.openSignup();
+      return;
+    }
+
+    console.log(`${actionLabel} clicked for`, selectedPaper.id);
+  };
 
   const handleKeywordSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -432,6 +445,28 @@ export default function Home() {
                   />
                   <span>Patents</span>
                 </label>
+                <label className={FILTER_CHECKBOX_DISABLED_LABEL_CLASSES} title="Coming soon">
+                  <input
+                    type="checkbox"
+                    checked={newsChecked}
+                    onChange={() => setNewsChecked((prev) => !prev)}
+                    disabled
+                    aria-disabled
+                    className={`${FILTER_CHECKBOX_INPUT_CLASSES} ${FILTER_CHECKBOX_INPUT_DISABLED_CLASSES}`}
+                  />
+                  <span>News</span>
+                </label>
+                <label className={FILTER_CHECKBOX_DISABLED_LABEL_CLASSES} title="Coming soon">
+                  <input
+                    type="checkbox"
+                    checked={communityChecked}
+                    onChange={() => setCommunityChecked((prev) => !prev)}
+                    disabled
+                    aria-disabled
+                    className={`${FILTER_CHECKBOX_INPUT_CLASSES} ${FILTER_CHECKBOX_INPUT_DISABLED_CLASSES}`}
+                  />
+                  <span>Community</span>
+                </label>
               </div>
             </header>
 
@@ -511,7 +546,7 @@ export default function Home() {
                 <div className="space-y-4">
                   <div className="rounded-xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-4 text-center">
                     <p className="text-sm font-semibold text-sky-700">Featured Research</p>
-                    <p className="text-xs text-sky-600 mt-1">Explore groundbreaking papers to get started. Register to get your personalised resaerch feed!</p>
+                    <p className="text-xs text-sky-600 mt-1">Explore groundbreaking papers or register to get your personalised research feed!</p>
                   </div>
                   <div className="space-y-3">
                     {SAMPLE_PAPERS.map((result) => {
@@ -560,18 +595,35 @@ export default function Home() {
           >
             {selectedPaper ? (
               <div className="flex h-full flex-col gap-8">
-                <div className={DETAIL_HERO_CLASSES}>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-sky-600">Paper details</p>
-                  <h2 className="mt-3 text-2xl font-semibold text-slate-900">{selectedPaper.title}</h2>
-                {metaSummary && (
-                  <p className="mt-4 text-xs text-slate-600">{metaSummary}</p>
-                )}
-              </div>
+                <div className={`${DETAIL_HERO_CLASSES} flex flex-col gap-4`}>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-sky-600">Paper details</p>
+                    <button
+                      type="button"
+                      onClick={handleSaveSelectedPaper}
+                      className={DETAIL_SAVE_BUTTON_CLASSES}
+                    >
+                      Save to List
+                    </button>
+                  </div>
+                  <h2 className="text-2xl font-semibold text-slate-900">{selectedPaper.title}</h2>
+                  {metaSummary && (
+                    <p className="text-xs text-slate-600">{metaSummary}</p>
+                  )}
+                </div>
 
 
               <div className={ACTION_LIST_CLASSES}>
                 {TILE_ACTIONS.map((action) => {
                   const isDisabled = Boolean(action.disabled)
+                  const layoutClasses =
+                    action.id === 'compile-claims'
+                      ? 'sm:col-start-1 sm:row-start-2'
+                      : action.id === 'rate'
+                      ? 'sm:col-start-2 sm:row-start-1'
+                      : action.id === 'share'
+                      ? 'sm:col-start-2 sm:row-start-2'
+                      : ''
                   const content = (
                     <div className="flex h-full flex-col gap-2">
                       <span className={ACTION_LABEL_CLASSES}>{action.label}</span>
@@ -587,7 +639,7 @@ export default function Home() {
                     return (
                       <div
                         key={action.id}
-                        className={`${ACTION_ITEM_BASE_CLASSES} ${ACTION_ITEM_DISABLED_CLASSES}`}
+                        className={`${ACTION_ITEM_BASE_CLASSES} ${ACTION_ITEM_DISABLED_CLASSES} ${layoutClasses}`}
                         aria-disabled="true"
                         title="Coming soon"
                       >
@@ -600,10 +652,10 @@ export default function Home() {
                     <button
                       key={action.id}
                       type="button"
-                      className={`${ACTION_ITEM_BASE_CLASSES} ${ACTION_ITEM_INTERACTIVE_CLASSES}`}
+                      className={`${ACTION_ITEM_BASE_CLASSES} ${ACTION_ITEM_INTERACTIVE_CLASSES} ${layoutClasses}`}
                       onClick={() => {
                         if (action.id === 'compile-methods' || action.id === 'compile-claims') {
-                          setShowOnboarding(true)
+                          handleCompileAction(action.label)
                           return
                         }
                         console.log(`${action.label} clicked for`, selectedPaper.id)
@@ -657,77 +709,6 @@ export default function Home() {
           </aside>
         </div>
       </main>
-
-      {showOnboarding && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8">
-          <div
-            className={ONBOARDING_SCRIM_CLASSES}
-            onClick={() => setShowOnboarding(false)}
-          />
-          <div className={ONBOARDING_PANEL_CLASSES}>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-sky-500">
-                  Workflow preview
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold text-slate-900">
-                  Compile related research
-                </h2>
-                <p className="mt-3 text-sm text-slate-600">
-                  Soon you’ll be able to bundle this paper with supporting literature, export citations, and brief collaborators straight from Synapse.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowOnboarding(false)}
-                className="rounded-full border border-slate-200 p-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
-                aria-label="Close onboarding"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="mt-6 space-y-4 text-sm">
-              <div className={ONBOARDING_CARD_CLASSES}>
-                <h3 className="text-sm font-semibold text-slate-800">1. Connect context</h3>
-                <p className="mt-1 text-slate-600">
-                  Link ORCID, personal sites, or upload bibliographies to map your research footprint.
-                </p>
-              </div>
-              <div className={ONBOARDING_CARD_CLASSES}>
-                <h3 className="text-sm font-semibold text-slate-800">2. Generate collections</h3>
-                <p className="mt-1 text-slate-600">
-                  We’ll cluster related works, surface pivotal citations, and keep the feed live.
-                </p>
-              </div>
-              <div className={ONBOARDING_CARD_CLASSES}>
-                <h3 className="text-sm font-semibold text-slate-800">3. Share effortlessly</h3>
-                <p className="mt-1 text-slate-600">
-                  Export to your reference manager or send tailored digests to collaborators.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-8 flex flex-wrap items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setShowOnboarding(false)}
-                className={ONBOARDING_DISMISS_CLASSES}
-              >
-                Not now
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowOnboarding(false)}
-                className={ONBOARDING_PRIMARY_CLASSES}
-              >
-                Keep me posted
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Auth Modal */}
       <AuthModal
         isOpen={authModal.isOpen}
