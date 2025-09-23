@@ -20,15 +20,36 @@ interface ApiSearchResult {
 const FEED_SKELETON_ITEMS = Array.from({ length: 6 })
 const TILE_ACTIONS: Array<{
   id: 'compile' | 'favorite' | 'like' | 'share'
-  short: string
   label: string
+  icon?: string
   disabled?: boolean
 }> = [
-  { id: 'compile', short: 'Compile', label: 'Compile related research' },
-  { id: 'favorite', short: 'Save', label: 'Favourite', disabled: true },
-  { id: 'like', short: 'Appreciate', label: 'Appreciate', disabled: true },
-  { id: 'share', short: 'Share', label: 'Share', disabled: true },
+  { id: 'compile', label: 'Compile', icon: '⚡' },
+  { id: 'favorite', label: 'Favourite', icon: '★', disabled: true },
+  { id: 'like', label: 'Like', icon: '👍', disabled: true },
+  { id: 'share', label: 'Share', icon: '↗', disabled: true },
 ]
+
+const SHELL_CLASSES = 'min-h-screen bg-slate-50 text-slate-900';
+const FEED_CARD_CLASSES = 'space-y-8 rounded-3xl border border-slate-200 bg-white p-8 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
+const DETAIL_SHELL_CLASSES = 'w-full rounded-3xl border border-slate-200 bg-white p-8 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
+const DETAIL_HERO_CLASSES = 'rounded-3xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-6 shadow-inner';
+const TILE_BASE_CLASSES = 'group relative flex cursor-pointer flex-col gap-5 overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 transition duration-200 hover:border-sky-300 hover:bg-sky-50 hover:shadow-[0_0_20px_rgba(2,132,199,0.15)]';
+const TILE_SELECTED_CLASSES = 'border-sky-400 bg-sky-50 shadow-[0_0_30px_rgba(2,132,199,0.2)]';
+const ACTION_ACTIVE_CLASSES = 'flex items-center gap-2 rounded-2xl border border-sky-300 bg-sky-100 px-4 py-2 text-xs font-semibold text-sky-700 transition hover:-translate-y-0.5 hover:bg-sky-200';
+const ACTION_DISABLED_CLASSES = 'flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-400';
+const SEARCH_CONTAINER_CLASSES = 'relative flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm';
+const SEARCH_INPUT_CLASSES = 'w-full bg-transparent px-5 py-3.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none';
+const SEARCH_BUTTON_CLASSES = 'mr-2 inline-flex items-center rounded-xl bg-sky-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-sky-400';
+const FILTER_ACTIVE_CLASSES = 'rounded-full border border-sky-300 bg-sky-100 px-4 py-2 text-xs font-semibold text-sky-700 shadow-[0_0_20px_rgba(56,189,248,0.15)]';
+const FILTER_INACTIVE_CLASSES = 'rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-500 transition hover:border-slate-300 hover:text-slate-700';
+const FILTER_DISABLED_CLASSES = 'flex items-center rounded-full border border-slate-200 bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-500';
+const DETAIL_PRIMARY_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-2xl bg-sky-500 px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(56,189,248,0.2)] transition hover:-translate-y-0.5 hover:bg-sky-400';
+const ONBOARDING_SCRIM_CLASSES = 'absolute inset-0 bg-slate-900/40 backdrop-blur-sm';
+const ONBOARDING_PANEL_CLASSES = 'relative z-10 w-full max-w-2xl rounded-3xl border border-slate-200 bg-white p-8 shadow-[0_30px_80px_rgba(15,23,42,0.25)]';
+const ONBOARDING_CARD_CLASSES = 'rounded-2xl border border-slate-200 bg-slate-50 p-4';
+const ONBOARDING_DISMISS_CLASSES = 'rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900';
+const ONBOARDING_PRIMARY_CLASSES = 'rounded-xl bg-sky-500 px-4 py-2 text-xs font-semibold text-white shadow-[0_10px_25px_rgba(56,189,248,0.25)] transition hover:bg-sky-400';
 
 function formatAuthors(authors: string[]) {
   if (!authors.length) return 'Author information unavailable'
@@ -61,6 +82,18 @@ export default function Home() {
   const [lastKeywordQuery, setLastKeywordQuery] = useState('');
   const [selectedPaper, setSelectedPaper] = useState<ApiSearchResult | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+
+  const metaSummary = selectedPaper
+    ? [
+        selectedPaper.venue,
+        selectedPaper.year,
+        typeof selectedPaper.citationCount === 'number'
+          ? `${selectedPaper.citationCount} citation${selectedPaper.citationCount === 1 ? '' : 's'}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(' • ')
+    : '';
 
   const handleKeywordSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -134,291 +167,233 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-      <main className="flex h-screen max-md:flex-col">
-        {/* Left Pane - Research Feed */}
-        <div className="flex-1 bg-white border-r border-gray-200 p-6 max-md:border-r-0 max-md:border-b shadow-sm overflow-y-auto">
-        <div className="max-w-3xl mx-auto">
-            <div className="flex items-center justify-center mb-6">
-              <div className="flex items-center space-x-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-white font-bold text-sm">
-                  1
-                </div>
-                <h2 className="text-xl font-semibold text-gray-800">Research Feed</h2>
-              </div>
+    <div className={SHELL_CLASSES}>
+      <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-6 py-10 xl:flex-row">
+        <section className={`flex-1 ${FEED_CARD_CLASSES}`}>
+          <header className="flex flex-col gap-6">
+            <div className="flex flex-col gap-1">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">Synapse</span>
+              <h1 className="text-3xl font-semibold text-slate-900">Research Feed</h1>
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6">
-              <p className="text-sm text-blue-800">
-                Search across academic databases to build your personalized research feed.
-              </p>
-            </div>
-
-            {/* Search Form */}
-            <form onSubmit={handleKeywordSearch} className="mb-6">
-              <div className="relative">
+            <form onSubmit={handleKeywordSearch} className="relative">
+              <div className={SEARCH_CONTAINER_CLASSES}>
                 <input
                   type="text"
                   value={keywordQuery}
                   onChange={(e) => setKeywordQuery(e.target.value)}
-                  placeholder="e.g., machine learning, cancer research..."
-                  className="w-full px-4 py-3 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                  placeholder="Search keywords, topics, authors…"
+                  className={SEARCH_INPUT_CLASSES}
                 />
                 <button
                   type="submit"
-                  className="absolute right-2 top-1/2 transform -translate-y-1/2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                  className={SEARCH_BUTTON_CLASSES}
                 >
                   Search
                 </button>
               </div>
             </form>
 
-            {/* Filters */}
-            <div className="mb-6">
-              <div className="flex flex-wrap gap-3">
-                <label className="flex items-center bg-white rounded-lg px-3 py-2 shadow-sm cursor-pointer hover:shadow-md transition-shadow border border-gray-200">
-                  <input
-                    type="checkbox"
-                    checked={researchChecked}
-                    onChange={(e) => setResearchChecked(e.target.checked)}
-                    className="mr-2 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <span className="text-gray-700 font-medium text-sm">Research</span>
-                </label>
-                <label className="flex items-center bg-white rounded-lg px-3 py-2 shadow-sm transition-shadow border border-gray-200">
-                  <input
-                    type="checkbox"
-                    checked={grantsChecked}
-                    disabled
-                    className="mr-2 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <div className="flex flex-col">
-                    <span className="text-gray-400 font-medium text-sm">Grants</span>
-                    <span className="text-xs text-gray-400">Coming soon</span>
-                  </div>
-                </label>
-                <label className="flex items-center bg-white rounded-lg px-3 py-2 shadow-sm transition-shadow border border-gray-200">
-                  <input
-                    type="checkbox"
-                    checked={patentsChecked}
-                    disabled
-                    className="mr-2 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <div className="flex flex-col">
-                    <span className="text-gray-400 font-medium text-sm">Patents</span>
-                    <span className="text-xs text-gray-400">Coming soon</span>
-                  </div>
-                </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setResearchChecked((prev) => !prev)}
+                aria-pressed={researchChecked}
+                className={researchChecked ? FILTER_ACTIVE_CLASSES : FILTER_INACTIVE_CLASSES}
+              >
+                Research
+              </button>
+              <span className={FILTER_DISABLED_CLASSES}>Grants</span>
+              <span className={FILTER_DISABLED_CLASSES}>Patents</span>
+            </div>
+          </header>
+
+          <div className="space-y-4">
+            {lastKeywordQuery && !keywordError && (
+              <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.25em] text-slate-500">
+                <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                  {lastKeywordQuery}
+                </span>
+                <span>
+                  {keywordResults.length} result{keywordResults.length === 1 ? '' : 's'}
+                </span>
               </div>
-            </div>
+            )}
 
-            {/* Results */}
-            <div className="space-y-4">
-              {lastKeywordQuery && (
-                <div className="flex flex-wrap items-center gap-2 text-sm text-blue-800">
-                  <span>
-                    Showing results for <span className="font-semibold">“{lastKeywordQuery}”</span>
-                  </span>
-                </div>
-              )}
+            {keywordError && (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+                {keywordError}
+              </div>
+            )}
 
-              {keywordError && (
-                <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
-                  {keywordError}
-                </div>
-              )}
-
-              {keywordLoading ? (
-                <div className="space-y-3">
-                  {FEED_SKELETON_ITEMS.map((_, index) => (
-                    <div key={index} className="h-36 rounded-2xl border border-blue-100 bg-white p-6 shadow-sm">
-                      <div className="h-6 w-3/4 animate-pulse rounded bg-blue-200" />
-                      <div className="mt-3 h-4 w-2/3 animate-pulse rounded bg-blue-100" />
-                      <div className="mt-4 h-3 w-1/2 animate-pulse rounded bg-slate-100" />
-                    </div>
-                  ))}
-                </div>
-              ) : keywordResults.length > 0 ? (
-                <div className="space-y-3">
-                  {keywordResults.map((result) => {
-                    const isSelected = selectedPaper?.id === result.id
-
-                    return (
-                      <article
-                        key={result.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setSelectedPaper(result)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault()
-                            setSelectedPaper(result)
-                          }
-                        }}
-                        className={`group flex h-full cursor-pointer flex-col justify-between rounded-2xl border bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
-                          isSelected ? 'border-blue-400 ring-2 ring-blue-200' : 'border-blue-100'
-                        }`}
-                      >
-                        <div>
-                          <a
-                            href={result.url ?? '#'}
-                            target={result.url ? '_blank' : undefined}
-                            rel={result.url ? 'noopener noreferrer' : undefined}
-                            className="block text-base font-semibold text-blue-900 transition group-hover:text-blue-700"
-                          >
-                            {result.title}
-                          </a>
-                          <p className="mt-2 text-sm text-slate-600">{formatAuthors(result.authors)}</p>
-                          {formatMeta(result) && (
-                            <p className="mt-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-                              {formatMeta(result)}
-                            </p>
-                          )}
-                          {/* Abstract hidden for list layout */}
-                        </div>
-
-                        <div className="mt-4 grid w-full gap-2 sm:grid-cols-2">
-                          {TILE_ACTIONS.map((action) => (
-                            <button
-                              key={action.id}
-                              type="button"
-                              disabled={action.disabled}
-                              className={`flex items-center justify-between rounded-xl border px-4 py-2 text-xs font-semibold shadow-[0px_4px_12px_rgba(59,130,246,0.15)] transition ${
-                                action.disabled
-                                  ? 'cursor-not-allowed border-blue-100 bg-blue-50 text-blue-300 shadow-none'
-                                  : 'border-blue-200/70 bg-white text-blue-800 hover:-translate-y-0.5 hover:border-blue-300 hover:text-blue-900'
-                              }`}
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                if (action.disabled) {
-                                  return
-                                }
-                                setSelectedPaper(result)
-                                if (action.id === 'compile') {
-                                  setShowOnboarding(true)
-                                  return
-                                }
-                                console.log(`${action.label} clicked for`, result.id)
-                              }}
-                            >
-                              <span>{action.short}</span>
-                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide ${
-                                action.disabled ? 'bg-blue-100 text-blue-400' : 'bg-blue-100 text-blue-600'
-                              }`}>
-                                {action.disabled ? 'soon' : 'beta'}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </article>
-                    )
-                  })}
-                </div>
-              ) : lastKeywordQuery ? (
-                <div className="rounded-2xl border border-dashed border-blue-200 bg-blue-50 px-6 py-10 text-center text-sm text-blue-700">
-                  No results yet. Try refining your keywords or toggling different filters.
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-
-        {/* Right Pane - Paper Details */}
-        <div className="flex-1 bg-white p-6 shadow-sm overflow-y-auto">
-          <div className="max-w-3xl mx-auto h-full flex flex-col">
-            {selectedPaper ? (
-              <>
-                <header className="mb-6">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Paper details</p>
-                  <h2 className="mt-2 text-2xl font-semibold text-slate-900">{selectedPaper.title}</h2>
-                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                    {selectedPaper.venue && (
-                      <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">
-                        {selectedPaper.venue}
-                      </span>
-                    )}
-                    {selectedPaper.year && (
-                      <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">
-                        {selectedPaper.year}
-                      </span>
-                    )}
-                    {typeof selectedPaper.citationCount === 'number' && (
-                      <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">
-                        {selectedPaper.citationCount} citation{selectedPaper.citationCount === 1 ? '' : 's'}
-                      </span>
-                    )}
+            {keywordLoading ? (
+              <div className="space-y-3">
+                <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-slate-200/60 to-transparent animate-[shimmer_1.6s_infinite]" />
+                  <div className="px-6 py-8">
+                    <div className="h-5 w-1/3 rounded-full bg-slate-200/80" />
+                    <div className="mt-4 h-4 w-2/3 rounded-full bg-slate-200/60" />
+                    <div className="mt-3 h-3 w-1/2 rounded-full bg-slate-200/50" />
                   </div>
-                </header>
-
-                <div className="space-y-6">
-                  <section>
-                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Authors</h3>
-                    <p className="mt-2 text-sm text-slate-700">
-                      {selectedPaper.authors.length ? selectedPaper.authors.join(', ') : 'Author information unavailable.'}
-                    </p>
-                  </section>
-
-                  <section>
-                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Abstract</h3>
-                    <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
-                      {selectedPaper.abstract ?? 'Abstract not available for this entry.'}
-                    </p>
-                  </section>
-
-                  <section className="flex flex-wrap gap-2 text-xs">
-                    {selectedPaper.doi && (
-                      <span className="rounded-full bg-blue-50 px-3 py-1 font-medium text-blue-700">
-                        DOI: {selectedPaper.doi}
-                      </span>
-                    )}
-                    {selectedPaper.arxivId && (
-                      <span className="rounded-full bg-blue-50 px-3 py-1 font-medium text-blue-700">
-                        arXiv: {selectedPaper.arxivId}
-                      </span>
-                    )}
-                    <span className="rounded-full bg-blue-100 px-3 py-1 font-medium text-blue-700">
-                      {selectedPaper.source.replace(/_/g, ' ')}
-                    </span>
-                  </section>
                 </div>
+              </div>
+            ) : keywordResults.length > 0 ? (
+              <div className="space-y-3">
+                {keywordResults.map((result) => {
+                  const isSelected = selectedPaper?.id === result.id
 
-                <div className="mt-auto pt-8">
-                  {selectedPaper.url ? (
-                    <a
-                      href={selectedPaper.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                  return (
+                    <article
+                      key={result.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedPaper(result)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          setSelectedPaper(result)
+                        }
+                      }}
+                      className={`${TILE_BASE_CLASSES} ${isSelected ? TILE_SELECTED_CLASSES : ''}`}
                     >
-                      Open full paper
-                    </a>
-                  ) : (
-                    <p className="text-sm text-slate-500">No external link available for this paper yet.</p>
-                  )}
-                </div>
-              </>
+                      <div className="space-y-2">
+                        <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Paper</p>
+                        <h3 className="text-lg font-semibold text-slate-900">{result.title}</h3>
+                        <p className="text-sm text-slate-600">{formatAuthors(result.authors)}</p>
+                        {formatMeta(result) && (
+                          <p className="text-xs text-slate-500">{formatMeta(result)}</p>
+                        )}
+                      </div>
+
+                    </article>
+                  )
+                })}
+              </div>
+            ) : lastKeywordQuery ? (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-100 px-6 py-10 text-center text-sm text-slate-600">
+                Nothing surfaced for this query yet. Try refining keywords or toggling a different source.
+              </div>
             ) : (
-              <div className="flex h-full flex-col items-center justify-center text-center text-slate-500">
-                <h2 className="text-lg font-semibold text-slate-700">No paper selected</h2>
-                <p className="mt-2 max-w-sm text-sm">
-                  Choose a result from the research feed to preview its abstract, authors and metadata here.
-                </p>
+              <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">
+                Start by searching for a topic above. You can drill into any result on the right-hand panel.
               </div>
             )}
           </div>
-        </div>
+        </section>
+
+        <aside className={`flex-1 ${DETAIL_SHELL_CLASSES}`}>
+          {selectedPaper ? (
+            <div className="flex h-full flex-col gap-8">
+              <div className={DETAIL_HERO_CLASSES}>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-sky-600">Paper details</p>
+                <h2 className="mt-3 text-2xl font-semibold text-slate-900">{selectedPaper.title}</h2>
+                {metaSummary && (
+                  <p className="mt-4 text-xs text-slate-600">{metaSummary}</p>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                {TILE_ACTIONS.map((action) => {
+                  const actionClass = action.disabled ? ACTION_DISABLED_CLASSES : ACTION_ACTIVE_CLASSES
+
+                  return (
+                    <button
+                      key={action.id}
+                      type="button"
+                      disabled={action.disabled}
+                      className={`flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-semibold transition ${actionClass}`}
+                      onClick={() => {
+                        if (action.disabled) return
+                        if (action.id === 'compile') {
+                          setShowOnboarding(true)
+                          return
+                        }
+                        console.log(`${action.label} clicked for`, selectedPaper.id)
+                      }}
+                    >
+                      {action.icon && <span className="text-base">{action.icon}</span>}
+                      <span>{action.label}</span>
+                      {action.disabled && <span className="text-[10px] font-medium tracking-wide opacity-70">Soon</span>}
+                    </button>
+                  )
+                })}
+              </div>
+
+              <section className="space-y-6">
+                <div>
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Authors</h3>
+                  <p className="mt-2 text-sm text-slate-700">
+                    {selectedPaper.authors.length ? selectedPaper.authors.join(', ') : 'Author information unavailable.'}
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Abstract</h3>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
+                    {selectedPaper.abstract ?? 'Abstract not available for this entry.'}
+                  </p>
+                </div>
+
+                <div className="space-y-2 text-xs text-slate-600">
+                  {selectedPaper.doi && (
+                    <p>
+                      <strong className="font-semibold text-slate-700">DOI:</strong> {selectedPaper.doi}
+                    </p>
+                  )}
+                  {selectedPaper.arxivId && (
+                    <p>
+                      <strong className="font-semibold text-slate-700">arXiv:</strong> {selectedPaper.arxivId}
+                    </p>
+                  )}
+                  <p>
+                    <strong className="font-semibold text-slate-700">Source:</strong> {selectedPaper.source.replace(/_/g, ' ')}
+                  </p>
+                </div>
+              </section>
+
+              <div className="mt-auto">
+                {selectedPaper.url ? (
+                  <a
+                    href={selectedPaper.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={DETAIL_PRIMARY_BUTTON_CLASSES}
+                  >
+                    Open full paper
+                  </a>
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    No external link available for this paper yet.
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-slate-500">
+              <h2 className="text-lg font-semibold text-slate-700">No paper selected</h2>
+              <p className="max-w-xs text-sm">
+                Choose a result from the research feed to preview its abstract, authors, and metadata here.
+              </p>
+            </div>
+          )}
+        </aside>
+      </main>
 
       {showOnboarding && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8">
           <div
-            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            className={ONBOARDING_SCRIM_CLASSES}
             onClick={() => setShowOnboarding(false)}
           />
-          <div className="relative z-10 w-full max-w-2xl rounded-3xl bg-white p-8 shadow-2xl">
-            <div className="flex items-start justify-between">
+          <div className={ONBOARDING_PANEL_CLASSES}>
+            <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-widest text-blue-500">Workflow preview</p>
-                <h2 className="mt-2 text-2xl font-semibold text-slate-900">Compile related research</h2>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-sky-500">
+                  Workflow preview
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold text-slate-900">
+                  Compile related research
+                </h2>
                 <p className="mt-3 text-sm text-slate-600">
                   Soon you’ll be able to bundle this paper with supporting literature, export citations, and brief collaborators straight from Synapse.
                 </p>
@@ -433,18 +408,24 @@ export default function Home() {
               </button>
             </div>
 
-            <div className="mt-6 space-y-4 text-sm text-slate-600">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <h3 className="text-sm font-semibold text-slate-700">1. Connect context</h3>
-                <p className="mt-1">Link ORCID, personal sites, or upload bibliographies to map your research footprint.</p>
+            <div className="mt-6 space-y-4 text-sm">
+              <div className={ONBOARDING_CARD_CLASSES}>
+                <h3 className="text-sm font-semibold text-slate-800">1. Connect context</h3>
+                <p className="mt-1 text-slate-600">
+                  Link ORCID, personal sites, or upload bibliographies to map your research footprint.
+                </p>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <h3 className="text-sm font-semibold text-slate-700">2. Generate collections</h3>
-                <p className="mt-1">We’ll cluster related works, surface pivotal citations, and keep the feed live.</p>
+              <div className={ONBOARDING_CARD_CLASSES}>
+                <h3 className="text-sm font-semibold text-slate-800">2. Generate collections</h3>
+                <p className="mt-1 text-slate-600">
+                  We’ll cluster related works, surface pivotal citations, and keep the feed live.
+                </p>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <h3 className="text-sm font-semibold text-slate-700">3. Share effortlessly</h3>
-                <p className="mt-1">Export to your reference manager or send tailored digests to collaborators.</p>
+              <div className={ONBOARDING_CARD_CLASSES}>
+                <h3 className="text-sm font-semibold text-slate-800">3. Share effortlessly</h3>
+                <p className="mt-1 text-slate-600">
+                  Export to your reference manager or send tailored digests to collaborators.
+                </p>
               </div>
             </div>
 
@@ -452,14 +433,14 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => setShowOnboarding(false)}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-800"
+                className={ONBOARDING_DISMISS_CLASSES}
               >
                 Not now
               </button>
               <button
                 type="button"
                 onClick={() => setShowOnboarding(false)}
-                className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                className={ONBOARDING_PRIMARY_CLASSES}
               >
                 Keep me posted
               </button>
@@ -467,8 +448,6 @@ export default function Home() {
           </div>
         </div>
       )}
-
-      </main>
     </div>
-  );
+  )
 }
