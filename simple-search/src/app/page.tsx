@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../lib/auth-context';
 import { useAuthModal, getUserDisplayName } from '../lib/auth-hooks';
+import { supabase } from '../lib/supabase';
 import { AuthModal } from '../components/auth-modal';
 
 interface ApiSearchResult {
@@ -144,6 +145,12 @@ const SIDEBAR_TOGGLE_BUTTON_CLASSES = 'inline-flex h-10 w-10 items-center justif
 const SIDEBAR_FLOAT_BUTTON_CLASSES = 'absolute left-0 top-0 -translate-x-1/2 -translate-y-1/2 z-20 hidden xl:inline-flex';
 const SEARCH_SPINNER_CLASSES = 'inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent';
 const DETAIL_SAVE_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-lg bg-sky-500 px-6 sm:px-8 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-[0_12px_30px_rgba(56,189,248,0.2)] transition hover:-translate-y-0.5 hover:bg-sky-400';
+const PROFILE_CARD_CLASSES = 'rounded-3xl border border-slate-200 bg-white p-8 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
+const PROFILE_LABEL_CLASSES = 'text-xs font-semibold uppercase tracking-wide text-slate-500';
+const PROFILE_INPUT_CLASSES = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100';
+const PROFILE_PRIMARY_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-xl bg-sky-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(56,189,248,0.18)] transition hover:-translate-y-0.5 hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60';
+const PROFILE_COMING_SOON_BADGE_CLASSES = 'inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600';
+const PROFILE_DISABLED_UPLOAD_BUTTON_CLASSES = 'flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-400 cursor-not-allowed';
 
 function formatAuthors(authors: string[]) {
   if (!authors.length) return 'Author information unavailable'
@@ -181,6 +188,23 @@ export default function Home() {
   const [lastKeywordQuery, setLastKeywordQuery] = useState('');
   const [selectedPaper, setSelectedPaper] = useState<ApiSearchResult | null>(null);
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [profile, setProfile] = useState<{ orcid_id: string | null; academic_website: string | null } | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState('');
+  const [profileFormOrcid, setProfileFormOrcid] = useState('');
+  const [profileFormWebsite, setProfileFormWebsite] = useState('');
+  const [profileSaveError, setProfileSaveError] = useState('');
+  const [profileSaveSuccess, setProfileSaveSuccess] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
+
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Set initial selected paper based on authentication status
   useEffect(() => {
@@ -193,6 +217,73 @@ export default function Home() {
     }
   }, [user, selectedPaper, keywordResults.length, lastKeywordQuery]);
 
+  const refreshProfile = useCallback(async () => {
+    if (!user) {
+      return;
+    }
+
+    setProfileLoading(true);
+    setProfileError('');
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('orcid_id, academic_website')
+        .eq('id', user.id)
+        .single();
+
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      if (error) {
+        console.error('Failed to load profile', error);
+        setProfile(null);
+        setProfileError('We could not load your research profile. Please try again.');
+      } else {
+        setProfile({
+          orcid_id: data?.orcid_id ?? null,
+          academic_website: data?.academic_website ?? null,
+        });
+      }
+    } catch (error) {
+      if (isMountedRef.current) {
+        console.error('Unexpected profile load error', error);
+        setProfile(null);
+        setProfileError('We could not load your research profile. Please try again.');
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setProfileLoading(false);
+      }
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      setProfile(null);
+      setProfileError('');
+      setProfileLoading(false);
+      setProfileFormOrcid('');
+      setProfileFormWebsite('');
+      setProfileSaveError('');
+      setProfileSaveSuccess('');
+      return;
+    }
+
+    refreshProfile();
+  }, [user, refreshProfile]);
+
+  useEffect(() => {
+    if (profile) {
+      setProfileFormOrcid(profile.orcid_id ?? '');
+      setProfileFormWebsite(profile.academic_website ?? '');
+    } else {
+      setProfileFormOrcid('');
+      setProfileFormWebsite('');
+    }
+  }, [profile]);
+
   const metaSummary = selectedPaper
     ? [
         selectedPaper.venue,
@@ -204,6 +295,14 @@ export default function Home() {
         .filter(Boolean)
         .join(' • ')
     : '';
+
+  const profileNeedsSetup = Boolean(user) && !profileLoading && !profileError && (!profile || !profile.orcid_id);
+  const hasSearchContext =
+    keywordLoading ||
+    keywordResults.length > 0 ||
+    Boolean(keywordError) ||
+    Boolean(lastKeywordQuery);
+  const shouldShowProfileSpinner = Boolean(user) && profileLoading;
 
   const handleSaveSelectedPaper = () => {
     if (!selectedPaper) return;
@@ -225,6 +324,76 @@ export default function Home() {
     }
 
     console.log(`${actionLabel} clicked for`, selectedPaper.id);
+  };
+
+  const handleProfileSave = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!user) {
+      authModal.openSignup();
+      return;
+    }
+
+    const trimmedOrcid = profileFormOrcid.trim();
+    const trimmedWebsite = profileFormWebsite.trim();
+    const normalisedOrcid = trimmedOrcid.toUpperCase();
+
+    setProfileSaveError('');
+    setProfileSaveSuccess('');
+
+    if (!normalisedOrcid) {
+      setProfileSaveError('Add your ORCID iD to personalise your feed.');
+      return;
+    }
+
+    const orcidPattern = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/i;
+    if (!orcidPattern.test(normalisedOrcid)) {
+      setProfileSaveError('Enter a valid ORCID iD in the format 0000-0000-0000-0000.');
+      return;
+    }
+
+    if (trimmedWebsite) {
+      try {
+        // Validate URL structure; will throw on invalid URLs
+        const parsed = new URL(trimmedWebsite);
+        if (!parsed.protocol.startsWith('http')) {
+          setProfileSaveError('Enter a valid URL starting with http:// or https://, or leave the field blank.');
+          return;
+        }
+      } catch (error) {
+        setProfileSaveError('Enter a valid academic website URL or leave the field blank.');
+        return;
+      }
+    }
+
+    setProfileSaving(true);
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          orcid_id: normalisedOrcid,
+          academic_website: trimmedWebsite || null,
+        })
+        .eq('id', user.id);
+
+      if (error) {
+        console.error('Profile update failed', error);
+        setProfileSaveError('We could not save your research profile. Please try again.');
+        return;
+      }
+
+      setProfile({
+        orcid_id: normalisedOrcid,
+        academic_website: trimmedWebsite || null,
+      });
+      setProfileSaveSuccess('Profile saved! Your feed will adapt to your research interests.');
+    } catch (error) {
+      console.error('Unexpected profile update error', error);
+      setProfileSaveError('Something went wrong while saving. Please try again.');
+    } finally {
+      setProfileSaving(false);
+    }
   };
 
   const handleKeywordSearch = async (e: React.FormEvent) => {
@@ -471,121 +640,239 @@ export default function Home() {
             </header>
 
             <div className="space-y-4">
-              {lastKeywordQuery && !keywordError && (
-                <div className={RESULT_SUMMARY_CLASSES}>
-                  <span>Showing</span>
-                  <span className="text-base font-semibold text-slate-900">{keywordResults.length}</span>
-                  <span>result{keywordResults.length === 1 ? '' : 's'} for</span>
-                  <span className="text-base font-semibold text-slate-900">"{lastKeywordQuery}"</span>
-                </div>
-              )}
-
-              {keywordError && (
+              {profileError && user && (
                 <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-                  {keywordError}
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <span>{profileError}</span>
+                    <button
+                      type="button"
+                      onClick={refreshProfile}
+                      className={SIDEBAR_SECONDARY_BUTTON_CLASSES}
+                    >
+                      Try again
+                    </button>
+                  </div>
                 </div>
               )}
 
-              {keywordLoading ? (
-                <div className={FEED_LOADING_WRAPPER_CLASSES}>
-                  <span className={FEED_LOADING_PILL_CLASSES}>
-                    <span className={FEED_SPINNER_CLASSES} aria-hidden="true" />
-                    <span>Fetching results…</span>
-                  </span>
-                  {FEED_SKELETON_ITEMS.slice(0, 3).map((_, index) => (
-                    <div
-                      key={index}
-                      className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white"
-                    >
-                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-slate-200/60 to-transparent animate-[shimmer_1.6s_infinite]" />
-                      <div className="px-6 py-8">
-                        <div className="h-5 w-1/3 rounded-full bg-slate-200/80" />
-                        <div className="mt-4 h-4 w-2/3 rounded-full bg-slate-200/60" />
-                        <div className="mt-3 h-3 w-1/2 rounded-full bg-slate-200/50" />
-                      </div>
+              {shouldShowProfileSpinner ? (
+                <div className="flex flex-col items-center gap-3 rounded-2xl border border-slate-200 bg-white px-6 py-12 text-sm text-slate-600">
+                  <span className={FEED_SPINNER_CLASSES} aria-hidden="true" />
+                  <p>Loading your research profile…</p>
+                </div>
+              ) : profileNeedsSetup && !hasSearchContext ? (
+                <div className={PROFILE_CARD_CLASSES}>
+                  <div className="flex flex-col gap-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-sky-600">Research profile</span>
+                    <h2 className="text-2xl font-semibold text-slate-900">Personalise your feed</h2>
+                    <p className="text-sm text-slate-600">
+                      Add your ORCID or academic site so we can surface research that matches your expertise.
+                    </p>
+                  </div>
+
+                  {profileSaveError && (
+                    <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+                      {profileSaveError}
                     </div>
-                  ))}
-                </div>
-              ) : keywordResults.length > 0 ? (
-                <div className="space-y-3">
-                  {keywordResults.map((result) => {
-                    const isSelected = selectedPaper?.id === result.id
+                  )}
 
-                    return (
-                      <article
-                        key={result.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setSelectedPaper(result)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault()
-                            setSelectedPaper(result)
-                          }
-                        }}
-                        className={`${TILE_BASE_CLASSES} ${isSelected ? TILE_SELECTED_CLASSES : ''}`}
+                  {profileSaveSuccess && (
+                    <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700">
+                      {profileSaveSuccess}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleProfileSave} className="mt-6 space-y-5">
+                    <div className="space-y-2">
+                      <label htmlFor="profile-orcid" className={PROFILE_LABEL_CLASSES}>
+                        ORCID iD
+                      </label>
+                      <input
+                        id="profile-orcid"
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        placeholder="0000-0000-0000-0000"
+                        value={profileFormOrcid}
+                        onChange={(event) => setProfileFormOrcid(event.target.value)}
+                        className={PROFILE_INPUT_CLASSES}
+                      />
+                      <p className="text-xs text-slate-500">
+                        We use your ORCID to align recommendations with your publications.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label htmlFor="profile-website" className={PROFILE_LABEL_CLASSES}>
+                        Academic website <span className="lowercase text-slate-400">(optional)</span>
+                      </label>
+                      <input
+                        id="profile-website"
+                        type="url"
+                        placeholder="https://"
+                        value={profileFormWebsite}
+                        onChange={(event) => setProfileFormWebsite(event.target.value)}
+                        className={PROFILE_INPUT_CLASSES}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className={PROFILE_LABEL_CLASSES}>Bibliography</span>
+                        <span className={PROFILE_COMING_SOON_BADGE_CLASSES}>Coming soon</span>
+                      </div>
+                      <button
+                        type="button"
+                        disabled
+                        aria-disabled
+                        className={PROFILE_DISABLED_UPLOAD_BUTTON_CLASSES}
                       >
-                        <div className="space-y-2">
-                          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Paper</p>
-                          <h3 className="text-lg font-semibold text-slate-900">{result.title}</h3>
-                          <p className="text-sm text-slate-600">{formatAuthors(result.authors)}</p>
-                          {formatMeta(result) && (
-                            <p className="text-xs text-slate-500">{formatMeta(result)}</p>
-                          )}
-                        </div>
+                        📄 Upload bibliography file
+                      </button>
+                      <p className="text-xs text-slate-400">
+                        Bring in your publications to further tailor recommendations.
+                      </p>
+                    </div>
 
-                      </article>
-                    )
-                  })}
-                </div>
-              ) : lastKeywordQuery ? (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-100 px-6 py-10 text-center text-sm text-slate-600">
-                  Nothing surfaced for this query yet. Try refining keywords or toggling a different source.
-                </div>
-              ) : !user ? (
-                <div className="space-y-4">
-                  <div className="rounded-xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-4 text-center">
-                    <p className="text-sm font-semibold text-sky-700">Featured Research</p>
-                    <p className="text-xs text-sky-600 mt-1">Explore groundbreaking papers or register to get your personalised research feed!</p>
-                  </div>
-                  <div className="space-y-3">
-                    {SAMPLE_PAPERS.map((result) => {
-                      const isSelected = selectedPaper?.id === result.id
-
-                      return (
-                        <article
-                          key={result.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => setSelectedPaper(result)}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault()
-                              setSelectedPaper(result)
-                            }
-                          }}
-                          className={`${TILE_BASE_CLASSES} ${isSelected ? TILE_SELECTED_CLASSES : ''}`}
-                        >
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Featured Paper</p>
-                            </div>
-                            <h3 className="text-lg font-semibold text-slate-900">{result.title}</h3>
-                            <p className="text-sm text-slate-600">{formatAuthors(result.authors)}</p>
-                            {formatMeta(result) && (
-                              <p className="text-xs text-slate-500">{formatMeta(result)}</p>
-                            )}
-                          </div>
-                        </article>
-                      )
-                    })}
-                  </div>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-xs text-slate-500">
+                        Your details stay private and only power personalised recommendations.
+                      </p>
+                      <button
+                        type="submit"
+                        className={PROFILE_PRIMARY_BUTTON_CLASSES}
+                        disabled={profileSaving}
+                      >
+                        {profileSaving ? 'Saving…' : 'Save profile'}
+                      </button>
+                    </div>
+                  </form>
                 </div>
               ) : (
-                <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">
-                  <h3 className="text-lg font-semibold text-slate-700 mb-2">Your Personal Feed</h3>
-                  <p>Search for topics above to discover research papers. Your saved papers and preferences will appear here.</p>
-                </div>
+                <>
+                  {profileSaveSuccess && (
+                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+                      {profileSaveSuccess}
+                    </div>
+                  )}
+
+                  {lastKeywordQuery && !keywordError && (
+                    <div className={RESULT_SUMMARY_CLASSES}>
+                      <span>Showing</span>
+                      <span className="text-base font-semibold text-slate-900">{keywordResults.length}</span>
+                      <span>result{keywordResults.length === 1 ? '' : 's'} for</span>
+                      <span className="text-base font-semibold text-slate-900">"{lastKeywordQuery}"</span>
+                    </div>
+                  )}
+
+                  {keywordError && (
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+                      {keywordError}
+                    </div>
+                  )}
+
+                  {keywordLoading ? (
+                    <div className={FEED_LOADING_WRAPPER_CLASSES}>
+                      <span className={FEED_LOADING_PILL_CLASSES}>
+                        <span className={FEED_SPINNER_CLASSES} aria-hidden="true" />
+                        <span>Fetching results…</span>
+                      </span>
+                      {FEED_SKELETON_ITEMS.slice(0, 3).map((_, index) => (
+                        <div
+                          key={index}
+                          className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white"
+                        >
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-slate-200/60 to-transparent animate-[shimmer_1.6s_infinite]" />
+                          <div className="px-6 py-8">
+                            <div className="h-5 w-1/3 rounded-full bg-slate-200/80" />
+                            <div className="mt-4 h-4 w-2/3 rounded-full bg-slate-200/60" />
+                            <div className="mt-3 h-3 w-1/2 rounded-full bg-slate-200/50" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : keywordResults.length > 0 ? (
+                    <div className="space-y-3">
+                      {keywordResults.map((result) => {
+                        const isSelected = selectedPaper?.id === result.id
+
+                        return (
+                          <article
+                            key={result.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setSelectedPaper(result)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault()
+                                setSelectedPaper(result)
+                              }
+                            }}
+                            className={`${TILE_BASE_CLASSES} ${isSelected ? TILE_SELECTED_CLASSES : ''}`}
+                          >
+                            <div className="space-y-2">
+                              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Paper</p>
+                              <h3 className="text-lg font-semibold text-slate-900">{result.title}</h3>
+                              <p className="text-sm text-slate-600">{formatAuthors(result.authors)}</p>
+                              {formatMeta(result) && (
+                                <p className="text-xs text-slate-500">{formatMeta(result)}</p>
+                              )}
+                            </div>
+
+                          </article>
+                        )
+                      })}
+                    </div>
+                  ) : lastKeywordQuery ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-100 px-6 py-10 text-center text-sm text-slate-600">
+                      Nothing surfaced for this query yet. Try refining keywords or toggling a different source.
+                    </div>
+                  ) : !user ? (
+                    <div className="space-y-4">
+                      <div className="rounded-xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-4 text-center">
+                        <p className="text-sm font-semibold text-sky-700">Featured Research</p>
+                        <p className="text-xs text-sky-600 mt-1">Explore groundbreaking papers or register to get your personalised research feed!</p>
+                      </div>
+                      <div className="space-y-3">
+                        {SAMPLE_PAPERS.map((result) => {
+                          const isSelected = selectedPaper?.id === result.id
+
+                          return (
+                            <article
+                              key={result.id}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => setSelectedPaper(result)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault()
+                                  setSelectedPaper(result)
+                                }
+                              }}
+                              className={`${TILE_BASE_CLASSES} ${isSelected ? TILE_SELECTED_CLASSES : ''}`}
+                            >
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Featured Paper</p>
+                                </div>
+                                <h3 className="text-lg font-semibold text-slate-900">{result.title}</h3>
+                                <p className="text-sm text-slate-600">{formatAuthors(result.authors)}</p>
+                                {formatMeta(result) && (
+                                  <p className="text-xs text-slate-500">{formatMeta(result)}</p>
+                                )}
+                              </div>
+                            </article>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">
+                      <h3 className="text-lg font-semibold text-slate-700 mb-2">Your Personal Feed</h3>
+                      <p>Search for topics above to discover research papers. Your saved papers and preferences will appear here.</p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </section>
