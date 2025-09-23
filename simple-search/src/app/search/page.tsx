@@ -20,11 +20,16 @@ interface ApiSearchResult {
 }
 
 const SKELETON_ITEMS = Array.from({ length: 6 })
-const TILE_ACTIONS = [
+const TILE_ACTIONS: Array<{
+  id: 'compile' | 'favorite' | 'like' | 'share'
+  short: string
+  label: string
+  disabled?: boolean
+}> = [
   { id: 'compile', short: 'Compile', label: 'Compile related research' },
-  { id: 'favorite', short: 'Save', label: 'Favourite' },
-  { id: 'like', short: 'Appreciate', label: 'Appreciate' },
-  { id: 'share', short: 'Share', label: 'Share' },
+  { id: 'favorite', short: 'Save', label: 'Favourite', disabled: true },
+  { id: 'like', short: 'Appreciate', label: 'Appreciate', disabled: true },
+  { id: 'share', short: 'Share', label: 'Share', disabled: true },
 ]
 
 function formatAuthors(authors: string[]) {
@@ -229,14 +234,22 @@ export default function SearchPage() {
                       <button
                         key={action.id}
                         type="button"
-                        className="flex items-center justify-between rounded-xl border border-slate-200/70 bg-white px-4 py-2 text-xs font-semibold text-slate-900 shadow-[0px_4px_12px_rgba(71,85,105,0.12)] transition hover:-translate-y-0.5 hover:border-slate-300"
+                        disabled={action.disabled}
+                        className={`flex items-center justify-between rounded-xl border px-4 py-2 text-xs font-semibold shadow-[0px_4px_12px_rgba(71,85,105,0.12)] transition ${
+                          action.disabled
+                            ? 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-400 shadow-none'
+                            : 'border-slate-200/70 bg-white text-slate-900 hover:-translate-y-0.5 hover:border-slate-300'
+                        }`}
                         onClick={() => {
+                          if (action.disabled) return
                           console.log(`${action.label} clicked for`, result.id)
                         }}
                       >
                         <span>{action.short}</span>
-                        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-medium tracking-wide text-slate-600">
-                          beta
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide ${
+                          action.disabled ? 'bg-slate-200 text-slate-500' : 'bg-slate-200 text-slate-600'
+                        }`}>
+                          {action.disabled ? 'soon' : 'beta'}
                         </span>
                       </button>
                     ))}
