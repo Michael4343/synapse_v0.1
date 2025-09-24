@@ -173,8 +173,8 @@ const FILTER_CHECKBOX_INPUT_CLASSES = 'h-4 w-4 rounded border-slate-300 text-sky
 const FILTER_CHECKBOX_INPUT_DISABLED_CLASSES = 'text-slate-300 focus:ring-0';
 const RESULT_SUMMARY_CLASSES = 'flex flex-wrap items-baseline gap-2 text-sm text-slate-600';
 const DETAIL_METADATA_CLASSES = 'space-y-3 text-sm text-slate-600';
-const DOI_LINK_CLASSES = 'text-lg font-semibold text-sky-600 underline decoration-sky-300 underline-offset-4 transition hover:text-sky-700';
-const TILE_DOI_LINK_CLASSES = 'inline-flex items-center text-xs font-semibold text-sky-600 underline decoration-sky-300 underline-offset-4 transition hover:text-sky-700';
+const DETAIL_LINK_CLASSES = 'text-lg font-semibold text-sky-600 underline decoration-sky-300 underline-offset-4 transition hover:text-sky-700';
+const TILE_LINK_CLASSES = 'inline-flex items-center text-xs font-semibold text-sky-600 underline decoration-sky-300 underline-offset-4 transition hover:text-sky-700';
 const SIDEBAR_CARD_CLASSES = 'flex h-full flex-col gap-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
 const SIDEBAR_PRIMARY_BUTTON_CLASSES = 'flex items-center justify-center rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(56,189,248,0.2)] transition hover:-translate-y-0.5 hover:bg-sky-400';
 const SIDEBAR_SECONDARY_BUTTON_CLASSES = 'flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900';
@@ -233,6 +233,57 @@ function buildDoiUrl(doi?: string | null): string | null {
   }
 
   return trimmed
+}
+
+function buildExternalUrl(url?: string | null): string | null {
+  if (!url) {
+    return null
+  }
+
+  const trimmed = url.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed
+  }
+
+  if (trimmed.startsWith('www.')) {
+    return `https://${trimmed}`
+  }
+
+  return trimmed
+}
+
+function getPrimaryLink(result: ApiSearchResult): { href: string; label: string } | null {
+  const doiUrl = buildDoiUrl(result.doi)
+  if (doiUrl) {
+    const displayDoi = result.doi?.replace(/^https?:\/\//i, '') ?? result.doi ?? doiUrl
+    return {
+      href: doiUrl,
+      label: `DOI: ${displayDoi}`
+    }
+  }
+
+  const externalUrl = buildExternalUrl(result.url)
+  if (externalUrl) {
+    try {
+      const parsed = new URL(externalUrl)
+      const hostname = parsed.hostname.replace(/^www\./i, '')
+      return {
+        href: externalUrl,
+        label: `View on ${hostname}`
+      }
+    } catch (error) {
+      return {
+        href: externalUrl,
+        label: 'View source'
+      }
+    }
+  }
+
+  return null
 }
 
 interface UserProfile {
@@ -417,12 +468,23 @@ export default function Home() {
       if (response.ok) {
         const data = await response.json();
         const lists = Array.isArray(data.lists) ? data.lists : [];
-        setUserLists(lists.map((list: any) => ({
-          id: list.id,
-          name: list.name,
-          items_count: typeof list.items_count === 'number' ? list.items_count : 0,
-          status: 'ready',
-        })));
+        setUserLists((previous) => {
+          const readyLists: UserListSummary[] = lists.map((list: any) => ({
+            id: list.id,
+            name: list.name,
+            items_count: typeof list.items_count === 'number' ? list.items_count : 0,
+            status: 'ready' as const,
+          }));
+
+          if (previous.length === 0) {
+            return readyLists;
+          }
+
+          const readyIds = new Set(readyLists.map((list) => list.id));
+          const placeholders = previous.filter((list) => list.status === 'loading' && !readyIds.has(list.id));
+
+          return [...placeholders, ...readyLists];
+        });
       }
     } catch (error) {
       console.error('Failed to fetch user lists:', error);
@@ -576,8 +638,22 @@ export default function Home() {
         const aggregated: ApiSearchResult[] = [];
         const seen = new Set<string>();
 
-        for (const query of queries) {
-          if (aggregated.length >= 20) {
+        // Fair distribution algorithm: ensure each keyword gets proportional representation
+        const maxResults = 12;
+        const resultsPerQuery = Math.floor(maxResults / queries.length);
+        const remainderSlots = maxResults % queries.length;
+
+        // Create array of how many results each query should contribute
+        const quotaPerQuery = queries.map((_, index) =>
+          resultsPerQuery + (index < remainderSlots ? 1 : 0)
+        );
+
+        for (let queryIndex = 0; queryIndex < queries.length; queryIndex++) {
+          const query = queries[queryIndex];
+          const maxForThisQuery = quotaPerQuery[queryIndex];
+          let addedForThisQuery = 0;
+
+          if (aggregated.length >= maxResults) {
             break;
           }
 
@@ -598,11 +674,13 @@ export default function Home() {
             const results = Array.isArray(payload.results) ? payload.results : [];
 
             for (const result of results) {
-              if (!seen.has(result.id)) {
+              if (!seen.has(result.id) && addedForThisQuery < maxForThisQuery) {
                 aggregated.push(result);
                 seen.add(result.id);
+                addedForThisQuery++;
               }
-              if (aggregated.length >= 12) {
+
+              if (addedForThisQuery >= maxForThisQuery || aggregated.length >= maxResults) {
                 break;
               }
             }
@@ -615,7 +693,7 @@ export default function Home() {
           setPersonalFeedResults([]);
           setPersonalFeedError('We could not find new papers for your focus areas. Try refreshing in a bit or adjust your profile.');
         } else {
-          setPersonalFeedResults(aggregated.slice(0, 20));
+          setPersonalFeedResults(aggregated.slice(0, 12));
           setPersonalFeedError('');
           setPersonalFeedLastUpdated(new Date().toISOString());
         }
@@ -728,90 +806,63 @@ export default function Home() {
         return;
       }
 
-      const manualKeywords = parseManualKeywords(profileManualKeywords);
-      const trimmedResume = profileResumeText.trim();
+      // Create simple keyword clusters directly from user input
+      const keywordClusters = createKeywordClusters(profileManualKeywords);
+
+      if (keywordClusters.length === 0) {
+        setProfileEnrichmentError('Add at least one keyword line to generate your personalized feed.');
+        return;
+      }
 
       setProfileEnrichmentLoading(true);
       setProfileEnrichmentError('');
 
       try {
-        const authHeaders = await getAuthHeaders();
+        // Create the personalization object with our simple keyword clusters
+        const newPersonalization = {
+          topic_clusters: keywordClusters,
+          created_at: new Date().toISOString(),
+          version: 'keyword-based'
+        };
 
-        const response = await fetch('/api/profile/enrich', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...authHeaders,
-          },
-          body: JSON.stringify({
-            manualKeywords,
-            resumeText: trimmedResume || undefined,
-            source,
-            force,
-            skipOrcidFetch,
-          }),
-        });
+        // Save to profile
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            profile_personalization: newPersonalization,
+            last_profile_enriched_at: new Date().toISOString(),
+            profile_enrichment_version: 'keyword-based'
+          })
+          .eq('id', user.id);
 
-        if (!response.ok) {
-          const payload = await response.json().catch(() => ({}));
-          const message = typeof payload.error === 'string' ? payload.error : 'Profile enrichment failed.';
-          setProfileEnrichmentError(message);
+        if (error) {
+          console.error('Failed to save profile personalization', error);
+          setProfileEnrichmentError('Failed to save your keywords. Please try again.');
           return;
         }
 
-        const payload = await response.json();
-
-        if (payload.skipped) {
-          if (payload.personalization) {
-            setProfile((prev) => {
-              if (!prev) {
-                return {
-                  orcid_id: effectiveOrcid,
-                  academic_website: null,
-                  profile_personalization: payload.personalization,
-                  last_profile_enriched_at: payload.last_profile_enriched_at ?? null,
-                  profile_enrichment_version: payload.profile_enrichment_version ?? null,
-                };
-              }
-
-              return {
-                ...prev,
-                profile_personalization: payload.personalization,
-                last_profile_enriched_at: payload.last_profile_enriched_at ?? prev.last_profile_enriched_at,
-                profile_enrichment_version:
-                  payload.profile_enrichment_version ?? prev.profile_enrichment_version,
-              };
-            });
-
-            await loadPersonalFeed({ personalizationOverride: payload.personalization, force: true });
+        // Update local state
+        setProfile((prev) => {
+          if (!prev) {
+            return {
+              orcid_id: effectiveOrcid,
+              academic_website: null,
+              profile_personalization: newPersonalization,
+              last_profile_enriched_at: new Date().toISOString(),
+              profile_enrichment_version: 'keyword-based',
+            };
           }
 
-          return;
-        }
+          return {
+            ...prev,
+            profile_personalization: newPersonalization,
+            last_profile_enriched_at: new Date().toISOString(),
+            profile_enrichment_version: 'keyword-based',
+          };
+        });
 
-        if (payload.personalization) {
-          setProfile((prev) => {
-            if (!prev) {
-              return {
-                orcid_id: effectiveOrcid,
-                academic_website: null,
-                profile_personalization: payload.personalization,
-                last_profile_enriched_at: payload.last_profile_enriched_at ?? null,
-                profile_enrichment_version: payload.profile_enrichment_version ?? null,
-              };
-            }
-
-            return {
-              ...prev,
-              profile_personalization: payload.personalization,
-              last_profile_enriched_at: payload.last_profile_enriched_at ?? prev.last_profile_enriched_at,
-              profile_enrichment_version:
-                payload.profile_enrichment_version ?? prev.profile_enrichment_version,
-            };
-          });
-
-          await loadPersonalFeed({ personalizationOverride: payload.personalization, force: true });
-        }
+        // Load the personal feed with new personalization
+        await loadPersonalFeed({ personalizationOverride: newPersonalization, force: true });
 
       } catch (error) {
         console.error('Profile enrichment request failed', error);
@@ -821,12 +872,10 @@ export default function Home() {
       }
     }, [
       authModal,
-      getAuthHeaders,
       loadPersonalFeed,
       profile,
       profileEnrichmentLoading,
       profileManualKeywords,
-      profileResumeText,
       user,
     ]);
 
@@ -887,11 +936,15 @@ export default function Home() {
           </label>
           <textarea
             id={keywordsId}
-            rows={3}
+            rows={4}
             value={profileManualKeywords}
             onChange={(event) => setProfileManualKeywords(event.target.value)}
-            className={`${PROFILE_INPUT_CLASSES} min-h-[96px]`}
+            placeholder="Enter each keyword or topic on a new line:&#10;machine learning&#10;neural networks, deep learning&#10;computer vision"
+            className={`${PROFILE_INPUT_CLASSES} min-h-[120px]`}
           />
+          <p className="text-xs text-slate-500">
+            Each line becomes a search cluster. Use commas to group related keywords together (e.g., &quot;AI, artificial intelligence&quot;).
+          </p>
         </div>
 
 
@@ -914,7 +967,7 @@ export default function Home() {
       <div className="space-y-2">
         {uniqueResults.map((result) => {
           const isSelected = selectedPaper?.id === result.id;
-          const doiUrl = buildDoiUrl(result.doi);
+          const primaryLink = getPrimaryLink(result);
 
           return (
             <article
@@ -940,16 +993,16 @@ export default function Home() {
                 {formatMeta(result) && (
                   <p className="text-xs text-slate-500">{formatMeta(result)}</p>
                 )}
-                {doiUrl && (
+                {primaryLink && (
                   <a
-                    href={doiUrl}
+                    href={primaryLink.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={TILE_DOI_LINK_CLASSES}
+                    className={TILE_LINK_CLASSES}
                     onClick={(event) => event.stopPropagation()}
                     onKeyDown={(event) => event.stopPropagation()}
                   >
-                    DOI: {result.doi}
+                    {primaryLink.label}
                   </a>
                 )}
               </div>
@@ -1198,6 +1251,7 @@ export default function Home() {
     );
   }
   const shouldShowProfileSpinner = Boolean(user) && profileLoading;
+  const selectedPaperPrimaryLink = selectedPaper ? getPrimaryLink(selectedPaper) : null;
 
   const handleSaveSelectedPaper = () => {
     if (!selectedPaper) return;
@@ -2004,15 +2058,15 @@ export default function Home() {
                 </div>
 
                 <div className={DETAIL_METADATA_CLASSES}>
-                  {selectedPaper.doi && (
+                  {selectedPaperPrimaryLink && (
                     <p>
                       <a
-                        href={`https://doi.org/${selectedPaper.doi}`}
+                        href={selectedPaperPrimaryLink.href}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className={DOI_LINK_CLASSES}
+                        className={DETAIL_LINK_CLASSES}
                       >
-                        DOI: {selectedPaper.doi}
+                        {selectedPaperPrimaryLink.label}
                       </a>
                     </p>
                   )}

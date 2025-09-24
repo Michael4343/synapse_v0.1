@@ -125,7 +125,8 @@ export function SaveToListModal({ isOpen, paper, onClose, onSaved, userLists, se
         setUserLists(prevLists => [...prevLists, {
           id: list.id,
           name: list.name,
-          items_count: 0
+          items_count: 0,
+          status: 'ready'
         }])
       }
 
