@@ -86,8 +86,21 @@ const SAMPLE_PAPERS: ApiSearchResult[] = [
     source: 'sample_data'
   }
 ]
+type TileActionId = 'compile-methods' | 'compile-claims' | 'rate' | 'share'
+type CompileActionId = Extract<TileActionId, 'compile-methods' | 'compile-claims'>
+
+interface CompileState {
+  actionId: CompileActionId | null
+  status: 'idle' | 'loading' | 'success' | 'error'
+  message: string
+  tempListId: number | null
+  listName: string | null
+  listId: number | null
+  summary: string | null
+}
+
 const TILE_ACTIONS: Array<{
-  id: 'compile-methods' | 'compile-claims' | 'rate' | 'share'
+  id: TileActionId
   label: string
   disabled?: boolean
   description?: string
@@ -116,6 +129,16 @@ const TILE_ACTIONS: Array<{
   },
 ]
 
+const INITIAL_COMPILE_STATE: CompileState = {
+  actionId: null,
+  status: 'idle',
+  message: '',
+  tempListId: null,
+  listName: null,
+  listId: null,
+  summary: null,
+}
+
 const SHELL_CLASSES = 'min-h-screen bg-slate-50 text-slate-900';
 const FEED_CARD_CLASSES = 'space-y-8 rounded-3xl border border-slate-200 bg-white p-8 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
 const DETAIL_SHELL_CLASSES = 'w-full rounded-3xl border border-slate-200 bg-white p-8 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
@@ -124,10 +147,11 @@ const TILE_BASE_CLASSES = 'group relative flex cursor-pointer flex-col gap-4 rou
 const TILE_SELECTED_CLASSES = 'border-sky-400 bg-sky-50 ring-1 ring-sky-100';
 const ACTION_LIST_CLASSES = 'grid w-full gap-3 sm:grid-cols-2';
 const ACTION_ITEM_BASE_CLASSES = 'flex h-full flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition';
-const ACTION_ITEM_INTERACTIVE_CLASSES = 'cursor-pointer hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-[0_12px_30px_rgba(56,189,248,0.12)]';
+const ACTION_ITEM_INTERACTIVE_CLASSES = 'cursor-pointer hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-[0_12px_30px_rgba(56,189,248,0.12)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-none disabled:hover:border-slate-200';
 const ACTION_ITEM_DISABLED_CLASSES = 'cursor-not-allowed opacity-70';
 const ACTION_LABEL_CLASSES = 'text-sm font-semibold text-slate-900';
 const ACTION_DESCRIPTION_CLASSES = 'text-xs leading-relaxed text-slate-500';
+const ACTION_SPINNER_CLASSES = 'inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent';
 const FEED_LOADING_WRAPPER_CLASSES = 'relative flex flex-col gap-3';
 const FEED_SPINNER_CLASSES = 'inline-block h-5 w-5 animate-spin rounded-full border-2 border-sky-500 border-t-transparent';
 const FEED_LOADING_PILL_CLASSES = 'inline-flex items-center gap-2 self-start rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-600 shadow-sm';
@@ -227,6 +251,13 @@ function parseManualKeywords(input: string) {
     .slice(0, 20)
 }
 
+function truncateTitleForList(title: string, maxLength = 64) {
+  if (title.length <= maxLength) {
+    return title
+  }
+  return `${title.slice(0, maxLength - 1)}…`
+}
+
 export default function Home() {
   const { user, signOut } = useAuth();
   const authModal = useAuthModal();
@@ -248,6 +279,8 @@ export default function Home() {
   const [profileError, setProfileError] = useState('');
   const [profileFormOrcid, setProfileFormOrcid] = useState('');
   const [profileFormWebsite, setProfileFormWebsite] = useState('');
+  const [orcidEditingMode, setOrcidEditingMode] = useState(false);
+  const [websiteEditingMode, setWebsiteEditingMode] = useState(false);
   const [profileManualKeywords, setProfileManualKeywords] = useState('');
   const [manualKeywordsSeededVersion, setManualKeywordsSeededVersion] = useState<string | null>(null);
   const [profileResumeText, setProfileResumeText] = useState('');
@@ -263,6 +296,8 @@ export default function Home() {
   const [selectedListId, setSelectedListId] = useState<number | null>(null);
   const [listItems, setListItems] = useState<ApiSearchResult[]>([]);
   const [listItemsLoading, setListItemsLoading] = useState(false);
+  const [listItemsLoadingMessage, setListItemsLoadingMessage] = useState('');
+  const [compileState, setCompileState] = useState<CompileState>(INITIAL_COMPILE_STATE);
   const [personalFeedResults, setPersonalFeedResults] = useState<ApiSearchResult[]>([]);
   const [personalFeedLoading, setPersonalFeedLoading] = useState(false);
   const [personalFeedError, setPersonalFeedError] = useState('');
@@ -341,6 +376,7 @@ export default function Home() {
     if (!user) return;
 
     setListItemsLoading(true);
+    setListItemsLoadingMessage('Loading list items…');
     try {
       const authHeaders = await getAuthHeaders();
       const response = await fetch(`/api/lists/${listId}/items`, {
@@ -359,6 +395,7 @@ export default function Home() {
       console.error('Failed to fetch list items:', error);
     } finally {
       setListItemsLoading(false);
+      setListItemsLoadingMessage('');
     }
   }, [getAuthHeaders, user]);
 
@@ -738,6 +775,8 @@ export default function Home() {
     if (profile) {
       setProfileFormOrcid(profile.orcid_id ?? '');
       setProfileFormWebsite(profile.academic_website ?? '');
+      setOrcidEditingMode(false);
+      setWebsiteEditingMode(false);
 
       const currentVersion = profile.profile_enrichment_version ?? 'initial';
       if (manualKeywordsSeededVersion !== currentVersion) {
@@ -776,6 +815,7 @@ export default function Home() {
   const isSearchContext = keywordLoading || keywordResults.length > 0 || Boolean(lastKeywordQuery) || Boolean(keywordError);
   const isListViewActive = Boolean(selectedListId);
   const shouldShowPersonalFeed = Boolean(user && profile?.orcid_id && !profileNeedsSetup && !isSearchContext && !isListViewActive);
+  const compileInProgress = compileState.status === 'loading';
   const personalizationInputs = (includeAction: boolean) => {
     const keywordsId = includeAction ? 'profile-keywords-editor' : 'profile-keywords';
     const resumeId = includeAction ? 'profile-resume-editor' : 'profile-resume';
@@ -795,18 +835,6 @@ export default function Home() {
           />
         </div>
 
-        <div className="space-y-2">
-          <label htmlFor={resumeId} className={PROFILE_LABEL_CLASSES}>
-            Recent work summary
-          </label>
-          <textarea
-            id={resumeId}
-            rows={4}
-            value={profileResumeText}
-            onChange={(event) => setProfileResumeText(event.target.value)}
-            className={`${PROFILE_INPUT_CLASSES} min-h-[120px]`}
-          />
-        </div>
 
       </div>
     );
@@ -868,30 +896,86 @@ export default function Home() {
           <label htmlFor="profile-orcid" className={PROFILE_LABEL_CLASSES}>
             ORCID iD
           </label>
-          <input
-            id="profile-orcid"
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            placeholder="0000-0000-0000-0000"
-            value={profileFormOrcid}
-            onChange={(event) => setProfileFormOrcid(event.target.value)}
-            className={PROFILE_INPUT_CLASSES}
-          />
+          <div className="flex gap-2">
+            <input
+              id="profile-orcid"
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="0000-0000-0000-0000"
+              value={profileFormOrcid}
+              onChange={(event) => setProfileFormOrcid(event.target.value)}
+              disabled={profile?.orcid_id && !orcidEditingMode}
+              className={`flex-1 ${PROFILE_INPUT_CLASSES} ${
+                profile?.orcid_id && !orcidEditingMode
+                  ? 'bg-slate-100 text-slate-500 cursor-not-allowed'
+                  : ''
+              }`}
+            />
+            {profile?.orcid_id && !orcidEditingMode && (
+              <button
+                type="button"
+                onClick={() => setOrcidEditingMode(true)}
+                className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition"
+              >
+                Update
+              </button>
+            )}
+            {orcidEditingMode && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOrcidEditingMode(false);
+                  setProfileFormOrcid(profile?.orcid_id ?? '');
+                }}
+                className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="space-y-2">
           <label htmlFor="profile-website" className={PROFILE_LABEL_CLASSES}>
             Academic website
           </label>
-          <input
-            id="profile-website"
-            type="url"
-            placeholder="https://"
-            value={profileFormWebsite}
-            onChange={(event) => setProfileFormWebsite(event.target.value)}
-            className={PROFILE_INPUT_CLASSES}
-          />
+          <div className="flex gap-2">
+            <input
+              id="profile-website"
+              type="url"
+              placeholder="https://"
+              value={profileFormWebsite}
+              onChange={(event) => setProfileFormWebsite(event.target.value)}
+              disabled={profile?.academic_website && !websiteEditingMode}
+              className={`flex-1 ${PROFILE_INPUT_CLASSES} ${
+                profile?.academic_website && !websiteEditingMode
+                  ? 'bg-slate-100 text-slate-500 cursor-not-allowed'
+                  : ''
+              }`}
+            />
+            {profile?.academic_website && !websiteEditingMode && (
+              <button
+                type="button"
+                onClick={() => setWebsiteEditingMode(true)}
+                className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition"
+              >
+                Update
+              </button>
+            )}
+            {websiteEditingMode && (
+              <button
+                type="button"
+                onClick={() => {
+                  setWebsiteEditingMode(false);
+                  setProfileFormWebsite(profile?.academic_website ?? '');
+                }}
+                className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -945,7 +1029,7 @@ export default function Home() {
   } else if (isListViewActive && listItemsLoading) {
     mainFeedContent = (
       <div className="space-y-3">
-        <p className="text-sm text-slate-600">Loading list items...</p>
+        <p className="text-sm text-slate-600">{listItemsLoadingMessage || 'Loading list items…'}</p>
         {FEED_SKELETON_ITEMS.slice(0, 3).map((_, index) => (
           <div key={index} className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white">
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-slate-200/60 to-transparent animate-[shimmer_1.6s_infinite]" />
@@ -1065,6 +1149,15 @@ export default function Home() {
   };
 
   const handleListClick = (listId: number) => {
+    setCompileState((previous) => {
+      if (previous.status === 'loading') {
+        return previous;
+      }
+      if (previous.listId !== null && previous.listId === listId) {
+        return previous;
+      }
+      return INITIAL_COMPILE_STATE;
+    });
     setSelectedListId(listId);
     setKeywordResults([]);
     setLastKeywordQuery('');
@@ -1076,15 +1169,133 @@ export default function Home() {
 
 
 
-  const handleCompileAction = (actionLabel: string) => {
-    if (!selectedPaper) return;
+  const handleCompileAction = async (actionId: CompileActionId, actionLabel: string) => {
+    if (!selectedPaper) {
+      return;
+    }
 
     if (!user) {
       authModal.openSignup();
       return;
     }
 
-    console.log(`${actionLabel} clicked for`, selectedPaper.id);
+    if (compileState.status === 'loading') {
+      return;
+    }
+
+    const previousListId = selectedListId;
+    const previousListItems = listItems;
+    const previousSelectedPaper = selectedPaper;
+    const tempListId = -Date.now();
+    const truncatedTitle = truncateTitleForList(selectedPaper.title);
+    const placeholderName = `${actionLabel}: ${truncatedTitle}`;
+    const loadingMessage = actionId === 'compile-claims'
+      ? 'Compiling similar claims for the selected paper…'
+      : 'Compiling similar methods for the selected paper…';
+
+    setCompileState({
+      actionId,
+      status: 'loading',
+      message: actionId === 'compile-claims'
+        ? 'Compiling similar claims…'
+        : 'Compiling similar methods…',
+      tempListId,
+      listName: placeholderName,
+      listId: null,
+      summary: null,
+    });
+
+    setListItemsLoading(true);
+    setListItemsLoadingMessage(loadingMessage);
+    setUserLists((previous) => {
+      const filtered = previous.filter((list) => list.id !== tempListId);
+      return [
+        { id: tempListId, name: placeholderName, items_count: 0 },
+        ...filtered,
+      ];
+    });
+    setSelectedListId(tempListId);
+    setListItems([]);
+
+    try {
+      const response = await fetch('/api/research/compile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          paper: selectedPaper,
+          options: {
+            listName: `${actionLabel}: ${truncateTitleForList(selectedPaper.title, 80)}`,
+            maxResults: 12,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.message || 'Failed to compile research.');
+      }
+
+      const result = await response.json();
+
+      if (!result.success || !result.list) {
+        throw new Error(result.message || 'Research compilation failed.');
+      }
+
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      const createdList = result.list as { id: number; name: string; items_count: number };
+      const compiledPapers: ApiSearchResult[] = Array.isArray(result.papers) ? result.papers : [];
+
+      setCompileState({
+        actionId,
+        status: 'success',
+        message: `Created “${createdList.name}” with ${createdList.items_count} papers.`,
+        tempListId: null,
+        listName: createdList.name,
+        listId: createdList.id,
+        summary: result.researchSummary ?? null,
+      });
+
+      setListItemsLoading(false);
+      setListItemsLoadingMessage('');
+      setUserLists((previous) => {
+        const filtered = previous.filter((list) => list.id !== tempListId && list.id !== createdList.id);
+        return [
+          { id: createdList.id, name: createdList.name, items_count: createdList.items_count },
+          ...filtered,
+        ];
+      });
+      setSelectedListId(createdList.id);
+      setListItems(compiledPapers);
+      setSelectedPaper(compiledPapers.length > 0 ? compiledPapers[0] : previousSelectedPaper);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Research compilation failed.';
+
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      setCompileState({
+        actionId,
+        status: 'error',
+        message: errorMessage,
+        tempListId: null,
+        listName: placeholderName,
+        listId: null,
+        summary: null,
+      });
+
+      setListItemsLoading(false);
+      setListItemsLoadingMessage('');
+      setUserLists((previous) => previous.filter((list) => list.id !== tempListId));
+      setSelectedListId(previousListId ?? null);
+      setListItems(previousListItems);
+      setSelectedPaper(previousSelectedPaper);
+    }
   };
 
   const handleProfileSave = async (event: React.FormEvent) => {
@@ -1118,10 +1329,16 @@ export default function Home() {
       return;
     }
 
+    let normalizedWebsite = trimmedWebsite;
     if (trimmedWebsite) {
       try {
+        // Add https:// if no protocol is provided
+        if (!/^https?:\/\//i.test(trimmedWebsite)) {
+          normalizedWebsite = `https://${trimmedWebsite}`;
+        }
+
         // Validate URL structure; will throw on invalid URLs
-        const parsed = new URL(trimmedWebsite);
+        const parsed = new URL(normalizedWebsite);
         if (!parsed.protocol.startsWith('http')) {
           setProfileSaveError('Enter a valid URL starting with http:// or https://, or leave the field blank.');
           return;
@@ -1139,7 +1356,7 @@ export default function Home() {
         .from('profiles')
         .update({
           orcid_id: normalisedOrcid,
-          academic_website: trimmedWebsite || null,
+          academic_website: normalizedWebsite || null,
         })
         .eq('id', user.id);
 
@@ -1149,15 +1366,22 @@ export default function Home() {
         return;
       }
 
+      const isOrcidUpdate = profile?.orcid_id && profile.orcid_id !== normalisedOrcid;
+
       setProfile((previous) => ({
         orcid_id: normalisedOrcid,
-        academic_website: trimmedWebsite || null,
+        academic_website: normalizedWebsite || null,
         profile_personalization: previous?.profile_personalization ?? null,
         last_profile_enriched_at: previous?.last_profile_enriched_at ?? null,
         profile_enrichment_version: previous?.profile_enrichment_version ?? null,
       }));
+
+      // Reset editing modes
+      setOrcidEditingMode(false);
+      setWebsiteEditingMode(false);
+
       await runProfileEnrichment({
-        source: 'orcid_update',
+        source: isOrcidUpdate ? 'orcid_update' : 'profile_setup',
         force: true,
         orcidOverride: normalisedOrcid,
       });
@@ -1352,7 +1576,7 @@ export default function Home() {
                     className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-slate-300 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-100"
                   >
                     <p className="text-sm font-semibold text-slate-900">{getUserDisplayName(user)}</p>
-                    <p className="text-xs text-slate-600 mt-1">Click to view today's personalised feed.</p>
+                    <p className="text-xs text-slate-600 mt-1">Click to view today&rsquo;s personalised feed.</p>
                   </button>
                   {listsLoading ? (
                     <div className="flex items-center gap-2 text-sm text-slate-500">
@@ -1606,6 +1830,16 @@ export default function Home() {
               <div className={ACTION_LIST_CLASSES}>
                 {TILE_ACTIONS.map((action) => {
                   const isDisabled = Boolean(action.disabled)
+                  const isCompileAction = action.id === 'compile-methods' || action.id === 'compile-claims'
+                  const isActiveCompileAction = isCompileAction && compileState.actionId === action.id
+                  const disableAction = isDisabled || (isCompileAction && compileInProgress)
+                  const statusMessage = isActiveCompileAction && compileState.status !== 'idle' ? compileState.message : ''
+                  const statusTone = compileState.status === 'error'
+                    ? 'text-rose-600'
+                    : compileState.status === 'success'
+                      ? 'text-emerald-600'
+                      : 'text-sky-600'
+                  const showSpinner = isActiveCompileAction && compileState.status === 'loading'
                   const layoutClasses =
                     action.id === 'compile-claims'
                       ? 'sm:col-start-1 sm:row-start-2'
@@ -1616,10 +1850,22 @@ export default function Home() {
                       : ''
                   const content = (
                     <div className="flex h-full flex-col gap-2">
-                      <span className={ACTION_LABEL_CLASSES}>{action.label}</span>
+                      <span className={ACTION_LABEL_CLASSES}>
+                        {action.label}
+                        {showSpinner && (
+                          <span className="ml-2 inline-flex items-center" aria-hidden="true">
+                            <span className={ACTION_SPINNER_CLASSES} />
+                          </span>
+                        )}
+                      </span>
                       {action.description && (
-                        <span className={`${ACTION_DESCRIPTION_CLASSES} ${isDisabled ? 'text-slate-400' : ''}`}>
+                        <span className={`${ACTION_DESCRIPTION_CLASSES} ${(disableAction && !isActiveCompileAction) ? 'text-slate-400' : ''}`}>
                           {action.description}
+                        </span>
+                      )}
+                      {statusMessage && (
+                        <span className={`${ACTION_DESCRIPTION_CLASSES} ${statusTone}`}>
+                          {statusMessage}
                         </span>
                       )}
                     </div>
@@ -1643,9 +1889,11 @@ export default function Home() {
                       key={action.id}
                       type="button"
                       className={`${ACTION_ITEM_BASE_CLASSES} ${ACTION_ITEM_INTERACTIVE_CLASSES} ${layoutClasses}`}
+                      disabled={disableAction}
+                      aria-busy={isActiveCompileAction && compileState.status === 'loading'}
                       onClick={() => {
                         if (action.id === 'compile-methods' || action.id === 'compile-claims') {
-                          handleCompileAction(action.label)
+                          void handleCompileAction(action.id, action.label)
                           return
                         }
                         console.log(`${action.label} clicked for`, selectedPaper.id)
@@ -1658,6 +1906,11 @@ export default function Home() {
               </div>
 
               <section className="space-y-6">
+                {compileState.status === 'success' && compileState.summary && (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+                    {compileState.summary}
+                  </div>
+                )}
                 <div>
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Authors</h3>
                   <p className="mt-2 text-sm text-slate-700">
