@@ -79,7 +79,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     )
 
     return () => subscription.unsubscribe()
-  }, [])
+  }, [router])
 
   const signUp = async (email: string, password: string, profileData?: ProfileData) => {
     try {

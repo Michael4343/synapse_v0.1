@@ -1,10 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import type { ReactNode } from 'react';
 import { useAuth } from '../lib/auth-context';
 import { useAuthModal, getUserDisplayName } from '../lib/auth-hooks';
 import { supabase } from '../lib/supabase';
 import { AuthModal } from '../components/auth-modal';
+import type { ProfilePersonalization } from '../lib/profile-types';
+import { SaveToListModal } from '../components/save-to-list-modal';
 
 interface ApiSearchResult {
   id: string
@@ -172,6 +175,56 @@ function formatMeta(result: ApiSearchResult) {
   return items.join(' · ')
 }
 
+interface UserProfile {
+  orcid_id: string | null
+  academic_website: string | null
+  profile_personalization: ProfilePersonalization | null
+  last_profile_enriched_at: string | null
+  profile_enrichment_version: string | null
+}
+
+function formatRelativeTime(timestamp: string | null | undefined) {
+  if (!timestamp) {
+    return 'Never'
+  }
+
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) {
+    return 'Unknown'
+  }
+
+  const diffMs = Date.now() - date.getTime()
+  const diffMinutes = Math.round(diffMs / (1000 * 60))
+
+  if (diffMinutes < 1) {
+    return 'Just now'
+  }
+
+  if (diffMinutes < 60) {
+    return `${diffMinutes} minute${diffMinutes === 1 ? '' : 's'} ago`
+  }
+
+  const diffHours = Math.round(diffMinutes / 60)
+  if (diffHours < 24) {
+    return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`
+  }
+
+  const diffDays = Math.floor(diffHours / 24)
+  if (diffDays < 7) {
+    return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`
+  }
+
+  return date.toLocaleString()
+}
+
+function parseManualKeywords(input: string) {
+  return input
+    .split(/[\n,]/)
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+    .slice(0, 20)
+}
+
 export default function Home() {
   const { user, signOut } = useAuth();
   const authModal = useAuthModal();
@@ -188,16 +241,40 @@ export default function Home() {
   const [lastKeywordQuery, setLastKeywordQuery] = useState('');
   const [selectedPaper, setSelectedPaper] = useState<ApiSearchResult | null>(null);
   const [sidebarVisible, setSidebarVisible] = useState(true);
-  const [profile, setProfile] = useState<{ orcid_id: string | null; academic_website: string | null } | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState('');
   const [profileFormOrcid, setProfileFormOrcid] = useState('');
   const [profileFormWebsite, setProfileFormWebsite] = useState('');
+  const [profileManualKeywords, setProfileManualKeywords] = useState('');
+  const [profileResumeText, setProfileResumeText] = useState('');
   const [profileSaveError, setProfileSaveError] = useState('');
   const [profileSaveSuccess, setProfileSaveSuccess] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
+  const [profileEnrichmentLoading, setProfileEnrichmentLoading] = useState(false);
+  const [profileEnrichmentError, setProfileEnrichmentError] = useState('');
+  const [profileEnrichmentMessage, setProfileEnrichmentMessage] = useState('');
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [paperToSave, setPaperToSave] = useState<ApiSearchResult | null>(null);
+  const [userLists, setUserLists] = useState<Array<{id: number, name: string, items_count: number}>>([]);
+  const [listsLoading, setListsLoading] = useState(false);
+  const [selectedListId, setSelectedListId] = useState<number | null>(null);
+  const [listItems, setListItems] = useState<ApiSearchResult[]>([]);
+  const [listItemsLoading, setListItemsLoading] = useState(false);
+  const [personalFeedResults, setPersonalFeedResults] = useState<ApiSearchResult[]>([]);
+  const [personalFeedLoading, setPersonalFeedLoading] = useState(false);
+  const [personalFeedError, setPersonalFeedError] = useState('');
+  const [personalFeedLastUpdated, setPersonalFeedLastUpdated] = useState<string | null>(null);
+  const [profileEditorVisible, setProfileEditorVisible] = useState(false);
 
   const isMountedRef = useRef(true);
+  const autoEnrichmentRequestedRef = useRef(false);
+
+  const getAuthHeaders = useCallback(async () => {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }, []);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -205,6 +282,51 @@ export default function Home() {
       isMountedRef.current = false;
     };
   }, []);
+
+  const fetchUserLists = useCallback(async () => {
+    if (!user) return;
+
+    setListsLoading(true);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch('/api/lists', {
+        headers: authHeaders,
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setUserLists(data.lists || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch user lists:', error);
+    } finally {
+      setListsLoading(false);
+    }
+  }, [getAuthHeaders, user]);
+
+  const fetchListItems = useCallback(async (listId: number) => {
+    if (!user) return;
+
+    setListItemsLoading(true);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch(`/api/lists/${listId}/items`, {
+        headers: authHeaders,
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const papers = data.list?.items?.map((item: any) => item.paper_data) || [];
+        setListItems(papers);
+        // Auto-select first paper if available
+        if (papers.length > 0) {
+          setSelectedPaper(papers[0]);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch list items:', error);
+    } finally {
+      setListItemsLoading(false);
+    }
+  }, [getAuthHeaders, user]);
 
   // Set initial selected paper based on authentication status
   useEffect(() => {
@@ -228,7 +350,7 @@ export default function Home() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('orcid_id, academic_website')
+        .select('orcid_id, academic_website, profile_personalization, last_profile_enriched_at, profile_enrichment_version')
         .eq('id', user.id)
         .single();
 
@@ -244,6 +366,9 @@ export default function Home() {
         setProfile({
           orcid_id: data?.orcid_id ?? null,
           academic_website: data?.academic_website ?? null,
+          profile_personalization: data?.profile_personalization ?? null,
+          last_profile_enriched_at: data?.last_profile_enriched_at ?? null,
+          profile_enrichment_version: data?.profile_enrichment_version ?? null,
         });
       }
     } catch (error) {
@@ -259,6 +384,167 @@ export default function Home() {
     }
   }, [user]);
 
+  const profilePersonalization = profile?.profile_personalization ?? null;
+  const profileTopicClusters = profilePersonalization?.topic_clusters ?? [];
+  const profileLastEnrichedLabel = formatRelativeTime(profile?.last_profile_enriched_at);
+
+  const buildClusterQuery = (cluster: ProfilePersonalization['topic_clusters'][number]) => {
+    const keywords = Array.isArray(cluster.keywords) ? cluster.keywords : [];
+    const synonyms = Array.isArray(cluster.synonyms) ? cluster.synonyms : [];
+    const methods = Array.isArray(cluster.methods) ? cluster.methods : [];
+    const applications = Array.isArray(cluster.applications) ? cluster.applications : [];
+    const terms = [...keywords, ...synonyms, ...methods, ...applications]
+      .map((term) => term?.trim())
+      .filter((term): term is string => Boolean(term))
+      .slice(0, 6);
+
+    if (!terms.length) {
+      return '';
+    }
+
+    const quotedTerms = terms.map((term) => (term.includes(' ') ? `"${term}"` : term));
+    return quotedTerms.join(' ');
+  };
+
+  const loadPersonalFeed = useCallback(
+    async ({ personalizationOverride, minimumQueries = 1, force = false }: { personalizationOverride?: ProfilePersonalization | null; minimumQueries?: number; force?: boolean } = {}) => {
+      if (!user || !profile?.orcid_id) {
+        return;
+      }
+
+      const activePersonalization = personalizationOverride ?? profilePersonalization;
+
+      if (!activePersonalization || !Array.isArray(activePersonalization.topic_clusters) || activePersonalization.topic_clusters.length === 0) {
+        setPersonalFeedResults([]);
+        setPersonalFeedError('Add focus keywords to generate your personalised feed.');
+        return;
+      }
+
+      if (personalFeedLoading && !force) {
+        return;
+      }
+
+      const sortedClusters = [...activePersonalization.topic_clusters].sort((a, b) => {
+        const priorityA = typeof a.priority === 'number' ? a.priority : Number.MAX_SAFE_INTEGER;
+        const priorityB = typeof b.priority === 'number' ? b.priority : Number.MAX_SAFE_INTEGER;
+        return priorityA - priorityB;
+      });
+
+      const queries = sortedClusters
+        .map((cluster) => buildClusterQuery(cluster))
+        .filter((query) => Boolean(query));
+
+      if (!queries.length) {
+        setPersonalFeedResults([]);
+        setPersonalFeedError('We need more detail about your focus areas to generate results.');
+        return;
+      }
+
+      setPersonalFeedLoading(true);
+      setPersonalFeedError('');
+
+      try {
+        const aggregated: ApiSearchResult[] = [];
+        const seen = new Set<string>();
+
+        for (const query of queries.slice(0, Math.max(minimumQueries, 3))) {
+          if (aggregated.length >= 12) {
+            break;
+          }
+
+          try {
+            const response = await fetch('/api/search', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ query }),
+            });
+
+            if (!response.ok) {
+              continue;
+            }
+
+            const payload = await response.json();
+            const results = Array.isArray(payload.results) ? payload.results : [];
+
+            for (const result of results) {
+              if (!seen.has(result.id)) {
+                aggregated.push(result);
+                seen.add(result.id);
+              }
+              if (aggregated.length >= 12) {
+                break;
+              }
+            }
+          } catch (error) {
+            console.error('Personal feed query failed', error);
+          }
+        }
+
+        if (!aggregated.length) {
+          setPersonalFeedResults([]);
+          setPersonalFeedError('We could not find new papers for your focus areas. Try refreshing in a bit or adjust your profile.');
+        } else {
+          setPersonalFeedResults(aggregated.slice(0, 12));
+          setPersonalFeedError('');
+          setPersonalFeedLastUpdated(new Date().toISOString());
+        }
+      } finally {
+        setPersonalFeedLoading(false);
+      }
+    },
+    [personalFeedLoading, profile?.orcid_id, profilePersonalization, user]
+  );
+
+  useEffect(() => {
+    if (!user) {
+      setPersonalFeedResults([]);
+      setPersonalFeedError('');
+      setPersonalFeedLastUpdated(null);
+      return;
+    }
+
+    if (!profile?.orcid_id) {
+      setPersonalFeedResults([]);
+      return;
+    }
+
+   if (!profilePersonalization || !profilePersonalization.topic_clusters?.length) {
+     return;
+   }
+
+    if (personalFeedResults.length === 0) {
+      loadPersonalFeed({ minimumQueries: 3 });
+    }
+  }, [loadPersonalFeed, personalFeedResults.length, profile?.orcid_id, profilePersonalization, user]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    if (keywordLoading || keywordResults.length > 0 || lastKeywordQuery || selectedListId) {
+      return;
+    }
+
+    if (personalFeedResults.length > 0) {
+      setSelectedPaper((prev) => {
+        if (prev && personalFeedResults.find((result) => result.id === prev.id)) {
+          return prev;
+        }
+        return personalFeedResults[0];
+      });
+    }
+  }, [
+    keywordLoading,
+    keywordResults,
+    lastKeywordQuery,
+    personalFeedResults,
+    selectedListId,
+    user,
+  ]);
+
   useEffect(() => {
     if (!user) {
       setProfile(null);
@@ -266,23 +552,219 @@ export default function Home() {
       setProfileLoading(false);
       setProfileFormOrcid('');
       setProfileFormWebsite('');
+      setProfileManualKeywords('');
+      setProfileResumeText('');
       setProfileSaveError('');
       setProfileSaveSuccess('');
+      setProfileEnrichmentError('');
+      setProfileEnrichmentMessage('');
+      setProfileEnrichmentLoading(false);
+      setPersonalFeedResults([]);
+      setPersonalFeedError('');
+      setPersonalFeedLastUpdated(null);
+      setProfileEditorVisible(false);
+      autoEnrichmentRequestedRef.current = false;
       return;
     }
 
     refreshProfile();
-  }, [user, refreshProfile]);
+    if (user) {
+      fetchUserLists();
+    } else {
+      setUserLists([]);
+    }
+  }, [user, refreshProfile, fetchUserLists]);
+
+  const runProfileEnrichment = useCallback(
+    async ({
+      source = 'manual_refresh',
+      force = false,
+      skipOrcidFetch = false,
+      skipMessages = false,
+      orcidOverride,
+    }: {
+      source?: string
+      force?: boolean
+      skipOrcidFetch?: boolean
+      skipMessages?: boolean
+      orcidOverride?: string | null
+    } = {}) => {
+      if (!user) {
+        authModal.openSignup();
+        return;
+      }
+
+      if (source !== 'manual_refresh') {
+        autoEnrichmentRequestedRef.current = true;
+      }
+
+      if (profileEnrichmentLoading) {
+        return;
+      }
+
+      const effectiveOrcid = orcidOverride ?? profile?.orcid_id ?? null;
+      if (!effectiveOrcid) {
+        setProfileEnrichmentError('Add your ORCID iD before generating personalization.');
+        return;
+      }
+
+      const manualKeywords = parseManualKeywords(profileManualKeywords);
+      const trimmedResume = profileResumeText.trim();
+
+      setProfileEnrichmentLoading(true);
+      setProfileEnrichmentError('');
+      if (!skipMessages) {
+        setProfileEnrichmentMessage('');
+      }
+
+      try {
+        const authHeaders = await getAuthHeaders();
+
+        const response = await fetch('/api/profile/enrich', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...authHeaders,
+          },
+          body: JSON.stringify({
+            manualKeywords,
+            resumeText: trimmedResume || undefined,
+            source,
+            force,
+            skipOrcidFetch,
+          }),
+        });
+
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          const message = typeof payload.error === 'string' ? payload.error : 'Profile enrichment failed.';
+          setProfileEnrichmentError(message);
+          return;
+        }
+
+        const payload = await response.json();
+
+        if (payload.skipped) {
+          if (!skipMessages) {
+            setProfileEnrichmentMessage(payload.reason || 'Personalization was refreshed recently.');
+          }
+
+          if (payload.personalization) {
+            setProfile((prev) => {
+              if (!prev) {
+                return {
+                  orcid_id: effectiveOrcid,
+                  academic_website: null,
+                  profile_personalization: payload.personalization,
+                  last_profile_enriched_at: payload.last_profile_enriched_at ?? null,
+                  profile_enrichment_version: payload.profile_enrichment_version ?? null,
+                };
+              }
+
+              return {
+                ...prev,
+                profile_personalization: payload.personalization,
+                last_profile_enriched_at: payload.last_profile_enriched_at ?? prev.last_profile_enriched_at,
+                profile_enrichment_version:
+                  payload.profile_enrichment_version ?? prev.profile_enrichment_version,
+              };
+            });
+
+            await loadPersonalFeed({ personalizationOverride: payload.personalization, force: true });
+          }
+
+          return;
+        }
+
+        if (payload.personalization) {
+          setProfile((prev) => {
+            if (!prev) {
+              return {
+                orcid_id: effectiveOrcid,
+                academic_website: null,
+                profile_personalization: payload.personalization,
+                last_profile_enriched_at: payload.last_profile_enriched_at ?? null,
+                profile_enrichment_version: payload.profile_enrichment_version ?? null,
+              };
+            }
+
+            return {
+              ...prev,
+              profile_personalization: payload.personalization,
+              last_profile_enriched_at: payload.last_profile_enriched_at ?? prev.last_profile_enriched_at,
+              profile_enrichment_version:
+                payload.profile_enrichment_version ?? prev.profile_enrichment_version,
+            };
+          });
+
+          await loadPersonalFeed({ personalizationOverride: payload.personalization, force: true });
+        }
+
+        if (!skipMessages) {
+          if (payload.usedFallback) {
+            setProfileEnrichmentMessage(payload.message || 'Generated personalization using fallback heuristics.');
+          } else {
+            setProfileEnrichmentMessage(payload.message || 'Personalization refreshed successfully.');
+          }
+        }
+      } catch (error) {
+        console.error('Profile enrichment request failed', error);
+        setProfileEnrichmentError('We could not refresh your personalization. Please try again.');
+      } finally {
+        setProfileEnrichmentLoading(false);
+      }
+    }, [
+      authModal,
+      getAuthHeaders,
+      loadPersonalFeed,
+      profile,
+      profileEnrichmentLoading,
+      profileManualKeywords,
+      profileResumeText,
+      user,
+    ]);
+
+  useEffect(() => {
+    if (!user || !profile?.orcid_id) {
+      return;
+    }
+
+    if (profileEnrichmentLoading || autoEnrichmentRequestedRef.current) {
+      return;
+    }
+
+    const lastRun = profile.last_profile_enriched_at ? new Date(profile.last_profile_enriched_at).getTime() : 0;
+    const needsRefresh = !lastRun || Date.now() - lastRun > 1000 * 60 * 60 * 24;
+
+    if (needsRefresh) {
+      autoEnrichmentRequestedRef.current = true;
+      void runProfileEnrichment({
+        source: 'daily_refresh',
+        force: true,
+        skipMessages: true,
+      });
+    }
+  }, [profile, profileEnrichmentLoading, runProfileEnrichment, user]);
 
   useEffect(() => {
     if (profile) {
       setProfileFormOrcid(profile.orcid_id ?? '');
       setProfileFormWebsite(profile.academic_website ?? '');
+
+      if (!profileManualKeywords && profile.profile_personalization?.topic_clusters?.length) {
+        const seedKeywords = profile.profile_personalization.topic_clusters
+          .map((cluster) => cluster.keywords?.[0] || cluster.label)
+          .filter((value): value is string => Boolean(value))
+          .slice(0, 5)
+        if (seedKeywords.length) {
+          setProfileManualKeywords(seedKeywords.join(', '));
+        }
+      }
     } else {
       setProfileFormOrcid('');
       setProfileFormWebsite('');
     }
-  }, [profile]);
+  }, [profile, profileManualKeywords]);
 
   const metaSummary = selectedPaper
     ? [
@@ -297,11 +779,326 @@ export default function Home() {
     : '';
 
   const profileNeedsSetup = Boolean(user) && !profileLoading && !profileError && (!profile || !profile.orcid_id);
-  const hasSearchContext =
-    keywordLoading ||
-    keywordResults.length > 0 ||
-    Boolean(keywordError) ||
-    Boolean(lastKeywordQuery);
+  const isSearchContext = keywordLoading || keywordResults.length > 0 || Boolean(lastKeywordQuery) || Boolean(keywordError);
+  const isListViewActive = Boolean(selectedListId);
+  const shouldShowPersonalFeed = Boolean(user && profile?.orcid_id && !profileNeedsSetup && !isSearchContext && !isListViewActive);
+  const personalFeedLastUpdatedLabel = personalFeedLastUpdated ? formatRelativeTime(personalFeedLastUpdated) : profileLastEnrichedLabel;
+  const userInitial = user ? getUserDisplayName(user).charAt(0).toUpperCase() : '';
+
+  const personalizationInputs = (includeAction: boolean) => {
+    const keywordsId = includeAction ? 'profile-keywords-editor' : 'profile-keywords';
+    const resumeId = includeAction ? 'profile-resume-editor' : 'profile-resume';
+
+    return (
+      <div className="space-y-5">
+        <div className="space-y-2">
+          <label htmlFor={keywordsId} className={PROFILE_LABEL_CLASSES}>
+            Focus keywords <span className="lowercase text-slate-400">(optional)</span>
+          </label>
+          <textarea
+            id={keywordsId}
+            rows={3}
+            placeholder="foundation models, transformer efficiency, retrieval-augmented generation"
+            value={profileManualKeywords}
+            onChange={(event) => setProfileManualKeywords(event.target.value)}
+            className={`${PROFILE_INPUT_CLASSES} min-h-[96px]`}
+          />
+          <p className="text-xs text-slate-500">
+            Separate terms with commas or line breaks. We seed personalization queries with these hints.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <label htmlFor={resumeId} className={PROFILE_LABEL_CLASSES}>
+            Recent work summary <span className="lowercase text-slate-400">(optional)</span>
+          </label>
+          <textarea
+            id={resumeId}
+            rows={4}
+            placeholder="Paste a short summary of what you are exploring right now."
+            value={profileResumeText}
+            onChange={(event) => setProfileResumeText(event.target.value)}
+            className={`${PROFILE_INPUT_CLASSES} min-h-[120px]`}
+          />
+          <p className="text-xs text-slate-500">
+            Add context about current projects so the assistant can weight emerging topics appropriately.
+          </p>
+        </div>
+
+        {includeAction ? (
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-slate-500">
+              We blend your ORCID history with these hints to gather 12 fresh items every day.
+            </p>
+            <button
+              type="button"
+              onClick={() => runProfileEnrichment({ source: 'manual_refresh', force: true })}
+              className={PROFILE_PRIMARY_BUTTON_CLASSES}
+              disabled={profileEnrichmentLoading || !profile?.orcid_id}
+            >
+              {profileEnrichmentLoading ? 'Generating…' : 'Refresh personalization'}
+            </button>
+          </div>
+        ) : (
+          <p className="text-xs text-slate-500">
+            We will use these hints once your ORCID is saved to jump-start the personalization model.
+          </p>
+        )}
+      </div>
+    );
+  };
+  const renderResultList = (results: ApiSearchResult[], badge: string) => (
+    <div className="space-y-3">
+      {results.map((result) => {
+        const isSelected = selectedPaper?.id === result.id;
+
+        return (
+          <article
+            key={result.id}
+            role="button"
+            tabIndex={0}
+            onClick={() => setSelectedPaper(result)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                setSelectedPaper(result);
+              }
+            }}
+            className={`${TILE_BASE_CLASSES} ${isSelected ? TILE_SELECTED_CLASSES : ''}`}
+          >
+            <div className="space-y-2">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">{badge}</p>
+              <h3 className="text-lg font-semibold text-slate-900">{result.title}</h3>
+              <p className="text-sm text-slate-600">{formatAuthors(result.authors)}</p>
+              {formatMeta(result) && (
+                <p className="text-xs text-slate-500">{formatMeta(result)}</p>
+              )}
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
+  const renderProfileForm = (includePersonalizationInputs: boolean) => (
+    <form onSubmit={handleProfileSave} className="mt-6 space-y-5">
+      <div className="space-y-2">
+        <label htmlFor="profile-orcid" className={PROFILE_LABEL_CLASSES}>
+          ORCID iD
+        </label>
+        <input
+          id="profile-orcid"
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          placeholder="0000-0000-0000-0000"
+          value={profileFormOrcid}
+          onChange={(event) => setProfileFormOrcid(event.target.value)}
+          className={PROFILE_INPUT_CLASSES}
+        />
+        <p className="text-xs text-slate-500">
+          We use your ORCID to align recommendations with your publications.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor="profile-website" className={PROFILE_LABEL_CLASSES}>
+          Academic website <span className="lowercase text-slate-400">(optional)</span>
+        </label>
+        <input
+          id="profile-website"
+          type="url"
+          placeholder="https://"
+          value={profileFormWebsite}
+          onChange={(event) => setProfileFormWebsite(event.target.value)}
+          className={PROFILE_INPUT_CLASSES}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <span className={PROFILE_LABEL_CLASSES}>Bibliography</span>
+          <span className={PROFILE_COMING_SOON_BADGE_CLASSES}>Coming soon</span>
+        </div>
+        <button
+          type="button"
+          disabled
+          aria-disabled
+          className={PROFILE_DISABLED_UPLOAD_BUTTON_CLASSES}
+        >
+          📄 Upload bibliography file
+        </button>
+        <p className="text-xs text-slate-400">
+          Bring in your publications to further tailor recommendations.
+        </p>
+      </div>
+
+      {personalizationInputs(includePersonalizationInputs)}
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-slate-500">
+          Your details stay private and only power personalised recommendations.
+        </p>
+        <button
+          type="submit"
+          className={PROFILE_PRIMARY_BUTTON_CLASSES}
+          disabled={profileSaving}
+        >
+          {profileSaving ? 'Saving…' : 'Save profile'}
+        </button>
+      </div>
+    </form>
+  );
+  let mainFeedContent: ReactNode = null;
+
+  if (keywordLoading) {
+    mainFeedContent = (
+      <div className={FEED_LOADING_WRAPPER_CLASSES}>
+        <span className={FEED_LOADING_PILL_CLASSES}>
+          <span className={FEED_SPINNER_CLASSES} aria-hidden="true" />
+          <span>Fetching results…</span>
+        </span>
+        {FEED_SKELETON_ITEMS.slice(0, 3).map((_, index) => (
+          <div key={index} className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-slate-200/60 to-transparent animate-[shimmer_1.6s_infinite]" />
+            <div className="px-6 py-8">
+              <div className="h-5 w-1/3 rounded-full bg-slate-200/80" />
+              <div className="mt-4 h-4 w-2/3 rounded-full bg-slate-200/60" />
+              <div className="mt-3 h-3 w-1/2 rounded-full bg-slate-200/50" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  } else if (isListViewActive && listItemsLoading) {
+    mainFeedContent = (
+      <div className="space-y-3">
+        <p className="text-sm text-slate-600">Loading list items...</p>
+        {FEED_SKELETON_ITEMS.slice(0, 3).map((_, index) => (
+          <div key={index} className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-slate-200/60 to-transparent animate-[shimmer_1.6s_infinite]" />
+            <div className="px-6 py-8">
+              <div className="h-5 w-1/3 rounded-full bg-slate-200/80" />
+              <div className="mt-4 h-4 w-2/3 rounded-full bg-slate-200/60" />
+              <div className="mt-3 h-3 w-1/2 rounded-full bg-slate-200/50" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  } else if (isListViewActive && listItems.length > 0) {
+    mainFeedContent = (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-slate-900">
+            {userLists.find((list) => list.id === selectedListId)?.name || 'Selected List'}
+          </h2>
+          <span className="text-sm text-slate-500">({listItems.length} papers)</span>
+        </div>
+        {renderResultList(listItems, 'Saved Paper')}
+      </div>
+    );
+  } else if (isListViewActive) {
+    mainFeedContent = (
+      <div className="rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center text-sm text-slate-600">
+        This list does not have any papers yet. Start saving results to populate it.
+      </div>
+    );
+  } else if (keywordResults.length > 0) {
+    mainFeedContent = (
+      <>
+        <div className={RESULT_SUMMARY_CLASSES}>
+          <span>Showing</span>
+          <span className="text-base font-semibold text-slate-900">{keywordResults.length}</span>
+          <span>result{keywordResults.length === 1 ? '' : 's'} for</span>
+          <span className="text-base font-semibold text-slate-900">&ldquo;{lastKeywordQuery}&rdquo;</span>
+        </div>
+        {renderResultList(keywordResults, 'Paper')}
+      </>
+    );
+  } else if (lastKeywordQuery && !keywordError) {
+    mainFeedContent = (
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-100 px-6 py-10 text-center text-sm text-slate-600">
+        Nothing surfaced for this query yet. Try refining keywords or toggling a different source.
+      </div>
+    );
+  } else if (shouldShowPersonalFeed) {
+    if (personalFeedLoading) {
+      mainFeedContent = (
+        <div className={FEED_LOADING_WRAPPER_CLASSES}>
+          <span className={FEED_LOADING_PILL_CLASSES}>
+            <span className={FEED_SPINNER_CLASSES} aria-hidden="true" />
+            <span>Refreshing your personalised feed…</span>
+          </span>
+          {FEED_SKELETON_ITEMS.slice(0, 3).map((_, index) => (
+            <div key={index} className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-slate-200/60 to-transparent animate-[shimmer_1.6s_infinite]" />
+              <div className="px-6 py-8">
+                <div className="h-5 w-1/3 rounded-full bg-slate-200/80" />
+                <div className="mt-4 h-4 w-2/3 rounded-full bg-slate-200/60" />
+                <div className="mt-3 h-3 w-1/2 rounded-full bg-slate-200/50" />
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    } else if (personalFeedResults.length > 0) {
+      mainFeedContent = renderResultList(personalFeedResults, 'Recommended Paper');
+    } else {
+      mainFeedContent = (
+        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center text-sm text-slate-600">
+          {personalFeedError || 'We could not find new papers for your focus areas today. Try refreshing later or adding more keywords to your profile.'}
+        </div>
+      );
+    }
+  } else if (!user) {
+    mainFeedContent = (
+      <div className="space-y-4">
+        <div className="rounded-xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-4 text-center">
+          <p className="text-sm font-semibold text-sky-700">Featured Research</p>
+          <p className="text-xs text-sky-600 mt-1">Explore groundbreaking papers or register to get your personalised research feed!</p>
+        </div>
+        <div className="space-y-3">
+          {SAMPLE_PAPERS.map((result) => {
+            const isSelected = selectedPaper?.id === result.id;
+
+            return (
+              <article
+                key={result.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => setSelectedPaper(result)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setSelectedPaper(result);
+                  }
+                }}
+                className={`${TILE_BASE_CLASSES} ${isSelected ? TILE_SELECTED_CLASSES : ''}`}
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Featured Paper</p>
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900">{result.title}</h3>
+                  <p className="text-sm text-slate-600">{formatAuthors(result.authors)}</p>
+                  {formatMeta(result) && (
+                    <p className="text-xs text-slate-500">{formatMeta(result)}</p>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </div>
+    );
+  } else {
+    mainFeedContent = (
+      <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">
+        <h3 className="text-lg font-semibold text-slate-700 mb-2">Your Personal Feed</h3>
+        <p>Search for topics above to discover research papers. Your saved papers and preferences will appear here.</p>
+      </div>
+    );
+  }
   const shouldShowProfileSpinner = Boolean(user) && profileLoading;
 
   const handleSaveSelectedPaper = () => {
@@ -312,8 +1109,32 @@ export default function Home() {
       return;
     }
 
-    console.log('Save to List clicked for', selectedPaper.id);
+    setPaperToSave(selectedPaper);
+    setSaveModalOpen(true);
   };
+
+  const handleSaveModalClose = () => {
+    setSaveModalOpen(false);
+    setPaperToSave(null);
+  };
+
+  const handlePaperSaved = () => {
+    // Refresh the user lists to show updated counts
+    fetchUserLists();
+    console.log('Paper saved successfully!');
+  };
+
+  const handleListClick = (listId: number) => {
+    setSelectedListId(listId);
+    setKeywordResults([]);
+    setLastKeywordQuery('');
+    setKeywordError('');
+    fetchListItems(listId);
+    // Clear selected paper or set to first item once loaded
+    setSelectedPaper(null);
+  };
+
+
 
   const handleCompileAction = (actionLabel: string) => {
     if (!selectedPaper) return;
@@ -383,11 +1204,19 @@ export default function Home() {
         return;
       }
 
-      setProfile({
+      setProfile((previous) => ({
         orcid_id: normalisedOrcid,
         academic_website: trimmedWebsite || null,
+        profile_personalization: previous?.profile_personalization ?? null,
+        last_profile_enriched_at: previous?.last_profile_enriched_at ?? null,
+        profile_enrichment_version: previous?.profile_enrichment_version ?? null,
+      }));
+      setProfileSaveSuccess('Profile saved! Generating a fresh personalization now.');
+      await runProfileEnrichment({
+        source: 'orcid_update',
+        force: true,
+        orcidOverride: normalisedOrcid,
       });
-      setProfileSaveSuccess('Profile saved! Your feed will adapt to your research interests.');
     } catch (error) {
       console.error('Unexpected profile update error', error);
       setProfileSaveError('Something went wrong while saving. Please try again.');
@@ -400,6 +1229,10 @@ export default function Home() {
     e.preventDefault();
     const trimmed = keywordQuery.trim();
     const atLeastOneFilter = researchChecked || grantsChecked || patentsChecked;
+
+    // Clear list selection when searching
+    setSelectedListId(null);
+    setListItems([]);
 
     if (!trimmed) {
       setKeywordError('Enter keywords to explore the literature feed.');
@@ -467,8 +1300,53 @@ export default function Home() {
     }
   };
 
+  const handleRefreshPersonalFeed = useCallback(() => {
+    setKeywordQuery('');
+    setKeywordResults([]);
+    setKeywordError('');
+    setLastKeywordQuery('');
+    setSelectedListId(null);
+    setListItems([]);
+    loadPersonalFeed({ force: true, minimumQueries: 3 });
+  }, [loadPersonalFeed]);
+
+  const openProfileEditor = useCallback(() => {
+    setProfileEditorVisible(true);
+  }, []);
+
+  const closeProfileEditor = useCallback(() => {
+    setProfileEditorVisible(false);
+  }, []);
+
   return (
     <div className={SHELL_CLASSES}>
+      {/* Top header with sign out button */}
+      {user && (
+        <header className="border-b border-slate-200 bg-white/80 backdrop-blur">
+          <div className="mx-auto flex max-w-[1600px] items-center justify-between px-6 py-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-slate-600">Synapse</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={openProfileEditor}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                aria-label="Edit profile"
+              >
+                {userInitial || 'U'}
+              </button>
+              <button
+                type="button"
+                onClick={signOut}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+        </header>
+      )}
       <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-6 py-10">
         <div className="relative flex flex-col gap-6 xl:flex-row">
           <button
@@ -496,18 +1374,40 @@ export default function Home() {
                     <p className="text-sm font-semibold text-slate-900">{getUserDisplayName(user)}</p>
                     <p className="text-xs text-slate-600 mt-1">{user.email}</p>
                   </div>
-                  <p className="text-sm text-slate-600">
-                    Your saved research and preferences are ready. Favourites will appear here once available.
-                  </p>
-                  <div className="flex flex-col gap-3">
-                    <button
-                      type="button"
-                      onClick={signOut}
-                      className={SIDEBAR_SECONDARY_BUTTON_CLASSES}
-                    >
-                      Sign out
-                    </button>
-                  </div>
+                  {listsLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600"></div>
+                      Loading your lists...
+                    </div>
+                  ) : userLists.length > 0 ? (
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-semibold text-slate-700">Your Lists</h3>
+                      <div className="space-y-2">
+                        {userLists.map((list) => (
+                          <button
+                            key={list.id}
+                            onClick={() => handleListClick(list.id)}
+                            className={`w-full flex items-center justify-between rounded-lg border p-3 text-sm transition hover:bg-slate-100 ${
+                              selectedListId === list.id
+                                ? 'border-sky-300 bg-sky-50 ring-1 ring-sky-200'
+                                : 'border-slate-200 bg-slate-50'
+                            }`}
+                          >
+                            <span className={`font-medium ${selectedListId === list.id ? 'text-sky-900' : 'text-slate-900'}`}>
+                              {list.name}
+                            </span>
+                            <span className={`text-xs ${selectedListId === list.id ? 'text-sky-600' : 'text-slate-500'}`}>
+                              {list.items_count} item{list.items_count === 1 ? '' : 's'}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-600">
+                      Your saved research will appear here. Start by saving papers to create your first list!
+                    </p>
+                  )}
                 </>
               ) : (
                 <>
@@ -660,7 +1560,7 @@ export default function Home() {
                   <span className={FEED_SPINNER_CLASSES} aria-hidden="true" />
                   <p>Loading your research profile…</p>
                 </div>
-              ) : profileNeedsSetup && !hasSearchContext ? (
+              ) : profileNeedsSetup && !isSearchContext ? (
                 <div className={PROFILE_CARD_CLASSES}>
                   <div className="flex flex-col gap-2">
                     <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-sky-600">Research profile</span>
@@ -682,71 +1582,7 @@ export default function Home() {
                     </div>
                   )}
 
-                  <form onSubmit={handleProfileSave} className="mt-6 space-y-5">
-                    <div className="space-y-2">
-                      <label htmlFor="profile-orcid" className={PROFILE_LABEL_CLASSES}>
-                        ORCID iD
-                      </label>
-                      <input
-                        id="profile-orcid"
-                        type="text"
-                        inputMode="numeric"
-                        autoComplete="off"
-                        placeholder="0000-0000-0000-0000"
-                        value={profileFormOrcid}
-                        onChange={(event) => setProfileFormOrcid(event.target.value)}
-                        className={PROFILE_INPUT_CLASSES}
-                      />
-                      <p className="text-xs text-slate-500">
-                        We use your ORCID to align recommendations with your publications.
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label htmlFor="profile-website" className={PROFILE_LABEL_CLASSES}>
-                        Academic website <span className="lowercase text-slate-400">(optional)</span>
-                      </label>
-                      <input
-                        id="profile-website"
-                        type="url"
-                        placeholder="https://"
-                        value={profileFormWebsite}
-                        onChange={(event) => setProfileFormWebsite(event.target.value)}
-                        className={PROFILE_INPUT_CLASSES}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className={PROFILE_LABEL_CLASSES}>Bibliography</span>
-                        <span className={PROFILE_COMING_SOON_BADGE_CLASSES}>Coming soon</span>
-                      </div>
-                      <button
-                        type="button"
-                        disabled
-                        aria-disabled
-                        className={PROFILE_DISABLED_UPLOAD_BUTTON_CLASSES}
-                      >
-                        📄 Upload bibliography file
-                      </button>
-                      <p className="text-xs text-slate-400">
-                        Bring in your publications to further tailor recommendations.
-                      </p>
-                    </div>
-
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="text-xs text-slate-500">
-                        Your details stay private and only power personalised recommendations.
-                      </p>
-                      <button
-                        type="submit"
-                        className={PROFILE_PRIMARY_BUTTON_CLASSES}
-                        disabled={profileSaving}
-                      >
-                        {profileSaving ? 'Saving…' : 'Save profile'}
-                      </button>
-                    </div>
-                  </form>
+                  {renderProfileForm(false)}
                 </div>
               ) : (
                 <>
@@ -756,12 +1592,41 @@ export default function Home() {
                     </div>
                   )}
 
-                  {lastKeywordQuery && !keywordError && (
-                    <div className={RESULT_SUMMARY_CLASSES}>
-                      <span>Showing</span>
-                      <span className="text-base font-semibold text-slate-900">{keywordResults.length}</span>
-                      <span>result{keywordResults.length === 1 ? '' : 's'} for</span>
-                      <span className="text-base font-semibold text-slate-900">"{lastKeywordQuery}"</span>
+                  {user && profile?.orcid_id && !profileNeedsSetup && (
+                    <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-sm font-semibold text-slate-900">Personalised feed</span>
+                        <span className="text-xs text-slate-500">Last synced {personalFeedLastUpdatedLabel}</span>
+                      </div>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <button
+                          type="button"
+                          onClick={handleRefreshPersonalFeed}
+                          className={PROFILE_PRIMARY_BUTTON_CLASSES}
+                          disabled={personalFeedLoading}
+                        >
+                          {personalFeedLoading ? 'Refreshing…' : isSearchContext || isListViewActive ? 'Back to personalised feed' : 'Refresh personalised feed'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={openProfileEditor}
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                        >
+                          Edit profile
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {profileEnrichmentError && (
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+                      {profileEnrichmentError}
+                    </div>
+                  )}
+
+                  {profileEnrichmentMessage && (
+                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700">
+                      {profileEnrichmentMessage}
                     </div>
                   )}
 
@@ -771,107 +1636,7 @@ export default function Home() {
                     </div>
                   )}
 
-                  {keywordLoading ? (
-                    <div className={FEED_LOADING_WRAPPER_CLASSES}>
-                      <span className={FEED_LOADING_PILL_CLASSES}>
-                        <span className={FEED_SPINNER_CLASSES} aria-hidden="true" />
-                        <span>Fetching results…</span>
-                      </span>
-                      {FEED_SKELETON_ITEMS.slice(0, 3).map((_, index) => (
-                        <div
-                          key={index}
-                          className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white"
-                        >
-                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-slate-200/60 to-transparent animate-[shimmer_1.6s_infinite]" />
-                          <div className="px-6 py-8">
-                            <div className="h-5 w-1/3 rounded-full bg-slate-200/80" />
-                            <div className="mt-4 h-4 w-2/3 rounded-full bg-slate-200/60" />
-                            <div className="mt-3 h-3 w-1/2 rounded-full bg-slate-200/50" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : keywordResults.length > 0 ? (
-                    <div className="space-y-3">
-                      {keywordResults.map((result) => {
-                        const isSelected = selectedPaper?.id === result.id
-
-                        return (
-                          <article
-                            key={result.id}
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => setSelectedPaper(result)}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter' || event.key === ' ') {
-                                event.preventDefault()
-                                setSelectedPaper(result)
-                              }
-                            }}
-                            className={`${TILE_BASE_CLASSES} ${isSelected ? TILE_SELECTED_CLASSES : ''}`}
-                          >
-                            <div className="space-y-2">
-                              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Paper</p>
-                              <h3 className="text-lg font-semibold text-slate-900">{result.title}</h3>
-                              <p className="text-sm text-slate-600">{formatAuthors(result.authors)}</p>
-                              {formatMeta(result) && (
-                                <p className="text-xs text-slate-500">{formatMeta(result)}</p>
-                              )}
-                            </div>
-
-                          </article>
-                        )
-                      })}
-                    </div>
-                  ) : lastKeywordQuery ? (
-                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-100 px-6 py-10 text-center text-sm text-slate-600">
-                      Nothing surfaced for this query yet. Try refining keywords or toggling a different source.
-                    </div>
-                  ) : !user ? (
-                    <div className="space-y-4">
-                      <div className="rounded-xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-4 text-center">
-                        <p className="text-sm font-semibold text-sky-700">Featured Research</p>
-                        <p className="text-xs text-sky-600 mt-1">Explore groundbreaking papers or register to get your personalised research feed!</p>
-                      </div>
-                      <div className="space-y-3">
-                        {SAMPLE_PAPERS.map((result) => {
-                          const isSelected = selectedPaper?.id === result.id
-
-                          return (
-                            <article
-                              key={result.id}
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => setSelectedPaper(result)}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter' || event.key === ' ') {
-                                  event.preventDefault()
-                                  setSelectedPaper(result)
-                                }
-                              }}
-                              className={`${TILE_BASE_CLASSES} ${isSelected ? TILE_SELECTED_CLASSES : ''}`}
-                            >
-                              <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Featured Paper</p>
-                                </div>
-                                <h3 className="text-lg font-semibold text-slate-900">{result.title}</h3>
-                                <p className="text-sm text-slate-600">{formatAuthors(result.authors)}</p>
-                                {formatMeta(result) && (
-                                  <p className="text-xs text-slate-500">{formatMeta(result)}</p>
-                                )}
-                              </div>
-                            </article>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">
-                      <h3 className="text-lg font-semibold text-slate-700 mb-2">Your Personal Feed</h3>
-                      <p>Search for topics above to discover research papers. Your saved papers and preferences will appear here.</p>
-                    </div>
-                  )}
+                  {mainFeedContent}
                 </>
               )}
             </div>
@@ -1003,6 +1768,56 @@ export default function Home() {
         onClose={authModal.close}
         onSwitchMode={authModal.switchMode}
       />
+      {/* Save to List Modal */}
+      <SaveToListModal
+        isOpen={saveModalOpen}
+        paper={paperToSave}
+        onClose={handleSaveModalClose}
+        onSaved={handlePaperSaved}
+      />
+      {profileEditorVisible && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 py-8"
+          role="dialog"
+          aria-modal="true"
+          onClick={closeProfileEditor}
+        >
+          <div
+            className="w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_25px_60px_rgba(15,23,42,0.18)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Profile settings</h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Update your details to tune the personalised feed.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeProfileEditor}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500 transition hover:border-slate-300 hover:text-slate-900"
+                aria-label="Close profile editor"
+              >
+                Close
+              </button>
+            </div>
+            <div className="mt-4 max-h-[70vh] overflow-y-auto pr-1">
+              {profileSaveError && (
+                <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+                  {profileSaveError}
+                </div>
+              )}
+              {profileSaveSuccess && (
+                <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700">
+                  {profileSaveSuccess}
+                </div>
+              )}
+              {renderProfileForm(true)}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

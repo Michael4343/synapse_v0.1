@@ -91,7 +91,7 @@ export function AuthModal({ isOpen, mode, onClose, onSwitchMode }: AuthModalProp
         <div className={SWITCH_CONTAINER_CLASSES}>
           {mode === 'login' ? (
             <>
-              Don't have an account?{' '}
+              Don&apos;t have an account?{' '}
               <button
                 type="button"
                 onClick={onSwitchMode}

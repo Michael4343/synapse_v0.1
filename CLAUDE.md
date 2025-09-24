@@ -154,15 +154,36 @@ Building a Next.js + Supabase academic research aggregation platform that allows
 │   ├── stage-6-optimization.md   # Performance and multi-API
 │   └── acceptance-criteria.md    # Testing requirements
 └── /simple-search/               # Next.js + Supabase application
-    ├── database/schema.sql       # Supabase schema (search queries/results)
     ├── package.json              # App dependencies and scripts
+    ├── supabase/migrations/       # Database schema migrations
+    │   ├── 001_initial_schema.sql      # Core tables (profiles, feed_items, etc.)
+    │   ├── 002_profile_trigger.sql     # Auto-create profiles on signup
+    │   ├── 003_add_keywords_profile_type.sql # Keywords support
+    │   ├── 004_add_feed_preferences.sql     # User feed customization
+    │   ├── 005_add_feed_sessions.sql       # Feed history tracking
+    │   ├── 006_add_user_favourites.sql     # User favorites system
+    │   └── 007_add_user_lists.sql          # Save to list functionality
     └── src/
         ├── app/
-        │   ├── api/search/route.ts   # Supabase-backed Semantic Scholar proxy
-        │   └── search/page.tsx       # Keyword search UI with live tiles
+        │   ├── api/
+        │   │   ├── search/route.ts          # Supabase-backed Semantic Scholar proxy
+        │   │   └── lists/                   # List management API
+        │   │       ├── route.ts             # Create/fetch user lists
+        │   │       └── [id]/items/route.ts  # Add/remove papers from lists
+        │   ├── search/page.tsx              # Keyword search UI with live tiles
+        │   ├── page.tsx                     # Main dashboard with auth & lists
+        │   └── layout.tsx                   # Root layout with auth provider
+        ├── components/
+        │   ├── auth-modal.tsx               # Login/signup modal
+        │   ├── save-to-list-modal.tsx       # Save papers to lists modal
+        │   ├── login-form.tsx               # Login form component
+        │   ├── register-form.tsx            # Registration form component
+        │   └── ui/message.tsx               # UI message component
         └── lib/
-            ├── supabase.ts           # Browser client
-            └── supabase-server.ts    # Service-role client for server routes
+            ├── auth-context.tsx             # Auth state management
+            ├── auth-hooks.ts                # Auth utility hooks
+            ├── supabase.ts                  # Browser client
+            └── supabase-server.ts           # Service-role client for server routes
 ```
 
 ### Development Approach
@@ -180,7 +201,15 @@ Building a Next.js + Supabase academic research aggregation platform that allows
 - Environment variables required: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, optional `SEMANTIC_SCHOLAR_API_KEY` for higher request quotas, and optional `SEMANTIC_SCHOLAR_USER_AGENT` (defaults to a generic contact string).
 - Cached results remain fresh for 6 hours; stale data is returned if the upstream API fails so the UI always renders something.
 - Tile feed renders in `simple-search/src/app/search/page.tsx`, using `/api/search` to populate cards under the search bar.
-- Supabase schema lives in `simple-search/database/schema.sql`; keep RLS policies aligned with anonymous read/write expectations until auth lands.
+- Supabase schema lives in `simple-search/supabase/migrations/`; keep RLS policies aligned with user-specific access control.
+
+### Save to List Feature (v0.2)
+- **Modal Interface**: Clean modal popup for saving papers to lists with create new list option
+- **Database Tables**: `user_lists` stores named lists, `list_items` stores papers in JSON format
+- **API Endpoints**: `/api/lists` (GET/POST) for list management, `/api/lists/[id]/items` (GET/POST) for paper operations
+- **UI Integration**: Sign out button moved to top-right header, sidebar shows user's actual lists with item counts
+- **User Flow**: Click "Save to List" → Modal opens → Select existing list or create new → Paper saved → Sidebar updates
+- **Security**: Full RLS policies ensure users only access their own lists and items
 
 ### API Integration Priority
 1. **arXiv** (Stage 2): Free, no auth, 3s rate limit
