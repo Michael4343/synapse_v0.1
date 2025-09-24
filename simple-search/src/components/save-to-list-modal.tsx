@@ -53,6 +53,7 @@ export function SaveToListModal({ isOpen, paper, onClose, onSaved, userLists, se
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
+
   // Reset modal state when it opens
   useEffect(() => {
     if (isOpen) {
@@ -119,8 +120,8 @@ export function SaveToListModal({ isOpen, paper, onClose, onSaved, userLists, se
         const { list } = await createResponse.json()
         targetListId = list.id
 
-        // Add the new list to the userLists state
-        setUserLists([...userLists, {
+        // Add the new list to the userLists state (we'll increment count after saving paper)
+        setUserLists(prevLists => [...prevLists, {
           id: list.id,
           name: list.name,
           items_count: 0
@@ -148,7 +149,7 @@ export function SaveToListModal({ isOpen, paper, onClose, onSaved, userLists, se
       }
 
       // Optimistically update the list count
-      setUserLists(userLists.map(list =>
+      setUserLists(prevLists => prevLists.map(list =>
         list.id === targetListId
           ? { ...list, items_count: (list.items_count || 0) + 1 }
           : list
@@ -158,7 +159,7 @@ export function SaveToListModal({ isOpen, paper, onClose, onSaved, userLists, se
       setTimeout(() => {
         onSaved()
         onClose()
-      }, 1000)
+      }, 2000)
 
     } catch (error) {
       console.error('Save failed:', error)

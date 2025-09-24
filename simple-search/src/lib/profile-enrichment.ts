@@ -1,6 +1,6 @@
 import { DEFAULT_PROFILE_PERSONALIZATION, ProfilePersonalization, TopicCluster } from './profile-types'
 
-const DEFAULT_MODEL = process.env.PROFILE_ENRICHMENT_MODEL || 'gpt-4.1-mini'
+const DEFAULT_MODEL = process.env.PROFILE_ENRICHMENT_MODEL || 'gemini-2.5-flash'
 
 interface OrcidWork {
   title?: string
@@ -32,19 +32,19 @@ export async function generateProfilePersonalization({
   existingPersonalization,
 }: GenerateProfileInput): Promise<GenerateProfileOutput> {
   const fallback = buildFallbackPersonalization({ manualKeywords, orcidWorks, existingPersonalization })
-  const apiKey = process.env.OPENAI_API_KEY
+  const apiKey = process.env.GEMINI_API_KEY
 
   if (!apiKey) {
     return {
       personalization: fallback,
       modelVersion: 'fallback/manual-keywords',
       usedFallback: true,
-      message: 'OPENAI_API_KEY not configured; using heuristic profile.'
+      message: 'GEMINI_API_KEY not configured; using heuristic profile.'
     }
   }
 
   try {
-    const response = await callOpenAiForProfile({ manualKeywords, resumeText, orcidWorks, existingPersonalization, apiKey })
+    const response = await callGeminiForProfile({ manualKeywords, resumeText, orcidWorks, existingPersonalization, apiKey })
     const personalization = normalisePersonalization(response)
 
     if (!personalization.topic_clusters.length) {
@@ -253,7 +253,7 @@ function titleCase(value: string) {
     .join(' ')
 }
 
-async function callOpenAiForProfile({
+async function callGeminiForProfile({
   manualKeywords,
   resumeText,
   orcidWorks,
@@ -276,7 +276,7 @@ async function callOpenAiForProfile({
     works: worksSummary,
   }
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -409,19 +409,19 @@ async function callOpenAiForProfile({
 
   if (!response.ok) {
     const errorPayload = await response.text()
-    throw new Error(`OpenAI profile request failed: ${response.status} ${errorPayload}`)
+    throw new Error(`Gemini profile request failed: ${response.status} ${errorPayload}`)
   }
 
   const payload = await response.json()
   const message = payload?.choices?.[0]?.message?.content
   if (!message) {
-    throw new Error('OpenAI profile response missing message content')
+    throw new Error('Gemini profile response missing message content')
   }
 
   try {
     return JSON.parse(message)
   } catch (error) {
-    throw new Error('Failed to parse OpenAI profile response JSON')
+    throw new Error('Failed to parse Gemini profile response JSON')
   }
 }
 

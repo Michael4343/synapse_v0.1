@@ -8,7 +8,11 @@
       "Bash(npm install:*)",
       "Read(//mnt/c/Users/mickl/Desktop/synapse/**)",
       "Bash(grep:*)",
-      "Bash(supabase db:*)"
+      "Bash(supabase db:*)",
+      "WebFetch(domain:ai.google.dev)",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:docs.perplexity.ai)"
     ],
     "deny": [],
     "ask": []

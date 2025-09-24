@@ -194,7 +194,6 @@ export default function SearchPage() {
             <div className="flex flex-wrap items-center gap-3">
               <h2 className="text-lg font-semibold text-slate-900">{activeQuery}</h2>
               <span className="text-sm text-slate-500">{results.length} results</span>
-              {cached && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs uppercase tracking-wide text-slate-600">Cached</span>}
             </div>
           )}
 
@@ -256,7 +255,7 @@ export default function SearchPage() {
                         key={action.id}
                         type="button"
                         disabled={action.disabled}
-                        className={`flex items-center justify-between rounded-xl border px-4 py-2 text-xs font-semibold shadow-[0px_4px_12px_rgba(71,85,105,0.12)] transition ${
+                        className={`flex items-center justify-center rounded-xl border px-4 py-2 text-xs font-semibold shadow-[0px_4px_12px_rgba(71,85,105,0.12)] transition ${
                           action.disabled
                             ? 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-400 shadow-none'
                             : 'border-slate-200/70 bg-white text-slate-900 hover:-translate-y-0.5 hover:border-slate-300'
@@ -267,11 +266,6 @@ export default function SearchPage() {
                         }}
                       >
                         <span>{action.short}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide ${
-                          action.disabled ? 'bg-slate-200 text-slate-500' : 'bg-slate-200 text-slate-600'
-                        }`}>
-                          {action.disabled ? 'soon' : 'beta'}
-                        </span>
                       </button>
                     ))}
                   </div>

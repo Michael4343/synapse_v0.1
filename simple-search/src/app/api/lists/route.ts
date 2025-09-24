@@ -32,12 +32,19 @@ export async function GET() {
     }
 
     // Transform the data to include item counts
-    const listsWithCounts = lists?.map(list => ({
-      id: list.id,
-      name: list.name,
-      created_at: list.created_at,
-      items_count: Array.isArray(list.list_items) ? list.list_items.length : 0
-    })) || []
+    const listsWithCounts = lists?.map(list => {
+      const rawItems = Array.isArray(list.list_items) ? list.list_items : []
+      const aggregatedCount = rawItems.length > 0 && typeof rawItems[0]?.count === 'number'
+        ? rawItems[0]?.count ?? 0
+        : rawItems.length
+
+      return {
+        id: list.id,
+        name: list.name,
+        created_at: list.created_at,
+        items_count: aggregatedCount
+      }
+    }) || []
 
     return NextResponse.json({ lists: listsWithCounts })
 
