@@ -17,6 +17,40 @@ interface ApiSearchResult {
   source: string
 }
 
+const SEMANTIC_SCHOLAR_BATCH_ENDPOINT = 'https://api.semanticscholar.org/graph/v1/paper/batch'
+const SEMANTIC_SCHOLAR_SEARCH_ENDPOINT = 'https://api.semanticscholar.org/graph/v1/paper/search'
+const SEMANTIC_SCHOLAR_FIELDS = [
+  'title',
+  'abstract',
+  'year',
+  'venue',
+  'citationCount',
+  'url',
+  'authors',
+  'externalIds',
+  'openAccessPdf',
+].join(',')
+
+const SEMANTIC_SCHOLAR_USER_AGENT_FALLBACK = 'SynapseAcademicAggregator/0.1 (contact: research@synapse.local)'
+const MAX_SEARCH_FALLBACKS = 5
+
+interface SemanticScholarAuthor {
+  name?: string | null
+}
+
+interface SemanticScholarPaper {
+  paperId: string
+  title: string
+  abstract: string | null
+  year: number | null
+  venue: string | null
+  citationCount: number | null
+  url: string | null
+  authors?: SemanticScholarAuthor[]
+  externalIds?: Record<string, string | string[] | null>
+  openAccessPdf?: { url?: string | null } | null
+}
+
 type CompileGoal = 'methods' | 'claims'
 
 interface CompileRequest {
@@ -93,7 +127,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<CompileRe
     console.debug('Deep research preview', researchResults.slice(0, 400))
 
     // Parse research results to extract related papers
-    const { papers: relatedPapers, summary: structuredSummary } = parseResearchResults(researchResults, maxResults)
+    const parsedResults = parseResearchResults(researchResults, maxResults)
+    let relatedPapers = parsedResults.papers
+    const structuredSummary = parsedResults.summary
 
     console.debug('Parsed research results', {
       structuredSummary: structuredSummary ? `${structuredSummary.slice(0, 120)}...` : null,
@@ -106,6 +142,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<CompileRe
         message: 'No related papers found in research results'
       }, { status: 404 })
     }
+
+    relatedPapers = await enrichPapersWithSemanticScholar(relatedPapers)
+
+    const cleanedSummary = sanitiseResearchSummary(structuredSummary ?? extractResearchSummary(researchResults))
 
     // Create new list with auto-generated name
     const listName = options?.listName || generateListName(paper)
@@ -159,7 +199,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<CompileRe
         items_count: relatedPapers.length
       },
       papers: relatedPapers,
-      researchSummary: structuredSummary ?? extractResearchSummary(researchResults),
+      researchSummary: cleanedSummary,
       message: `Successfully compiled ${relatedPapers.length} related papers`
     })
 
@@ -336,6 +376,279 @@ function parseResearchResults(researchText: string, maxResults: number): { paper
     papers: parseResearchResultsFallback(researchText, maxResults),
     summary: null
   }
+}
+
+async function enrichPapersWithSemanticScholar(papers: ApiSearchResult[]): Promise<ApiSearchResult[]> {
+  if (!papers.length) {
+    return papers
+  }
+
+  const apiKey = process.env.SEMANTIC_SCHOLAR_API_KEY
+  const userAgent = process.env.SEMANTIC_SCHOLAR_USER_AGENT || SEMANTIC_SCHOLAR_USER_AGENT_FALLBACK
+
+  const idLookup = new Map<number, string[]>()
+  const batchIds = new Set<string>()
+
+  papers.forEach((paper, index) => {
+    const ids = collectSemanticScholarLookupIds(paper)
+    if (ids.length) {
+      idLookup.set(index, ids)
+      ids.forEach(id => batchIds.add(id))
+    }
+  })
+
+  const enrichedById = batchIds.size
+    ? await fetchSemanticScholarBatch(Array.from(batchIds), apiKey, userAgent)
+    : new Map<string, SemanticScholarPaper>()
+
+  const merged: ApiSearchResult[] = papers.map((paper) => ({ ...paper }))
+  const matchedIndexes = new Set<number>()
+
+  for (const [index, ids] of idLookup.entries()) {
+    let matchedPaper: SemanticScholarPaper | null = null
+    for (const id of ids) {
+      const candidate = enrichedById.get(id)
+      if (candidate) {
+        matchedPaper = candidate
+        break
+      }
+    }
+
+    if (matchedPaper) {
+      merged[index] = mergeSemanticScholarData(papers[index], transformSemanticScholarPaper(matchedPaper))
+      matchedIndexes.add(index)
+    }
+  }
+
+  const unmatchedIndexes = merged.map((_, index) => index).filter(index => !matchedIndexes.has(index))
+  let fallbackLookups = 0
+
+  for (const index of unmatchedIndexes) {
+    if (fallbackLookups >= MAX_SEARCH_FALLBACKS) {
+      break
+    }
+
+    const paper = papers[index]
+    if (!paper.title) {
+      continue
+    }
+
+    const searchResult = await searchSemanticScholarByTitle(paper.title, apiKey, userAgent)
+    fallbackLookups++
+
+    if (searchResult) {
+      merged[index] = mergeSemanticScholarData(merged[index], transformSemanticScholarPaper(searchResult))
+      matchedIndexes.add(index)
+    }
+  }
+
+  return merged.map(paper => ({
+    ...paper,
+    authors: paper.authors.length ? paper.authors : ['Unknown'],
+    abstract: paper.abstract ?? null,
+    citationCount: paper.citationCount ?? null,
+    semanticScholarId: paper.semanticScholarId || '',
+    source: paper.source || 'perplexity_research'
+  }))
+}
+
+function collectSemanticScholarLookupIds(paper: ApiSearchResult): string[] {
+  const ids = new Set<string>()
+
+  if (paper.semanticScholarId) {
+    ids.add(paper.semanticScholarId)
+  }
+
+  const doi = paper.doi || normaliseDoi(paper.url)
+  if (doi) {
+    ids.add(`DOI:${doi}`)
+  }
+
+  const arxivId = extractArxivIdFromUrl(paper.url)
+  if (arxivId) {
+    ids.add(`ARXIV:${arxivId}`)
+  }
+
+  return Array.from(ids)
+}
+
+async function fetchSemanticScholarBatch(ids: string[], apiKey: string | undefined, userAgent: string): Promise<Map<string, SemanticScholarPaper>> {
+  if (!ids.length) {
+    return new Map()
+  }
+
+  try {
+    const params = new URLSearchParams({ fields: SEMANTIC_SCHOLAR_FIELDS })
+    const response = await fetch(`${SEMANTIC_SCHOLAR_BATCH_ENDPOINT}?${params.toString()}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'User-Agent': userAgent,
+        ...(apiKey ? { 'x-api-key': apiKey } : {})
+      },
+      body: JSON.stringify({ ids })
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.warn('Semantic Scholar batch request failed', {
+        status: response.status,
+        error: errorText
+      })
+      return new Map()
+    }
+
+    const payload = await response.json()
+    if (!Array.isArray(payload)) {
+      console.warn('Unexpected batch payload format from Semantic Scholar', {
+        payloadType: typeof payload
+      })
+      return new Map()
+    }
+
+    const result = new Map<string, SemanticScholarPaper>()
+
+    payload.forEach((item, index) => {
+      const requestId = ids[index]
+      if (!item || typeof item !== 'object' || 'error' in item) {
+        return
+      }
+
+      const paper = item as SemanticScholarPaper
+      result.set(requestId, paper)
+      if (paper.paperId) {
+        result.set(paper.paperId, paper)
+      }
+    })
+
+    return result
+  } catch (error) {
+    console.error('Semantic Scholar batch enrichment failed', error)
+    return new Map()
+  }
+}
+
+async function searchSemanticScholarByTitle(title: string, apiKey: string | undefined, userAgent: string): Promise<SemanticScholarPaper | null> {
+  const trimmed = title.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  try {
+    const params = new URLSearchParams({
+      query: trimmed,
+      fields: SEMANTIC_SCHOLAR_FIELDS,
+      limit: '1'
+    })
+
+    const response = await fetch(`${SEMANTIC_SCHOLAR_SEARCH_ENDPOINT}?${params.toString()}`, {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': userAgent,
+        ...(apiKey ? { 'x-api-key': apiKey } : {})
+      }
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.warn('Semantic Scholar fallback search failed', {
+        status: response.status,
+        error: errorText
+      })
+      return null
+    }
+
+    const payload = await response.json()
+    const first = Array.isArray(payload?.data) ? payload.data[0] : null
+    if (!first || typeof first !== 'object') {
+      return null
+    }
+
+    return first as SemanticScholarPaper
+  } catch (error) {
+    console.error('Semantic Scholar fallback search error', error)
+    return null
+  }
+}
+
+interface SemanticScholarTransformed {
+  title: string
+  abstract: string | null
+  authors: string[]
+  year: number | null
+  venue: string | null
+  citationCount: number | null
+  semanticScholarId: string
+  doi: string | null
+  arxivId: string | null
+  url: string | null
+}
+
+function transformSemanticScholarPaper(paper: SemanticScholarPaper): SemanticScholarTransformed {
+  const authors = (paper.authors ?? [])
+    .map(author => author.name?.trim())
+    .filter((name): name is string => Boolean(name))
+
+  const externalIds = paper.externalIds ?? {}
+  const doiValue = externalIds.DOI ?? externalIds.doi ?? externalIds.Doi ?? null
+  const doi = Array.isArray(doiValue) ? doiValue[0] ?? null : doiValue
+  const arxivValue = externalIds.ArXiv || externalIds.arXiv || externalIds.ARXIV || null
+  const arxivId = Array.isArray(arxivValue) ? arxivValue[0] ?? null : arxivValue
+
+  const preferredUrl = paper.url || paper.openAccessPdf?.url || (doi ? `https://doi.org/${doi}` : null)
+  const resolvedDoi = typeof doi === 'string' ? normaliseDoi(doi) : null
+  const resolvedUrl = preferredUrl ? normaliseUrl(preferredUrl, resolvedDoi) : null
+
+  return {
+    title: paper.title,
+    abstract: paper.abstract ?? null,
+    authors,
+    year: paper.year ?? null,
+    venue: paper.venue ?? null,
+    citationCount: paper.citationCount ?? null,
+    semanticScholarId: paper.paperId,
+    doi: resolvedDoi,
+    arxivId: typeof arxivId === 'string' ? arxivId : null,
+    url: resolvedUrl
+  }
+}
+
+function mergeSemanticScholarData(original: ApiSearchResult, enriched: SemanticScholarTransformed): ApiSearchResult {
+  const doi = enriched.doi ?? original.doi
+  const url = enriched.url ?? original.url ?? (doi ? `https://doi.org/${doi}` : null)
+
+  return {
+    ...original,
+    title: enriched.title || original.title,
+    abstract: enriched.abstract ?? original.abstract,
+    authors: enriched.authors.length ? enriched.authors : original.authors,
+    year: enriched.year ?? original.year,
+    venue: enriched.venue ?? original.venue,
+    citationCount: enriched.citationCount ?? original.citationCount,
+    semanticScholarId: enriched.semanticScholarId || original.semanticScholarId,
+    arxivId: enriched.arxivId ?? original.arxivId,
+    doi,
+    url
+  }
+}
+
+function extractArxivIdFromUrl(url: string | null): string | null {
+  if (!url) {
+    return null
+  }
+
+  try {
+    const parsed = new URL(url)
+    const match = parsed.pathname.match(/\/(?:abs|pdf)\/([^\/?#]+)/i)
+    if (match) {
+      return match[1]
+    }
+  } catch (error) {
+    // Ignore invalid URLs
+  }
+
+  return null
 }
 
 function parseStructuredResearchResults(researchText: string, maxResults: number): { papers: ApiSearchResult[]; summary: string | null } | null {
@@ -605,6 +918,44 @@ function extractResearchSummary(researchText: string): string {
   return summary.length > 10
     ? summary + (summary.endsWith('.') ? '' : '.')
     : 'Deep research completed successfully.'
+}
+
+const PROMPT_HEADER_PATTERNS = [
+  'target paper:',
+  'authors:',
+  'published in:',
+  'research focus:',
+  'task:',
+  'output requirements:',
+  'return the findings',
+  'you are an assistant',
+]
+
+function sanitiseResearchSummary(summary: string | null | undefined): string | null {
+  if (!summary) {
+    return null
+  }
+
+  const cleanedLines = summary
+    .split(/\r?\n+/)
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+    .filter(line => {
+      const lower = line.toLowerCase()
+      return !PROMPT_HEADER_PATTERNS.some(pattern => lower.startsWith(pattern))
+    })
+
+  const cleaned = cleanedLines.join(' ').replace(/\s{2,}/g, ' ').trim()
+
+  if (!cleaned) {
+    return null
+  }
+
+  if (cleaned.length > 600) {
+    return `${cleaned.slice(0, 597).trimEnd()}…`
+  }
+
+  return cleaned
 }
 
 function clampResults(requested?: number): number {

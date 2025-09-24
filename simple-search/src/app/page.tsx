@@ -190,6 +190,19 @@ const PROFILE_PRIMARY_BUTTON_CLASSES = 'inline-flex items-center justify-center 
 const PROFILE_COMING_SOON_HINT_CLASSES = 'text-xs font-medium text-slate-400';
 const PROFILE_DISABLED_UPLOAD_BUTTON_CLASSES = 'flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-400 cursor-not-allowed';
 
+const PROMPT_ARTIFACT_PATTERNS = [
+  'target paper:',
+  'research focus:',
+  'output requirements:',
+  'you are an assistant',
+  'task: identify up to',
+]
+
+function containsResearchPromptArtifacts(text: string) {
+  const lower = text.toLowerCase()
+  return PROMPT_ARTIFACT_PATTERNS.some((pattern) => lower.includes(pattern))
+}
+
 function formatAuthors(authors: string[]) {
   if (!authors.length) return 'Author information unavailable'
   if (authors.length <= 3) return authors.join(', ')
@@ -207,7 +220,12 @@ function formatMeta(result: ApiSearchResult) {
     items.push(String(result.year))
   }
 
-  return items.join(' · ')
+  if (typeof result.citationCount === 'number' && Number.isFinite(result.citationCount) && result.citationCount >= 0) {
+    const formattedCount = result.citationCount.toLocaleString()
+    items.push(`${formattedCount} citation${result.citationCount === 1 ? '' : 's'}`)
+  }
+
+  return items.join(' • ')
 }
 
 function buildDoiUrl(doi?: string | null): string | null {
@@ -1963,7 +1981,10 @@ export default function Home() {
                   const isCompileAction = action.id === 'compile-methods' || action.id === 'compile-claims'
                   const isActiveCompileAction = isCompileAction && compileState.actionId === action.id
                   const disableAction = isDisabled || (isCompileAction && compileInProgress)
-                  const statusMessage = isActiveCompileAction && compileState.status !== 'idle' ? compileState.message : ''
+                  const rawStatusMessage = isActiveCompileAction && compileState.status !== 'idle' ? compileState.message : ''
+                  const statusMessage = rawStatusMessage && !containsResearchPromptArtifacts(rawStatusMessage)
+                    ? rawStatusMessage
+                    : ''
                   const statusTone = compileState.status === 'error'
                     ? 'text-rose-600'
                     : compileState.status === 'success'
@@ -2038,7 +2059,7 @@ export default function Home() {
               </div>
 
               <section className="space-y-6">
-                {compileState.status === 'success' && compileState.summary && (
+                {compileState.status === 'success' && compileState.summary && !containsResearchPromptArtifacts(compileState.summary) && (
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
                     {compileState.summary}
                   </div>

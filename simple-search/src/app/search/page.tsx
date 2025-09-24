@@ -49,6 +49,10 @@ function formatMeta(result: ApiSearchResult) {
     items.push(String(result.year))
   }
 
+  if (result.citationCount !== null && result.citationCount !== undefined) {
+    items.push(`${result.citationCount} citations`)
+  }
+
   return items.join(' · ')
 }
 
