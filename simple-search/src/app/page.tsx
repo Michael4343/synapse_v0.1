@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { useAuth } from '../lib/auth-context';
 import { useAuthModal, getUserDisplayName } from '../lib/auth-hooks';
 import { supabase } from '../lib/supabase';
@@ -119,8 +120,8 @@ const SHELL_CLASSES = 'min-h-screen bg-slate-50 text-slate-900';
 const FEED_CARD_CLASSES = 'space-y-8 rounded-3xl border border-slate-200 bg-white p-8 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
 const DETAIL_SHELL_CLASSES = 'w-full rounded-3xl border border-slate-200 bg-white p-8 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
 const DETAIL_HERO_CLASSES = 'rounded-3xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-6 shadow-inner';
-const TILE_BASE_CLASSES = 'group relative flex cursor-pointer flex-col gap-5 overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 transition duration-200 hover:border-sky-300 hover:bg-sky-50 hover:shadow-[0_0_20px_rgba(2,132,199,0.15)]';
-const TILE_SELECTED_CLASSES = 'border-sky-400 bg-sky-50 shadow-[0_0_30px_rgba(2,132,199,0.2)]';
+const TILE_BASE_CLASSES = 'group relative flex cursor-pointer flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 transition duration-150 hover:border-slate-300 hover:bg-slate-50';
+const TILE_SELECTED_CLASSES = 'border-sky-400 bg-sky-50 ring-1 ring-sky-100';
 const ACTION_LIST_CLASSES = 'grid w-full gap-3 sm:grid-cols-2';
 const ACTION_ITEM_BASE_CLASSES = 'flex h-full flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition';
 const ACTION_ITEM_INTERACTIVE_CLASSES = 'cursor-pointer hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-[0_12px_30px_rgba(56,189,248,0.12)]';
@@ -138,7 +139,7 @@ const FILTER_CHECKBOX_LABEL_CLASSES = 'inline-flex items-center gap-1.5 rounded-
 const FILTER_CHECKBOX_DISABLED_LABEL_CLASSES = 'inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-100 px-2.5 py-2 text-xs font-medium text-slate-400 opacity-80 cursor-not-allowed whitespace-nowrap';
 const FILTER_CHECKBOX_INPUT_CLASSES = 'h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500';
 const FILTER_CHECKBOX_INPUT_DISABLED_CLASSES = 'text-slate-300 focus:ring-0';
-const RESULT_SUMMARY_CLASSES = 'flex flex-wrap items-baseline gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600';
+const RESULT_SUMMARY_CLASSES = 'flex flex-wrap items-baseline gap-2 text-sm text-slate-600';
 const DETAIL_METADATA_CLASSES = 'space-y-3 text-sm text-slate-600';
 const DOI_LINK_CLASSES = 'text-lg font-semibold text-sky-600 underline decoration-sky-300 underline-offset-4 transition hover:text-sky-700';
 const SIDEBAR_CARD_CLASSES = 'flex h-full flex-col gap-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
@@ -149,11 +150,12 @@ const SIDEBAR_FLOAT_BUTTON_CLASSES = 'absolute left-0 top-0 -translate-x-1/2 -tr
 const SEARCH_SPINNER_CLASSES = 'inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent';
 const DETAIL_SAVE_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-lg bg-sky-500 px-6 sm:px-8 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-[0_12px_30px_rgba(56,189,248,0.2)] transition hover:-translate-y-0.5 hover:bg-sky-400';
 const PROFILE_CARD_CLASSES = 'rounded-3xl border border-slate-200 bg-white p-8 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
-const PROFILE_LABEL_CLASSES = 'text-xs font-semibold uppercase tracking-wide text-slate-500';
+const FEED_REFRESH_BUTTON_CLASSES = 'inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60';
+const PROFILE_LABEL_CLASSES = 'text-sm font-medium text-slate-700';
 const PROFILE_INPUT_CLASSES = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100';
 const PROFILE_PRIMARY_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-xl bg-sky-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(56,189,248,0.18)] transition hover:-translate-y-0.5 hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60';
-const PROFILE_COMING_SOON_BADGE_CLASSES = 'inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600';
-const PROFILE_DISABLED_UPLOAD_BUTTON_CLASSES = 'flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-400 cursor-not-allowed';
+const PROFILE_COMING_SOON_HINT_CLASSES = 'text-xs font-medium text-slate-400';
+const PROFILE_DISABLED_UPLOAD_BUTTON_CLASSES = 'flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-400 cursor-not-allowed';
 
 function formatAuthors(authors: string[]) {
   if (!authors.length) return 'Author information unavailable'
@@ -386,7 +388,6 @@ export default function Home() {
 
   const profilePersonalization = profile?.profile_personalization ?? null;
   const profileTopicClusters = profilePersonalization?.topic_clusters ?? [];
-  const profileLastEnrichedLabel = formatRelativeTime(profile?.last_profile_enriched_at);
 
   const buildClusterQuery = (cluster: ProfilePersonalization['topic_clusters'][number]) => {
     const keywords = Array.isArray(cluster.keywords) ? cluster.keywords : [];
@@ -782,7 +783,12 @@ export default function Home() {
   const isSearchContext = keywordLoading || keywordResults.length > 0 || Boolean(lastKeywordQuery) || Boolean(keywordError);
   const isListViewActive = Boolean(selectedListId);
   const shouldShowPersonalFeed = Boolean(user && profile?.orcid_id && !profileNeedsSetup && !isSearchContext && !isListViewActive);
-  const personalFeedLastUpdatedLabel = personalFeedLastUpdated ? formatRelativeTime(personalFeedLastUpdated) : profileLastEnrichedLabel;
+  const shouldShowRefreshControl = Boolean(user && profile?.orcid_id && !profileNeedsSetup);
+  const refreshButtonLabel = personalFeedLoading
+    ? 'Refreshing personalised feed'
+    : isSearchContext || isListViewActive
+    ? 'Back to personalised feed'
+    : 'Refresh personalised feed';
   const userInitial = user ? getUserDisplayName(user).charAt(0).toUpperCase() : '';
 
   const personalizationInputs = (includeAction: boolean) => {
@@ -847,8 +853,8 @@ export default function Home() {
       </div>
     );
   };
-  const renderResultList = (results: ApiSearchResult[], badge: string) => (
-    <div className="space-y-3">
+  const renderResultList = (results: ApiSearchResult[], contextLabel: string) => (
+    <div className="space-y-2">
       {results.map((result) => {
         const isSelected = selectedPaper?.id === result.id;
 
@@ -867,7 +873,10 @@ export default function Home() {
             className={`${TILE_BASE_CLASSES} ${isSelected ? TILE_SELECTED_CLASSES : ''}`}
           >
             <div className="space-y-2">
-              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">{badge}</p>
+              <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
+                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-sky-400" aria-hidden="true" />
+                <span>{contextLabel}</span>
+              </div>
               <h3 className="text-lg font-semibold text-slate-900">{result.title}</h3>
               <p className="text-sm text-slate-600">{formatAuthors(result.authors)}</p>
               {formatMeta(result) && (
@@ -917,7 +926,7 @@ export default function Home() {
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3">
           <span className={PROFILE_LABEL_CLASSES}>Bibliography</span>
-          <span className={PROFILE_COMING_SOON_BADGE_CLASSES}>Coming soon</span>
+          <span className={PROFILE_COMING_SOON_HINT_CLASSES}>Coming soon</span>
         </div>
         <button
           type="button"
@@ -994,7 +1003,7 @@ export default function Home() {
           </h2>
           <span className="text-sm text-slate-500">({listItems.length} papers)</span>
         </div>
-        {renderResultList(listItems, 'Saved Paper')}
+        {renderResultList(listItems, 'Saved paper')}
       </div>
     );
   } else if (isListViewActive) {
@@ -1012,7 +1021,7 @@ export default function Home() {
           <span>result{keywordResults.length === 1 ? '' : 's'} for</span>
           <span className="text-base font-semibold text-slate-900">&ldquo;{lastKeywordQuery}&rdquo;</span>
         </div>
-        {renderResultList(keywordResults, 'Paper')}
+        {renderResultList(keywordResults, 'Search result')}
       </>
     );
   } else if (lastKeywordQuery && !keywordError) {
@@ -1042,7 +1051,7 @@ export default function Home() {
         </div>
       );
     } else if (personalFeedResults.length > 0) {
-      mainFeedContent = renderResultList(personalFeedResults, 'Recommended Paper');
+      mainFeedContent = renderResultList(personalFeedResults, 'Personal recommendation');
     } else {
       mainFeedContent = (
         <div className="rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center text-sm text-slate-600">
@@ -1057,38 +1066,7 @@ export default function Home() {
           <p className="text-sm font-semibold text-sky-700">Featured Research</p>
           <p className="text-xs text-sky-600 mt-1">Explore groundbreaking papers or register to get your personalised research feed!</p>
         </div>
-        <div className="space-y-3">
-          {SAMPLE_PAPERS.map((result) => {
-            const isSelected = selectedPaper?.id === result.id;
-
-            return (
-              <article
-                key={result.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => setSelectedPaper(result)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    setSelectedPaper(result);
-                  }
-                }}
-                className={`${TILE_BASE_CLASSES} ${isSelected ? TILE_SELECTED_CLASSES : ''}`}
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Featured Paper</p>
-                  </div>
-                  <h3 className="text-lg font-semibold text-slate-900">{result.title}</h3>
-                  <p className="text-sm text-slate-600">{formatAuthors(result.authors)}</p>
-                  {formatMeta(result) && (
-                    <p className="text-xs text-slate-500">{formatMeta(result)}</p>
-                  )}
-                </div>
-              </article>
-            );
-          })}
-        </div>
+        {renderResultList(SAMPLE_PAPERS, 'Featured pick')}
       </div>
     );
   } else {
@@ -1119,8 +1097,6 @@ export default function Home() {
   };
 
   const handlePaperSaved = () => {
-    // Refresh the user lists to show updated counts
-    fetchUserLists();
     console.log('Paper saved successfully!');
   };
 
@@ -1443,7 +1419,21 @@ export default function Home() {
               <div className="flex items-center justify-between">
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">Synapse</span>
-                  <h1 className="text-3xl font-semibold text-slate-900">Research Feed</h1>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-3xl font-semibold text-slate-900">Research Feed</h1>
+                    {shouldShowRefreshControl && (
+                      <button
+                        type="button"
+                        className={FEED_REFRESH_BUTTON_CLASSES}
+                        onClick={handleRefreshPersonalFeed}
+                        aria-label={refreshButtonLabel}
+                        title={refreshButtonLabel}
+                        disabled={personalFeedLoading}
+                      >
+                        <RefreshCw className={`h-4 w-4 ${personalFeedLoading ? 'animate-spin' : ''}`} />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -1589,32 +1579,6 @@ export default function Home() {
                   {profileSaveSuccess && (
                     <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
                       {profileSaveSuccess}
-                    </div>
-                  )}
-
-                  {user && profile?.orcid_id && !profileNeedsSetup && (
-                    <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-sm font-semibold text-slate-900">Personalised feed</span>
-                        <span className="text-xs text-slate-500">Last synced {personalFeedLastUpdatedLabel}</span>
-                      </div>
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                        <button
-                          type="button"
-                          onClick={handleRefreshPersonalFeed}
-                          className={PROFILE_PRIMARY_BUTTON_CLASSES}
-                          disabled={personalFeedLoading}
-                        >
-                          {personalFeedLoading ? 'Refreshing…' : isSearchContext || isListViewActive ? 'Back to personalised feed' : 'Refresh personalised feed'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={openProfileEditor}
-                          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
-                        >
-                          Edit profile
-                        </button>
-                      </div>
                     </div>
                   )}
 
@@ -1774,6 +1738,8 @@ export default function Home() {
         paper={paperToSave}
         onClose={handleSaveModalClose}
         onSaved={handlePaperSaved}
+        userLists={userLists}
+        setUserLists={setUserLists}
       />
       {profileEditorVisible && (
         <div
@@ -1783,33 +1749,33 @@ export default function Home() {
           onClick={closeProfileEditor}
         >
           <div
-            className="w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_25px_60px_rgba(15,23,42,0.18)]"
+            className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-3">
+            <header className="flex items-start justify-between gap-6 border-b border-slate-200 px-6 py-5">
               <div>
-                <h2 className="text-xl font-semibold text-slate-900">Profile settings</h2>
-                <p className="text-xs text-slate-500 mt-1">
+                <h2 className="text-lg font-semibold text-slate-900">Profile settings</h2>
+                <p className="mt-1 text-sm text-slate-500">
                   Update your details to tune the personalised feed.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={closeProfileEditor}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500 transition hover:border-slate-300 hover:text-slate-900"
+                className="text-sm font-medium text-slate-500 transition hover:text-slate-900"
                 aria-label="Close profile editor"
               >
                 Close
               </button>
-            </div>
-            <div className="mt-4 max-h-[70vh] overflow-y-auto pr-1">
+            </header>
+            <div className="max-h-[70vh] overflow-y-auto px-6 py-6">
               {profileSaveError && (
-                <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+                <div className="mb-4 rounded-lg border-l-4 border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                   {profileSaveError}
                 </div>
               )}
               {profileSaveSuccess && (
-                <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700">
+                <div className="mb-4 rounded-lg border-l-4 border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
                   {profileSaveSuccess}
                 </div>
               )}

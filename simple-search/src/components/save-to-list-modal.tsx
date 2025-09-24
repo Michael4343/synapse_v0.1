@@ -28,6 +28,8 @@ interface SaveToListModalProps {
   paper: ApiSearchResult | null
   onClose: () => void
   onSaved: () => void
+  userLists: UserList[]
+  setUserLists: (lists: UserList[]) => void
 }
 
 const MODAL_CONTAINER_CLASSES = 'fixed inset-0 z-50 flex items-center justify-center px-4 py-4 overflow-y-auto'
@@ -43,8 +45,7 @@ const NEW_LIST_INPUT_CLASSES = 'w-full rounded-lg border border-slate-200 px-3 p
 const BUTTON_PRIMARY_CLASSES = 'inline-flex items-center justify-center rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60'
 const BUTTON_SECONDARY_CLASSES = 'inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900'
 
-export function SaveToListModal({ isOpen, paper, onClose, onSaved }: SaveToListModalProps) {
-  const [lists, setLists] = useState<UserList[]>([])
+export function SaveToListModal({ isOpen, paper, onClose, onSaved, userLists, setUserLists }: SaveToListModalProps) {
   const [selectedListId, setSelectedListId] = useState<number | null>(null)
   const [isCreatingNew, setIsCreatingNew] = useState(false)
   const [newListName, setNewListName] = useState('')
@@ -52,10 +53,9 @@ export function SaveToListModal({ isOpen, paper, onClose, onSaved }: SaveToListM
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  // Fetch user's lists when modal opens
+  // Reset modal state when it opens
   useEffect(() => {
     if (isOpen) {
-      fetchLists()
       setError('')
       setSuccess('')
       setNewListName('')
@@ -83,17 +83,6 @@ export function SaveToListModal({ isOpen, paper, onClose, onSaved }: SaveToListM
     }
   }, [isOpen, onClose])
 
-  const fetchLists = async () => {
-    try {
-      const response = await fetch('/api/lists')
-      if (response.ok) {
-        const data = await response.json()
-        setLists(data.lists || [])
-      }
-    } catch (error) {
-      console.error('Failed to fetch lists:', error)
-    }
-  }
 
   const handleSave = async () => {
     if (!paper) return
@@ -129,6 +118,13 @@ export function SaveToListModal({ isOpen, paper, onClose, onSaved }: SaveToListM
 
         const { list } = await createResponse.json()
         targetListId = list.id
+
+        // Add the new list to the userLists state
+        setUserLists([...userLists, {
+          id: list.id,
+          name: list.name,
+          items_count: 0
+        }])
       }
 
       if (!targetListId) {
@@ -150,6 +146,13 @@ export function SaveToListModal({ isOpen, paper, onClose, onSaved }: SaveToListM
         setLoading(false)
         return
       }
+
+      // Optimistically update the list count
+      setUserLists(userLists.map(list =>
+        list.id === targetListId
+          ? { ...list, items_count: (list.items_count || 0) + 1 }
+          : list
+      ))
 
       setSuccess('Paper saved successfully!')
       setTimeout(() => {
@@ -206,7 +209,7 @@ export function SaveToListModal({ isOpen, paper, onClose, onSaved }: SaveToListM
           )}
 
           <div className={RADIO_CONTAINER_CLASSES}>
-            {lists.map((list) => (
+            {userLists.map((list) => (
               <label key={list.id} className={RADIO_LABEL_CLASSES}>
                 <input
                   type="radio"
