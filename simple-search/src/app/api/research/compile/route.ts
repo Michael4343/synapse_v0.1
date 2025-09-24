@@ -17,8 +17,11 @@ interface ApiSearchResult {
   source: string
 }
 
+type CompileGoal = 'methods' | 'claims'
+
 interface CompileRequest {
   paper: ApiSearchResult
+  goal?: CompileGoal
   options?: {
     listName?: string
     maxResults?: number
@@ -71,14 +74,31 @@ export async function POST(request: NextRequest): Promise<NextResponse<CompileRe
       }, { status: 500 })
     }
 
-    // Generate research query based on paper content
-    const researchQuery = generateResearchQuery(paper)
+    const goal: CompileGoal = body.goal === 'claims' ? 'claims' : 'methods'
+    const maxResults = clampResults(options?.maxResults)
+
+    console.debug('Compile request received', {
+      goal,
+      maxResults,
+      paperTitle: paper.title
+    })
+
+    // Generate research query based on paper content and compile goal
+    const researchQuery = generateResearchQuery(paper, goal, maxResults)
 
     // Call Perplexity Sonar Deep Research API
-    const researchResults = await callPerplexityDeepResearch(researchQuery, apiKey)
+    const researchResults = await callPerplexityDeepResearch(researchQuery, goal, maxResults, apiKey)
+
+    console.debug('Deep research raw length', researchResults.length)
+    console.debug('Deep research preview', researchResults.slice(0, 400))
 
     // Parse research results to extract related papers
-    const relatedPapers = parseResearchResults(researchResults, options?.maxResults || 12)
+    const { papers: relatedPapers, summary: structuredSummary } = parseResearchResults(researchResults, maxResults)
+
+    console.debug('Parsed research results', {
+      structuredSummary: structuredSummary ? `${structuredSummary.slice(0, 120)}...` : null,
+      paperCount: relatedPapers.length
+    })
 
     if (relatedPapers.length === 0) {
       return NextResponse.json({
@@ -139,7 +159,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<CompileRe
         items_count: relatedPapers.length
       },
       papers: relatedPapers,
-      researchSummary: extractResearchSummary(researchResults),
+      researchSummary: structuredSummary ?? extractResearchSummary(researchResults),
       message: `Successfully compiled ${relatedPapers.length} related papers`
     })
 
@@ -152,53 +172,61 @@ export async function POST(request: NextRequest): Promise<NextResponse<CompileRe
   }
 }
 
-function generateResearchQuery(paper: ApiSearchResult): string {
+function generateResearchQuery(paper: ApiSearchResult, goal: CompileGoal, maxResults: number): string {
   const title = paper.title
   const abstract = paper.abstract ? paper.abstract.slice(0, 500) : ''
   const authors = paper.authors.slice(0, 3).join(', ')
   const venue = paper.venue || ''
+  const focusLine = goal === 'claims'
+    ? 'Highlight studies that report comparable or contrasting findings, outcomes, or claims.'
+    : 'Emphasise works that share methodologies, experimental setups, or analytical techniques.'
 
-  return `Conduct comprehensive academic research to find papers closely related to this research paper:
+  return `Target paper:
 
 Title: "${title}"
 Authors: ${authors}
 ${venue ? `Published in: ${venue}` : ''}
 ${abstract ? `Abstract: ${abstract}` : ''}
 
-Please find and cite 12-15 highly relevant academic papers that:
-1. Study similar research questions or methodologies
-2. Build upon or extend this work
-3. Use similar approaches or techniques
-4. Address related problems in the same field
-5. Could be considered competing approaches
+Research focus: ${focusLine}
 
-For each paper you find, please include:
-- Full title
-- Author names
-- Publication year
-- Journal/conference name
-- Brief description of relevance
-- DOI or URL when available
+Task: Identify up to ${maxResults} high-quality academic papers published in reputable venues that most directly support this focus. Prioritise recent work where possible and include seminal references when essential for context.
 
-Focus on recent, high-quality publications from reputable venues and provide comprehensive coverage of related work in this research area.`
+Output requirements:
+- Provide only papers that a domain expert would consider substantively related.
+- Include a brief relevance note that captures why the paper belongs in this set.
+- Prefer peer-reviewed sources; include preprints only when highly influential.
+
+Return the findings using the structured JSON format requested in the system instructions.`
 }
 
-async function callPerplexityDeepResearch(query: string, apiKey: string): Promise<string> {
+async function callPerplexityDeepResearch(query: string, goal: CompileGoal, maxResults: number, apiKey: string): Promise<string> {
+  const systemPrompt = buildSystemPrompt(goal, maxResults)
+  const structuredBody = buildPerplexityRequestBody(systemPrompt, query, maxResults, true)
+
+  try {
+    return await performPerplexityRequest(structuredBody, apiKey)
+  } catch (error) {
+    console.warn('Structured deep research request failed, retrying without schema', error)
+    const fallbackBody = buildPerplexityRequestBody(systemPrompt, query, maxResults, false)
+    return await performPerplexityRequest(fallbackBody, apiKey)
+  }
+}
+
+interface PerplexityRequestBody {
+  model: string
+  messages: Array<{ role: 'system' | 'user'; content: string }>
+  response_format?: Record<string, unknown>
+}
+
+async function performPerplexityRequest(body: PerplexityRequestBody, apiKey: string): Promise<string> {
   const response = await fetch('https://api.perplexity.ai/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`
     },
-    body: JSON.stringify({
-      model: 'sonar-deep-research',
-      messages: [
-        {
-          role: 'user',
-          content: query
-        }
-      ]
-    })
+    body: JSON.stringify(body)
   })
 
   if (!response.ok) {
@@ -216,26 +244,281 @@ async function callPerplexityDeepResearch(query: string, apiKey: string): Promis
   return content
 }
 
-function parseResearchResults(researchText: string, maxResults: number): ApiSearchResult[] {
+function buildPerplexityRequestBody(systemPrompt: string, userPrompt: string, maxResults: number, includeSchema: boolean): PerplexityRequestBody {
+  const body: PerplexityRequestBody = {
+    model: 'sonar-deep-research',
+    messages: [
+      {
+        role: 'system',
+        content: systemPrompt
+      },
+      {
+        role: 'user',
+        content: userPrompt
+      }
+    ]
+  }
+
+  if (includeSchema) {
+    body.response_format = buildResponseFormatSchema(maxResults)
+  }
+
+  return body
+}
+
+function buildSystemPrompt(goal: CompileGoal, maxResults: number): string {
+  const boundedMax = Math.max(1, Math.min(maxResults, 25))
+  const focus = goal === 'claims'
+    ? 'Surface papers that report similar or contrasting findings, outcomes, or claims to the target work.'
+    : 'Surface papers that employ comparable methodologies, experimental techniques, or analytical frameworks to the target work.'
+
+  return [
+    'You are an assistant for academic literature reviews.',
+    focus,
+    `Return no more than ${boundedMax} papers that a domain expert would consider highly relevant.`,
+    'Respond with valid JSON only. Do not include Markdown code fences or free-form commentary.',
+    'For optional fields, omit them instead of using null. Provide author names as an array of strings and use integers for years when available.'
+  ].join(' ')
+}
+
+function buildResponseFormatSchema(maxResults: number): Record<string, unknown> {
+  const boundedMax = Math.max(1, Math.min(maxResults, 25))
+
+  return {
+    type: 'json_schema',
+    json_schema: {
+      name: 'related_research_response',
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['summary', 'papers'],
+        properties: {
+          summary: {
+            type: 'string',
+            description: 'Concise synthesis of themes across the recommended papers.'
+          },
+          papers: {
+            type: 'array',
+            maxItems: boundedMax,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['title', 'relevance'],
+              properties: {
+                title: { type: 'string', minLength: 5 },
+                authors: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Author names in publication order.'
+                },
+                year: { type: 'integer', description: 'Four-digit publication year.' },
+                venue: { type: 'string', description: 'Publication venue or journal.' },
+                doi: { type: 'string', description: 'Digital Object Identifier if available.' },
+                url: { type: 'string', format: 'uri', description: 'Stable link to the paper.' },
+                abstract: { type: 'string', description: 'Optional abstract text if relevant.' },
+                relevance: { type: 'string', minLength: 10 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+function parseResearchResults(researchText: string, maxResults: number): { papers: ApiSearchResult[]; summary: string | null } {
+  const structured = parseStructuredResearchResults(researchText, maxResults)
+  if (structured) {
+    return structured
+  }
+
+  return {
+    papers: parseResearchResultsFallback(researchText, maxResults),
+    summary: null
+  }
+}
+
+function parseStructuredResearchResults(researchText: string, maxResults: number): { papers: ApiSearchResult[]; summary: string | null } | null {
+  const parsed = tryParseJsonLike(researchText)
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    console.debug('Structured parse failed: non-object payload')
+    return null
+  }
+
+  const record = parsed as Record<string, unknown>
+  const summary = typeof record.summary === 'string' ? record.summary.trim() || null : null
+  const rawPapers = record.papers
+
+  if (!Array.isArray(rawPapers)) {
+    console.debug('Structured parse failed: papers not array', {
+      keys: Object.keys(record)
+    })
+    return summary ? { papers: [], summary } : null
+  }
+
+  const baseTimestamp = Date.now()
   const papers: ApiSearchResult[] = []
 
-  // Look for patterns that indicate academic papers
-  // This is a simplified parser - in production you'd want more sophisticated parsing
-  const titleRegex = /(?:Title:|Paper:|Study:)\s*"([^"]+)"/gi
-  const authorRegex = /(?:Authors?:|By:)\s*([^\n]+)/gi
-  const yearRegex = /(?:Year:|Published:|)\s*(\d{4})/gi
-  const venueRegex = /(?:Journal:|Conference:|Published in:)\s*([^\n]+)/gi
-  const doiRegex = /(?:DOI:|doi:|https?:\/\/(?:dx\.)?doi\.org\/)(10\.\d+\/[^\s]+)/gi
+  for (let index = 0; index < rawPapers.length && papers.length < maxResults; index++) {
+    const entry = rawPapers[index]
+    const paper = createPaperFromStructured(entry, baseTimestamp, index)
+    if (paper) {
+      papers.push(paper)
+    } else {
+      console.debug('Structured parse skipped entry', { index, entry })
+    }
+  }
 
+  if (papers.length === 0) {
+    console.debug('Structured parse yielded zero papers despite array input', {
+      candidateCount: rawPapers.length
+    })
+    return summary ? { papers: [], summary } : null
+  }
+
+  return { papers, summary }
+}
+
+function tryParseJsonLike(text: string): unknown {
+  const trimmed = text.trim()
+  const attempts: string[] = []
+
+  if (trimmed) {
+    attempts.push(trimmed)
+  }
+
+  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  if (fencedMatch && fencedMatch[1]) {
+    attempts.push(fencedMatch[1].trim())
+  }
+
+  const firstBrace = trimmed.indexOf('{')
+  const lastBrace = trimmed.lastIndexOf('}')
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    attempts.push(trimmed.slice(firstBrace, lastBrace + 1))
+  }
+
+  for (const candidate of attempts) {
+    if (!candidate) continue
+    try {
+      return JSON.parse(candidate)
+    } catch (error) {
+      console.debug('JSON parse attempt failed', {
+        length: candidate.length,
+        snippet: candidate.slice(0, 120)
+      })
+      continue
+    }
+  }
+
+  console.debug('All JSON parse attempts exhausted')
+  return null
+}
+
+function createPaperFromStructured(entry: unknown, baseTimestamp: number, index: number): ApiSearchResult | null {
+  if (!entry || typeof entry !== 'object') {
+    return null
+  }
+
+  const data = entry as Record<string, unknown>
+  const rawTitle = typeof data.title === 'string' ? data.title.trim() : ''
+  if (!rawTitle) {
+    return null
+  }
+
+  const authors = Array.isArray(data.authors)
+    ? data.authors
+        .map(author => (typeof author === 'string' ? author.trim() : ''))
+        .filter(author => author.length > 0 && author.length < 100)
+    : []
+
+  const year = normaliseYear(data.year)
+  const venue = typeof data.venue === 'string' ? data.venue.trim() || null : null
+  const doi = normaliseDoi(data.doi ?? data.DOI ?? data.Doi)
+  const url = normaliseUrl(data.url ?? data.link, doi)
+  const relevance = typeof data.relevance === 'string' ? data.relevance.trim() : ''
+  const abstractText = typeof data.abstract === 'string' ? data.abstract.trim() : ''
+  const abstract = abstractText || relevance || null
+
+  return {
+    id: `research_${baseTimestamp}_${index}`,
+    title: rawTitle,
+    abstract,
+    authors,
+    year,
+    venue,
+    citationCount: null,
+    semanticScholarId: '',
+    arxivId: null,
+    doi,
+    url,
+    source: 'perplexity_research'
+  }
+}
+
+function normaliseYear(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const rounded = Math.round(value)
+    return rounded >= 1800 && rounded <= 2100 ? rounded : null
+  }
+
+  if (typeof value === 'string') {
+    const match = value.match(/\b(19|20)\d{2}\b/)
+    if (match) {
+      return parseInt(match[0], 10)
+    }
+  }
+
+  return null
+}
+
+function normaliseDoi(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  const normalised = trimmed.replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '')
+  const match = normalised.match(/10\.\d{4,9}\/[\w./:-]+/)
+  if (!match) {
+    return null
+  }
+
+  return match[0].replace(/[).,;]+$/, '')
+}
+
+function normaliseUrl(value: unknown, doi: string | null): string | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (trimmed) {
+      if (/^https?:\/\//i.test(trimmed)) {
+        return trimmed.replace(/[).,;]+$/, '')
+      }
+
+      if (trimmed.startsWith('doi.org/')) {
+        return `https://${trimmed}`
+      }
+    }
+  }
+
+  return doi ? `https://doi.org/${doi}` : null
+}
+
+function parseResearchResultsFallback(researchText: string, maxResults: number): ApiSearchResult[] {
+  const papers: ApiSearchResult[] = []
+  const titleRegex = /(?:Title:|Paper:|Study:)\s*"([^"]+)"/gi
   let titleMatch: RegExpExecArray | null
   let paperIndex = 0
+  const baseTimestamp = Date.now()
 
-  // Simple parsing approach - look for title patterns
   while ((titleMatch = titleRegex.exec(researchText)) !== null && paperIndex < maxResults) {
     const title = titleMatch[1].trim()
-    if (!title || title.length < 10) continue // Skip very short titles
+    if (!title || title.length < 10) continue
 
-    // Try to extract other information near this title
     const contextStart = Math.max(0, titleMatch.index - 200)
     const contextEnd = Math.min(researchText.length, titleMatch.index + 500)
     const context = researchText.slice(contextStart, contextEnd)
@@ -246,16 +529,16 @@ function parseResearchResults(researchText: string, maxResults: number): ApiSear
     const doi = extractDoiFromContext(context)
 
     papers.push({
-      id: `research_${Date.now()}_${paperIndex}`,
+      id: `research_${baseTimestamp}_${paperIndex}`,
       title,
-      abstract: null, // Research results typically don't include full abstracts
-      authors: authors,
-      year: year,
-      venue: venue,
+      abstract: null,
+      authors,
+      year,
+      venue,
       citationCount: null,
       semanticScholarId: '',
       arxivId: null,
-      doi: doi,
+      doi,
       url: doi ? `https://doi.org/${doi}` : null,
       source: 'perplexity_research'
     })
@@ -263,6 +546,7 @@ function parseResearchResults(researchText: string, maxResults: number): ApiSear
     paperIndex++
   }
 
+  console.debug('Fallback parser produced papers', { count: papers.length })
   return papers
 }
 
@@ -321,4 +605,13 @@ function extractResearchSummary(researchText: string): string {
   return summary.length > 10
     ? summary + (summary.endsWith('.') ? '' : '.')
     : 'Deep research completed successfully.'
+}
+
+function clampResults(requested?: number): number {
+  if (!requested || Number.isNaN(requested)) {
+    return 12
+  }
+
+  const normalised = Math.floor(requested)
+  return Math.min(Math.max(normalised, 1), 25)
 }

@@ -106,14 +106,15 @@ const TILE_ACTIONS: Array<{
   description?: string
 }> = [
   {
-    id: 'compile-methods',
-    label: 'Compile Similar Methods',
-    description: 'Discover and bundle papers that share methodological approaches.',
-  },
-  {
     id: 'compile-claims',
     label: 'Compile Similar Claims',
     description: 'Collect papers that make comparable findings or claims.',
+  },
+  {
+    id: 'compile-methods',
+    label: 'Compile Similar Methods',
+    disabled: true,
+    description: 'Discover and bundle papers that share methodological approaches.',
   },
   {
     id: 'rate',
@@ -166,6 +167,7 @@ const FILTER_CHECKBOX_INPUT_DISABLED_CLASSES = 'text-slate-300 focus:ring-0';
 const RESULT_SUMMARY_CLASSES = 'flex flex-wrap items-baseline gap-2 text-sm text-slate-600';
 const DETAIL_METADATA_CLASSES = 'space-y-3 text-sm text-slate-600';
 const DOI_LINK_CLASSES = 'text-lg font-semibold text-sky-600 underline decoration-sky-300 underline-offset-4 transition hover:text-sky-700';
+const TILE_DOI_LINK_CLASSES = 'inline-flex items-center text-xs font-semibold text-sky-600 underline decoration-sky-300 underline-offset-4 transition hover:text-sky-700';
 const SIDEBAR_CARD_CLASSES = 'flex h-full flex-col gap-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
 const SIDEBAR_PRIMARY_BUTTON_CLASSES = 'flex items-center justify-center rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(56,189,248,0.2)] transition hover:-translate-y-0.5 hover:bg-sky-400';
 const SIDEBAR_SECONDARY_BUTTON_CLASSES = 'flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900';
@@ -199,6 +201,31 @@ function formatMeta(result: ApiSearchResult) {
   }
 
   return items.join(' · ')
+}
+
+function buildDoiUrl(doi?: string | null): string | null {
+  if (!doi) {
+    return null
+  }
+
+  const trimmed = doi.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed
+  }
+
+  if (trimmed.startsWith('doi.org/')) {
+    return `https://${trimmed}`
+  }
+
+  if (trimmed.startsWith('10.')) {
+    return `https://doi.org/${trimmed}`
+  }
+
+  return trimmed
 }
 
 interface UserProfile {
@@ -855,6 +882,7 @@ export default function Home() {
       <div className="space-y-2">
         {uniqueResults.map((result) => {
           const isSelected = selectedPaper?.id === result.id;
+          const doiUrl = buildDoiUrl(result.doi);
 
           return (
             <article
@@ -879,6 +907,18 @@ export default function Home() {
                 <p className="text-sm text-slate-600">{formatAuthors(result.authors)}</p>
                 {formatMeta(result) && (
                   <p className="text-xs text-slate-500">{formatMeta(result)}</p>
+                )}
+                {doiUrl && (
+                  <a
+                    href={doiUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={TILE_DOI_LINK_CLASSES}
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  >
+                    DOI: {result.doi}
+                  </a>
                 )}
               </div>
             </article>
@@ -943,8 +983,8 @@ export default function Home() {
           <div className="flex gap-2">
             <input
               id="profile-website"
-              type="url"
-              placeholder="https://"
+              type="text"
+              placeholder="Enter your website URL"
               value={profileFormWebsite}
               onChange={(event) => setProfileFormWebsite(event.target.value)}
               disabled={profile?.academic_website && !websiteEditingMode}
@@ -1218,6 +1258,8 @@ export default function Home() {
     setListItems([]);
 
     try {
+      const goal = actionId === 'compile-claims' ? 'claims' : 'methods';
+
       const response = await fetch('/api/research/compile', {
         method: 'POST',
         headers: {
@@ -1225,6 +1267,7 @@ export default function Home() {
         },
         body: JSON.stringify({
           paper: selectedPaper,
+          goal,
           options: {
             listName: `${actionLabel}: ${truncateTitleForList(selectedPaper.title, 80)}`,
             maxResults: 12,
@@ -1331,16 +1374,17 @@ export default function Home() {
 
     let normalizedWebsite = trimmedWebsite;
     if (trimmedWebsite) {
-      try {
-        // Add https:// if no protocol is provided
-        if (!/^https?:\/\//i.test(trimmedWebsite)) {
-          normalizedWebsite = `https://${trimmedWebsite}`;
-        }
+      // Add https:// if no protocol is provided
+      if (!/^https?:\/\//i.test(trimmedWebsite)) {
+        normalizedWebsite = `https://${trimmedWebsite}`;
+      }
 
-        // Validate URL structure; will throw on invalid URLs
+      // Basic validation - check if it looks like a valid URL
+      try {
         const parsed = new URL(normalizedWebsite);
-        if (!parsed.protocol.startsWith('http')) {
-          setProfileSaveError('Enter a valid URL starting with http:// or https://, or leave the field blank.');
+        // Additional check that it's a proper domain
+        if (!parsed.hostname || parsed.hostname.length < 3) {
+          setProfileSaveError('Enter a valid academic website URL or leave the field blank.');
           return;
         }
       } catch (error) {
@@ -1385,6 +1429,9 @@ export default function Home() {
         force: true,
         orcidOverride: normalisedOrcid,
       });
+
+      // Close the profile editor modal on successful save
+      closeProfileEditor();
     } catch (error) {
       console.error('Unexpected profile update error', error);
       setProfileSaveError('Something went wrong while saving. Please try again.');
@@ -1842,6 +1889,8 @@ export default function Home() {
                   const showSpinner = isActiveCompileAction && compileState.status === 'loading'
                   const layoutClasses =
                     action.id === 'compile-claims'
+                      ? 'sm:col-start-1 sm:row-start-1'
+                      : action.id === 'compile-methods'
                       ? 'sm:col-start-1 sm:row-start-2'
                       : action.id === 'rate'
                       ? 'sm:col-start-2 sm:row-start-1'
