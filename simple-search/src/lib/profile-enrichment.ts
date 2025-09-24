@@ -45,7 +45,7 @@ export async function generateProfilePersonalization({
 
   try {
     const response = await callGeminiForProfile({ manualKeywords, resumeText, orcidWorks, existingPersonalization, apiKey })
-    const personalization = normalisePersonalization(response)
+    const personalization = applyManualKeywordFocus(normalisePersonalization(response), manualKeywords)
 
     if (!personalization.topic_clusters.length) {
       return {
@@ -188,27 +188,127 @@ function buildFallbackPersonalization({
   orcidWorks: OrcidWork[]
   existingPersonalization?: ProfilePersonalization | null
 }): ProfilePersonalization {
-  if (existingPersonalization && existingPersonalization.topic_clusters.length) {
-    return existingPersonalization
-  }
-
   const keywords = dedupeStrings([
     ...manualKeywords,
     ...extractTopKeywordsFromWorks(orcidWorks),
   ])
 
-  const topic_clusters: ProfilePersonalization['topic_clusters'] = keywords.slice(0, 5).map((keyword, index) => ({
-    id: `manual-${index + 1}`,
-    label: titleCase(keyword),
-    keywords: [keyword],
-    priority: index + 1,
-    source: 'manual',
-  }))
+  const base: ProfilePersonalization = existingPersonalization
+    ? {
+        ...DEFAULT_PROFILE_PERSONALIZATION,
+        ...existingPersonalization,
+        topic_clusters: [...existingPersonalization.topic_clusters],
+        author_focus: [...(existingPersonalization.author_focus ?? [])],
+        venue_focus: [...(existingPersonalization.venue_focus ?? [])],
+        filters: {
+          ...DEFAULT_PROFILE_PERSONALIZATION.filters,
+          ...(existingPersonalization.filters ?? {}),
+        },
+      }
+    : {
+        ...DEFAULT_PROFILE_PERSONALIZATION,
+        topic_clusters: [],
+        author_focus: [],
+        venue_focus: [],
+      }
 
-  return {
-    ...DEFAULT_PROFILE_PERSONALIZATION,
-    topic_clusters,
+  if (keywords.length) {
+    base.topic_clusters = keywords.slice(0, 5).map((keyword, index) => ({
+      id: `manual-${index + 1}`,
+      label: titleCase(keyword),
+      keywords: [keyword],
+      priority: index + 1,
+      source: 'manual',
+    }))
+  } else if (!base.topic_clusters.length) {
+    base.topic_clusters = DEFAULT_PROFILE_PERSONALIZATION.topic_clusters
   }
+
+  return base
+}
+
+function applyManualKeywordFocus(personalization: ProfilePersonalization, manualKeywords: string[]): ProfilePersonalization {
+  const keywords = dedupeStrings(manualKeywords)
+  if (!keywords.length) {
+    return personalization
+  }
+
+  const clusters: TopicCluster[] = personalization.topic_clusters ? [...personalization.topic_clusters] : []
+  const seenIds = new Set<string>()
+
+  for (const cluster of clusters) {
+    if (cluster.id) {
+      seenIds.add(cluster.id)
+    }
+  }
+
+  const ensureKeywordInCluster = (cluster: TopicCluster, keyword: string) => {
+    const lower = keyword.toLowerCase()
+    if (!cluster.keywords.some((value) => value.toLowerCase() === lower)) {
+      cluster.keywords = [keyword, ...cluster.keywords]
+    }
+    cluster.source = 'manual'
+  }
+
+  const findClusterByKeyword = (keyword: string) => {
+    const lower = keyword.toLowerCase()
+    return clusters.find((cluster) => {
+      if (cluster.label.toLowerCase() === lower) {
+        return true
+      }
+      if (cluster.keywords.some((value) => value.toLowerCase() === lower)) {
+        return true
+      }
+      if (cluster.synonyms && cluster.synonyms.some((value) => value.toLowerCase() === lower)) {
+        return true
+      }
+      return false
+    })
+  }
+
+  const manualClusters: TopicCluster[] = []
+  let manualPosition = 0
+
+  for (const keyword of keywords) {
+    const existing = findClusterByKeyword(keyword)
+    manualPosition += 1
+    if (existing) {
+      if (manualClusters.includes(existing)) {
+        existing.priority = manualPosition
+        ensureKeywordInCluster(existing, keyword)
+        continue
+      }
+      ensureKeywordInCluster(existing, keyword)
+      existing.priority = manualPosition
+      manualClusters.push(existing)
+    } else {
+      const id = `manual-${manualPosition}`
+      // Keep id unique if manual keywords change often.
+      const uniqueId = seenIds.has(id) ? `${id}-${Date.now()}` : id
+      seenIds.add(uniqueId)
+      manualClusters.push({
+        id: uniqueId,
+        label: titleCase(keyword),
+        keywords: [keyword],
+        synonyms: [],
+        methods: [],
+        applications: [],
+        priority: manualPosition,
+        source: 'manual',
+      })
+    }
+  }
+
+  const remainingClusters = clusters.filter((cluster) => !manualClusters.includes(cluster))
+
+  const combined = [...manualClusters, ...remainingClusters]
+
+  combined.forEach((cluster, index) => {
+    cluster.priority = index + 1
+  })
+
+  personalization.topic_clusters = combined
+  return personalization
 }
 
 function extractTopKeywordsFromWorks(works: OrcidWork[]): string[] {

@@ -62,6 +62,8 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [cached, setCached] = useState(false)
+  const [compilingPaper, setCompilingPaper] = useState<string | null>(null)
+  const [compileMessage, setCompileMessage] = useState('')
 
   const performSearch = useCallback(async (term: string) => {
     const trimmed = term.trim()
@@ -133,6 +135,51 @@ export default function SearchPage() {
     [inputValue, performSearch, router]
   )
 
+  const handleCompile = async (paper: ApiSearchResult) => {
+    setCompilingPaper(paper.id)
+    setCompileMessage('Starting deep research...')
+
+    try {
+      const response = await fetch('/api/research/compile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ paper }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        setCompileMessage(errorData.message || 'Failed to compile research')
+        return
+      }
+
+      const result = await response.json()
+
+      if (result.success) {
+        setCompileMessage(`✅ Created "${result.list.name}" with ${result.list.items_count} papers`)
+        // Clear success message after 5 seconds
+        setTimeout(() => {
+          setCompileMessage('')
+        }, 5000)
+      } else {
+        setCompileMessage(result.message || 'Research compilation failed')
+      }
+
+    } catch (error) {
+      console.error('Compile error:', error)
+      setCompileMessage('Network error during research compilation')
+    } finally {
+      setCompilingPaper(null)
+      // Clear error messages after 8 seconds
+      setTimeout(() => {
+        if (compileMessage && !compileMessage.includes('✅')) {
+          setCompileMessage('')
+        }
+      }, 8000)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white/80 backdrop-blur">
@@ -202,6 +249,18 @@ export default function SearchPage() {
               {error}
             </div>
           )}
+
+          {compileMessage && (
+            <div className={`rounded-xl border px-4 py-3 text-sm ${
+              compileMessage.includes('✅')
+                ? 'border-green-100 bg-green-50 text-green-700'
+                : compileMessage.includes('Starting')
+                ? 'border-blue-100 bg-blue-50 text-blue-700'
+                : 'border-red-100 bg-red-50 text-red-600'
+            }`}>
+              {compileMessage}
+            </div>
+          )}
         </section>
 
         <section className="mt-6">
@@ -250,24 +309,35 @@ export default function SearchPage() {
                   </div>
 
                   <div className="mt-4 grid w-full gap-2 sm:grid-cols-2">
-                    {TILE_ACTIONS.map((action) => (
-                      <button
-                        key={action.id}
-                        type="button"
-                        disabled={action.disabled}
-                        className={`flex items-center justify-center rounded-xl border px-4 py-2 text-xs font-semibold shadow-[0px_4px_12px_rgba(71,85,105,0.12)] transition ${
-                          action.disabled
-                            ? 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-400 shadow-none'
-                            : 'border-slate-200/70 bg-white text-slate-900 hover:-translate-y-0.5 hover:border-slate-300'
-                        }`}
-                        onClick={() => {
-                          if (action.disabled) return
-                          console.log(`${action.label} clicked for`, result.id)
-                        }}
-                      >
-                        <span>{action.short}</span>
-                      </button>
-                    ))}
+                    {TILE_ACTIONS.map((action) => {
+                      const isCompiling = action.id === 'compile' && compilingPaper === result.id
+                      const isDisabled = action.disabled || isCompiling
+
+                      return (
+                        <button
+                          key={action.id}
+                          type="button"
+                          disabled={isDisabled}
+                          className={`flex items-center justify-center rounded-xl border px-4 py-2 text-xs font-semibold shadow-[0px_4px_12px_rgba(71,85,105,0.12)] transition ${
+                            isDisabled
+                              ? 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-400 shadow-none'
+                              : 'border-slate-200/70 bg-white text-slate-900 hover:-translate-y-0.5 hover:border-slate-300'
+                          }`}
+                          onClick={() => {
+                            if (isDisabled) return
+                            if (action.id === 'compile') {
+                              handleCompile(result)
+                            } else {
+                              console.log(`${action.label} clicked for`, result.id)
+                            }
+                          }}
+                        >
+                          <span>
+                            {isCompiling ? 'Researching...' : action.short}
+                          </span>
+                        </button>
+                      )
+                    })}
                   </div>
                 </article>
               ))}
