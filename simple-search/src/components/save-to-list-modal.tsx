@@ -6,6 +6,7 @@ interface UserList {
   id: number
   name: string
   items_count?: number
+  status?: 'loading' | 'ready'
 }
 
 interface ApiSearchResult {

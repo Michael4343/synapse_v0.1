@@ -25,6 +25,13 @@ interface ApiSearchResult {
   source: string
 }
 
+interface UserListSummary {
+  id: number
+  name: string
+  items_count: number
+  status?: 'loading' | 'ready'
+}
+
 const FEED_SKELETON_ITEMS = Array.from({ length: 6 })
 
 // Sample papers to show in default feed
@@ -278,6 +285,25 @@ function parseManualKeywords(input: string) {
     .slice(0, 20)
 }
 
+function createKeywordClusters(input: string) {
+  // Split by newlines to get individual clusters
+  const lines = input.split(/\n/).map((line) => line.trim()).filter((line) => line.length > 0)
+
+  return lines.map((line, index) => {
+    // Split by commas within each line to get keywords for this cluster
+    const keywords = line.split(/,/).map((keyword) => keyword.trim()).filter((keyword) => keyword.length > 0)
+
+    return {
+      label: keywords[0] || `Cluster ${index + 1}`, // Use first keyword as label
+      priority: index + 1, // Order by appearance
+      keywords: keywords,
+      synonyms: [],
+      methods: [],
+      applications: []
+    }
+  }).slice(0, 10) // Limit to 10 clusters max
+}
+
 function truncateTitleForList(title: string, maxLength = 64) {
   if (title.length <= maxLength) {
     return title
@@ -317,7 +343,7 @@ export default function Home() {
   const [profileEnrichmentError, setProfileEnrichmentError] = useState('');
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [paperToSave, setPaperToSave] = useState<ApiSearchResult | null>(null);
-  const [userLists, setUserLists] = useState<Array<{id: number, name: string, items_count: number}>>([]);
+  const [userLists, setUserLists] = useState<UserListSummary[]>([]);
   const [listsLoading, setListsLoading] = useState(false);
 
   const [selectedListId, setSelectedListId] = useState<number | null>(null);
@@ -390,7 +416,13 @@ export default function Home() {
       });
       if (response.ok) {
         const data = await response.json();
-        setUserLists(data.lists || []);
+        const lists = Array.isArray(data.lists) ? data.lists : [];
+        setUserLists(lists.map((list: any) => ({
+          id: list.id,
+          name: list.name,
+          items_count: typeof list.items_count === 'number' ? list.items_count : 0,
+          status: 'ready',
+        })));
       }
     } catch (error) {
       console.error('Failed to fetch user lists:', error);
@@ -492,13 +524,13 @@ export default function Home() {
     const applications = Array.isArray(cluster.applications) ? cluster.applications : [];
     const terms = [...keywords, ...synonyms, ...methods, ...applications]
       .map((term) => term?.trim())
-      .filter((term): term is string => Boolean(term))
-      .slice(0, 6);
+      .filter((term): term is string => Boolean(term));
 
     if (!terms.length) {
       return '';
     }
 
+    // Use all terms, not just first 6
     const quotedTerms = terms.map((term) => (term.includes(' ') ? `"${term}"` : term));
     return quotedTerms.join(' ');
   };
@@ -544,8 +576,8 @@ export default function Home() {
         const aggregated: ApiSearchResult[] = [];
         const seen = new Set<string>();
 
-        for (const query of queries.slice(0, Math.max(minimumQueries, 3))) {
-          if (aggregated.length >= 12) {
+        for (const query of queries) {
+          if (aggregated.length >= 20) {
             break;
           }
 
@@ -583,7 +615,7 @@ export default function Home() {
           setPersonalFeedResults([]);
           setPersonalFeedError('We could not find new papers for your focus areas. Try refreshing in a bit or adjust your profile.');
         } else {
-          setPersonalFeedResults(aggregated.slice(0, 12));
+          setPersonalFeedResults(aggregated.slice(0, 20));
           setPersonalFeedError('');
           setPersonalFeedLastUpdated(new Date().toISOString());
         }
@@ -1223,15 +1255,9 @@ export default function Home() {
       return;
     }
 
-    const previousListId = selectedListId;
-    const previousListItems = listItems;
-    const previousSelectedPaper = selectedPaper;
     const tempListId = -Date.now();
     const truncatedTitle = truncateTitleForList(selectedPaper.title);
     const placeholderName = `${actionLabel}: ${truncatedTitle}`;
-    const loadingMessage = actionId === 'compile-claims'
-      ? 'Compiling similar claims for the selected paper…'
-      : 'Compiling similar methods for the selected paper…';
 
     setCompileState({
       actionId,
@@ -1245,17 +1271,13 @@ export default function Home() {
       summary: null,
     });
 
-    setListItemsLoading(true);
-    setListItemsLoadingMessage(loadingMessage);
     setUserLists((previous) => {
       const filtered = previous.filter((list) => list.id !== tempListId);
       return [
-        { id: tempListId, name: placeholderName, items_count: 0 },
+        { id: tempListId, name: placeholderName, items_count: 0, status: 'loading' },
         ...filtered,
       ];
     });
-    setSelectedListId(tempListId);
-    setListItems([]);
 
     try {
       const goal = actionId === 'compile-claims' ? 'claims' : 'methods';
@@ -1291,30 +1313,24 @@ export default function Home() {
       }
 
       const createdList = result.list as { id: number; name: string; items_count: number };
-      const compiledPapers: ApiSearchResult[] = Array.isArray(result.papers) ? result.papers : [];
 
       setCompileState({
         actionId,
         status: 'success',
-        message: `Created “${createdList.name}” with ${createdList.items_count} papers.`,
+        message: `Created “${createdList.name}” with ${createdList.items_count} papers. Open it from your library when you’re ready.`,
         tempListId: null,
         listName: createdList.name,
         listId: createdList.id,
         summary: result.researchSummary ?? null,
       });
 
-      setListItemsLoading(false);
-      setListItemsLoadingMessage('');
       setUserLists((previous) => {
         const filtered = previous.filter((list) => list.id !== tempListId && list.id !== createdList.id);
         return [
-          { id: createdList.id, name: createdList.name, items_count: createdList.items_count },
+          { id: createdList.id, name: createdList.name, items_count: createdList.items_count, status: 'ready' },
           ...filtered,
         ];
       });
-      setSelectedListId(createdList.id);
-      setListItems(compiledPapers);
-      setSelectedPaper(compiledPapers.length > 0 ? compiledPapers[0] : previousSelectedPaper);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Research compilation failed.';
 
@@ -1332,12 +1348,7 @@ export default function Home() {
         summary: null,
       });
 
-      setListItemsLoading(false);
-      setListItemsLoadingMessage('');
       setUserLists((previous) => previous.filter((list) => list.id !== tempListId));
-      setSelectedListId(previousListId ?? null);
-      setListItems(previousListItems);
-      setSelectedPaper(previousSelectedPaper);
     }
   };
 
@@ -1634,24 +1645,42 @@ export default function Home() {
                     <div className="space-y-3">
                       <h3 className="text-sm font-semibold text-slate-700">Your Lists</h3>
                       <div className="space-y-2">
-                        {userLists.map((list) => (
+                        {userLists.map((list) => {
+                          const isSelected = selectedListId === list.id;
+                          const isLoadingList = list.status === 'loading';
+
+                          return (
                             <button
                               key={list.id}
-                              onClick={() => handleListClick(list.id)}
-                              className={`w-full flex items-center justify-between rounded-lg border p-3 text-sm transition hover:bg-slate-100 ${
-                                selectedListId === list.id
+                              type="button"
+                              onClick={isLoadingList ? undefined : () => handleListClick(list.id)}
+                              disabled={isLoadingList}
+                              aria-busy={isLoadingList}
+                              className={`w-full flex items-center justify-between rounded-lg border p-3 text-sm transition ${
+                                isSelected
                                   ? 'border-sky-300 bg-sky-50 ring-1 ring-sky-200'
-                                  : 'border-slate-200 bg-slate-50'
-                              }`}
+                                  : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+                              } ${isLoadingList ? 'cursor-wait opacity-80' : ''}`}
                             >
-                              <span className={`font-medium ${selectedListId === list.id ? 'text-sky-900' : 'text-slate-900'}`}>
+                              <span className={`font-medium ${isSelected ? 'text-sky-900' : 'text-slate-900'}`}>
                                 {list.name}
                               </span>
-                              <span className={`text-xs ${selectedListId === list.id ? 'text-sky-600' : 'text-slate-500'}`}>
-                                {list.items_count} item{list.items_count === 1 ? '' : 's'}
+                              <span className={`text-xs ${isSelected ? 'text-sky-600' : 'text-slate-500'}`}>
+                                {isLoadingList ? (
+                                  <span className="flex items-center gap-2">
+                                    <span
+                                      className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"
+                                      aria-hidden="true"
+                                    />
+                                    Compiling…
+                                  </span>
+                                ) : (
+                                  `${list.items_count} item${list.items_count === 1 ? '' : 's'}`
+                                )}
                               </span>
                             </button>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   ) : (
