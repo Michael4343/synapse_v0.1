@@ -634,7 +634,7 @@ export default function Home() {
 
   const loadPersonalFeed = useCallback(
     async ({ personalizationOverride, minimumQueries = 1, force = false }: { personalizationOverride?: ProfilePersonalization | null; minimumQueries?: number; force?: boolean } = {}) => {
-      if (!user || !profile?.orcid_id) {
+      if (!user) {
         return;
       }
 
@@ -659,6 +659,7 @@ export default function Home() {
       const queries = sortedClusters
         .map((cluster) => buildClusterQuery(cluster))
         .filter((query) => Boolean(query));
+
 
       if (!queries.length) {
         setPersonalFeedResults([]);
@@ -687,6 +688,7 @@ export default function Home() {
           const query = queries[queryIndex];
           const maxForThisQuery = quotaPerQuery[queryIndex];
           let addedForThisQuery = 0;
+
 
           if (aggregated.length >= maxResults) {
             break;
@@ -724,6 +726,7 @@ export default function Home() {
           }
         }
 
+
         if (!aggregated.length) {
           setPersonalFeedResults([]);
           setPersonalFeedError('We could not find new papers for your focus areas. Try refreshing in a bit or adjust your profile.');
@@ -736,7 +739,7 @@ export default function Home() {
         setPersonalFeedLoading(false);
       }
     },
-    [personalFeedLoading, profile?.orcid_id, profilePersonalization, user]
+    [personalFeedLoading, profilePersonalization, user]
   );
 
   useEffect(() => {
@@ -747,7 +750,8 @@ export default function Home() {
       return;
     }
 
-    if (!profile?.orcid_id) {
+    const userHasKeywords = profile?.profile_personalization?.manual_keywords && profile.profile_personalization.manual_keywords.length > 0;
+    if (!userHasKeywords) {
       setPersonalFeedResults([]);
       return;
     }
@@ -759,7 +763,7 @@ export default function Home() {
     if (personalFeedResults.length === 0) {
       loadPersonalFeed({ minimumQueries: 3 });
     }
-  }, [loadPersonalFeed, personalFeedResults.length, profile?.orcid_id, profilePersonalization, user]);
+  }, [loadPersonalFeed, personalFeedResults.length, profile, profilePersonalization, user]);
 
   useEffect(() => {
     if (!user) {
@@ -835,11 +839,12 @@ export default function Home() {
         return;
       }
 
-      const effectiveOrcid = orcidOverride ?? profile?.orcid_id ?? null;
-      if (!effectiveOrcid) {
-        setProfileEnrichmentError('Add your ORCID iD before generating personalization.');
-        return;
-      }
+      // Skip ORCID requirement since it's coming soon - use keywords only
+      // const effectiveOrcid = orcidOverride ?? profile?.orcid_id ?? null;
+      // if (!effectiveOrcid) {
+      //   setProfileEnrichmentError('Add your ORCID iD before generating personalization.');
+      //   return;
+      // }
 
       // Create simple keyword clusters directly from user input
       const keywordClusters = createKeywordClusters(profileManualKeywords);
@@ -856,6 +861,7 @@ export default function Home() {
         // Create the personalization object with our simple keyword clusters
         const newPersonalization: ProfilePersonalization = {
           topic_clusters: keywordClusters,
+          manual_keywords: profileManualKeywords.split('\n').filter(line => line.trim()),
           author_focus: [],
           venue_focus: [],
           filters: {
@@ -886,7 +892,7 @@ export default function Home() {
         setProfile((prev) => {
           if (!prev) {
             return {
-              orcid_id: effectiveOrcid,
+              orcid_id: null,
               academic_website: null,
               profile_personalization: newPersonalization,
               last_profile_enriched_at: new Date().toISOString(),
@@ -914,7 +920,6 @@ export default function Home() {
     }, [
       authModal,
       loadPersonalFeed,
-      profile,
       profileEnrichmentLoading,
       profileManualKeywords,
       user,
@@ -960,10 +965,11 @@ export default function Home() {
         .join(' • ')
     : '';
 
-  const profileNeedsSetup = Boolean(user) && !profileLoading && !profileError && (!profile || !profile.orcid_id);
+  const hasKeywords = profile?.profile_personalization?.manual_keywords && profile.profile_personalization.manual_keywords.length > 0;
+  const profileNeedsSetup = Boolean(user) && !profileLoading && !profileError && (!profile || !hasKeywords);
   const isSearchContext = keywordLoading || keywordResults.length > 0 || Boolean(lastKeywordQuery) || Boolean(keywordError);
   const isListViewActive = Boolean(selectedListId);
-  const shouldShowPersonalFeed = Boolean(user && profile?.orcid_id && !profileNeedsSetup && !isSearchContext && !isListViewActive);
+  const shouldShowPersonalFeed = Boolean(user && hasKeywords && !profileNeedsSetup && !isSearchContext && !isListViewActive);
   const compileInProgress = compileState.status === 'loading';
   const personalizationInputs = (includeAction: boolean) => {
     const keywordsId = includeAction ? 'profile-keywords-editor' : 'profile-keywords';
@@ -1072,9 +1078,12 @@ export default function Home() {
     return (
       <form id={formId} onSubmit={handleProfileSave} className="mt-6 space-y-5">
         <div className="space-y-2">
-          <label htmlFor="profile-orcid" className={PROFILE_LABEL_CLASSES}>
-            ORCID iD
-          </label>
+          <div className="flex items-center justify-between gap-3">
+            <label htmlFor="profile-orcid" className={PROFILE_LABEL_CLASSES}>
+              ORCID iD
+            </label>
+            <span className={PROFILE_COMING_SOON_HINT_CLASSES}>Coming soon</span>
+          </div>
           <div className="flex gap-2">
             <input
               id="profile-orcid"
@@ -1085,17 +1094,14 @@ export default function Home() {
               value={profileFormOrcid}
               onChange={(event) => setProfileFormOrcid(event.target.value)}
               disabled={profile?.orcid_id && !orcidEditingMode}
-              className={`flex-1 ${PROFILE_INPUT_CLASSES} ${
-                profile?.orcid_id && !orcidEditingMode
-                  ? 'bg-slate-100 text-slate-500 cursor-not-allowed'
-                  : ''
-              }`}
+              className={`flex-1 ${PROFILE_INPUT_CLASSES} bg-slate-100 text-slate-500 cursor-not-allowed`}
             />
             {profile?.orcid_id && !orcidEditingMode && (
               <button
                 type="button"
                 onClick={() => setOrcidEditingMode(true)}
-                className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition"
+                className="px-4 py-2 text-sm font-medium text-slate-400 bg-slate-50 border border-slate-200 rounded-lg cursor-not-allowed"
+                disabled
               >
                 Update
               </button>
@@ -1107,7 +1113,8 @@ export default function Home() {
                   setOrcidEditingMode(false);
                   setProfileFormOrcid(profile?.orcid_id ?? '');
                 }}
-                className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition"
+                className="px-4 py-2 text-sm font-medium text-slate-400 bg-slate-50 border border-slate-200 rounded-lg cursor-not-allowed"
+                disabled
               >
                 Cancel
               </button>
@@ -1116,9 +1123,12 @@ export default function Home() {
         </div>
 
         <div className="space-y-2">
-          <label htmlFor="profile-website" className={PROFILE_LABEL_CLASSES}>
-            Academic website
-          </label>
+          <div className="flex items-center justify-between gap-3">
+            <label htmlFor="profile-website" className={PROFILE_LABEL_CLASSES}>
+              Academic website
+            </label>
+            <span className={PROFILE_COMING_SOON_HINT_CLASSES}>Coming soon</span>
+          </div>
           <div className="flex gap-2">
             <input
               id="profile-website"
@@ -1127,17 +1137,14 @@ export default function Home() {
               value={profileFormWebsite}
               onChange={(event) => setProfileFormWebsite(event.target.value)}
               disabled={profile?.academic_website && !websiteEditingMode}
-              className={`flex-1 ${PROFILE_INPUT_CLASSES} ${
-                profile?.academic_website && !websiteEditingMode
-                  ? 'bg-slate-100 text-slate-500 cursor-not-allowed'
-                  : ''
-              }`}
+              className={`flex-1 ${PROFILE_INPUT_CLASSES} bg-slate-100 text-slate-500 cursor-not-allowed`}
             />
             {profile?.academic_website && !websiteEditingMode && (
               <button
                 type="button"
                 onClick={() => setWebsiteEditingMode(true)}
-                className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition"
+                className="px-4 py-2 text-sm font-medium text-slate-400 bg-slate-50 border border-slate-200 rounded-lg cursor-not-allowed"
+                disabled
               >
                 Update
               </button>
@@ -1149,7 +1156,8 @@ export default function Home() {
                   setWebsiteEditingMode(false);
                   setProfileFormWebsite(profile?.academic_website ?? '');
                 }}
-                className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition"
+                className="px-4 py-2 text-sm font-medium text-slate-400 bg-slate-50 border border-slate-200 rounded-lg cursor-not-allowed"
+                disabled
               >
                 Cancel
               </button>
@@ -1554,16 +1562,17 @@ export default function Home() {
 
     setProfileSaveError('');
 
-    if (!normalisedOrcid) {
-      setProfileSaveError('Add your ORCID iD to personalise your feed.');
-      return;
-    }
+    // Skip ORCID validation since it's coming soon
+    // if (!normalisedOrcid) {
+    //   setProfileSaveError('Add your ORCID iD to personalise your feed.');
+    //   return;
+    // }
 
-    const orcidPattern = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/i;
-    if (!orcidPattern.test(normalisedOrcid)) {
-      setProfileSaveError('Enter a valid ORCID iD in the format 0000-0000-0000-0000.');
-      return;
-    }
+    // const orcidPattern = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/i;
+    // if (!orcidPattern.test(normalisedOrcid)) {
+    //   setProfileSaveError('Enter a valid ORCID iD in the format 0000-0000-0000-0000.');
+    //   return;
+    // }
 
     const parsedManualKeywords = parseManualKeywords(profileManualKeywords);
     if (parsedManualKeywords.length === 0) {
@@ -1599,7 +1608,7 @@ export default function Home() {
       const { error } = await supabase
         .from('profiles')
         .update({
-          orcid_id: normalisedOrcid,
+          orcid_id: normalisedOrcid || null,
           academic_website: normalizedWebsite || null,
         })
         .eq('id', user.id);
@@ -2046,13 +2055,13 @@ export default function Home() {
                   <span className={FEED_SPINNER_CLASSES} aria-hidden="true" />
                   <p>Loading your research profile…</p>
                 </div>
-              ) : profileNeedsSetup && !isSearchContext ? (
+              ) : profileNeedsSetup && !isSearchContext && !isListViewActive ? (
                 <div className={PROFILE_CARD_CLASSES}>
                   <div className="flex flex-col gap-2">
                     <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-sky-600">Research profile</span>
                     <h2 className="text-2xl font-semibold text-slate-900">Personalise your feed</h2>
                     <p className="text-sm text-slate-600">
-                      Add your ORCID or academic site so we can surface research that matches your expertise.
+                      Add keywords to personalise your feed. ORCID and academic site features coming soon.
                     </p>
                   </div>
 

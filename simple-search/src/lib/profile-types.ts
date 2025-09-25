@@ -36,6 +36,7 @@ export interface ProfilePersonalization {
   author_focus: AuthorFocus[]
   venue_focus: VenueFocus[]
   filters: ProfileFilters
+  manual_keywords?: string[]
 }
 
 export const DEFAULT_PROFILE_PERSONALIZATION: ProfilePersonalization = {
