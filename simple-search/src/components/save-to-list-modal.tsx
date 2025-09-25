@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 interface UserList {
   id: number
   name: string
-  items_count?: number
+  items_count: number
   status?: 'loading' | 'ready'
 }
 
@@ -153,7 +153,7 @@ export function SaveToListModal({ isOpen, paper, onClose, onSaved, userLists, se
       // Optimistically update the list count
       setUserLists(prevLists => prevLists.map(list =>
         list.id === targetListId
-          ? { ...list, items_count: (list.items_count || 0) + 1 }
+          ? { ...list, items_count: list.items_count + 1 }
           : list
       ))
 
