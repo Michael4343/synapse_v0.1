@@ -18,12 +18,6 @@ const DIVIDER_CLASSES = 'relative flex items-center justify-center'
 const DIVIDER_LINE_CLASSES = 'absolute inset-x-0 h-px bg-slate-200'
 const DIVIDER_TEXT_CLASSES = 'relative bg-white px-4 text-xs font-semibold text-slate-500'
 const TERMS_CLASSES = 'text-xs text-slate-500'
-const SECTION_HEADER_CLASSES = 'text-sm font-semibold text-slate-700 border-t border-slate-200 pt-3 mt-3'
-const SECTION_SUBTITLE_CLASSES = 'text-xs text-slate-500 mt-1'
-const OPTIONAL_LABEL_CLASSES = 'text-xs text-slate-400 font-normal'
-const COMING_SOON_CLASSES = 'inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600'
-const UPLOAD_BUTTON_CLASSES = 'w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-400 cursor-not-allowed'
-
 export function RegisterForm({ onSuccess }: RegisterFormProps) {
   const [formState, formActions] = useAuthForm('signup')
 
@@ -87,113 +81,54 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
 
       {/* Email/Password Form */}
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Main form in two columns */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left Column - Account Details */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-slate-700 mb-2">Account Details</h3>
-
-            <div className={INPUT_GROUP_CLASSES}>
-              <label htmlFor="signup-email" className={LABEL_CLASSES}>
-                Email
-              </label>
-              <input
-                type="email"
-                id="signup-email"
-                value={formState.email}
-                onChange={(e) => formActions.setEmail(e.target.value)}
-                placeholder="Enter your email"
-                className={INPUT_CLASSES}
-                disabled={formState.loading}
-                required
-              />
-            </div>
-
-            <div className={INPUT_GROUP_CLASSES}>
-              <label htmlFor="signup-password" className={LABEL_CLASSES}>
-                Password
-              </label>
-              <input
-                type="password"
-                id="signup-password"
-                value={formState.password}
-                onChange={(e) => formActions.setPassword(e.target.value)}
-                placeholder="Create a password (min. 6 characters)"
-                className={INPUT_CLASSES}
-                disabled={formState.loading}
-                minLength={6}
-                required
-              />
-            </div>
-
-            <div className={INPUT_GROUP_CLASSES}>
-              <label htmlFor="confirm-password" className={LABEL_CLASSES}>
-                Confirm Password
-              </label>
-              <input
-                type="password"
-                id="confirm-password"
-                value={formState.confirmPassword || ''}
-                onChange={(e) => formActions.setConfirmPassword?.(e.target.value)}
-                placeholder="Confirm your password"
-                className={INPUT_CLASSES}
-                disabled={formState.loading}
-                required
-              />
-            </div>
+        <div className="space-y-3">
+          <div className={INPUT_GROUP_CLASSES}>
+            <label htmlFor="signup-email" className={LABEL_CLASSES}>
+              Email
+            </label>
+            <input
+              type="email"
+              id="signup-email"
+              value={formState.email}
+              onChange={(e) => formActions.setEmail(e.target.value)}
+              placeholder="Enter your email"
+              className={INPUT_CLASSES}
+              disabled={formState.loading}
+              required
+            />
           </div>
 
-          {/* Right Column - Research Profile */}
-          <div className="space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-700">
-                Research Profile <span className={OPTIONAL_LABEL_CLASSES}>(Optional)</span>
-              </h3>
-            </div>
+          <div className={INPUT_GROUP_CLASSES}>
+            <label htmlFor="signup-password" className={LABEL_CLASSES}>
+              Password
+            </label>
+            <input
+              type="password"
+              id="signup-password"
+              value={formState.password}
+              onChange={(e) => formActions.setPassword(e.target.value)}
+              placeholder="Create a password (min. 6 characters)"
+              className={INPUT_CLASSES}
+              disabled={formState.loading}
+              minLength={6}
+              required
+            />
+          </div>
 
-            <div className={INPUT_GROUP_CLASSES}>
-              <label htmlFor="orcid-id" className={LABEL_CLASSES}>
-                ORCID iD
-              </label>
-              <input
-                type="text"
-                id="orcid-id"
-                value={formState.orcidId || ''}
-                onChange={(e) => formActions.setOrcidId?.(e.target.value)}
-                placeholder="0000-0000-0000-0000"
-                className={INPUT_CLASSES}
-                disabled={formState.loading}
-                pattern="[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{3}[0-9X]"
-              />
-            </div>
-
-            <div className={INPUT_GROUP_CLASSES}>
-              <label htmlFor="academic-website" className={LABEL_CLASSES}>
-                Academic Website
-              </label>
-              <input
-                type="url"
-                id="academic-website"
-                value={formState.academicWebsite || ''}
-                onChange={(e) => formActions.setAcademicWebsite?.(e.target.value)}
-                placeholder="https://yoursite.edu"
-                className={INPUT_CLASSES}
-                disabled={formState.loading}
-              />
-            </div>
-
-            <div className={INPUT_GROUP_CLASSES}>
-              <label className={LABEL_CLASSES}>
-                Bibliography <span className={COMING_SOON_CLASSES}>Coming Soon</span>
-              </label>
-              <button
-                type="button"
-                disabled
-                className={UPLOAD_BUTTON_CLASSES}
-              >
-                📄 Upload bibliography file
-              </button>
-            </div>
+          <div className={INPUT_GROUP_CLASSES}>
+            <label htmlFor="confirm-password" className={LABEL_CLASSES}>
+              Confirm Password
+            </label>
+            <input
+              type="password"
+              id="confirm-password"
+              value={formState.confirmPassword || ''}
+              onChange={(e) => formActions.setConfirmPassword?.(e.target.value)}
+              placeholder="Confirm your password"
+              className={INPUT_CLASSES}
+              disabled={formState.loading}
+              required
+            />
           </div>
         </div>
 

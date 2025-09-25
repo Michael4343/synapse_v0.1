@@ -7,8 +7,6 @@ interface UseAuthFormState {
   email: string
   password: string
   confirmPassword?: string
-  orcidId?: string
-  academicWebsite?: string
   loading: boolean
   error: string
   success: string
@@ -19,8 +17,6 @@ interface UseAuthFormActions {
   setEmail: (email: string) => void
   setPassword: (password: string) => void
   setConfirmPassword?: (password: string) => void
-  setOrcidId?: (orcidId: string) => void
-  setAcademicWebsite?: (website: string) => void
   setError: (error: string) => void
   setSuccess: (success: string) => void
   clearError: () => void
@@ -38,8 +34,6 @@ export function useAuthForm(mode: 'login' | 'signup' = 'login'): [UseAuthFormSta
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [orcidId, setOrcidId] = useState('')
-  const [academicWebsite, setAcademicWebsite] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -122,17 +116,12 @@ export function useAuthForm(mode: 'login' | 'signup' = 'login'): [UseAuthFormSta
     setLoading(true)
     clearMessages()
 
-    const profileData = {
-      orcidId: orcidId.trim() || null,
-      academicWebsite: academicWebsite.trim() || null
-    }
-
-    const { error: authError } = await signUp(email, password, profileData)
+    const { error: authError } = await signUp(email, password)
 
     if (authError) {
       setError(getErrorMessage(authError))
     } else {
-      setSuccess('Account created successfully! You can now start exploring academic research.')
+      setSuccess('Account created! You are signed in and your personal feed is ready to set up.')
     }
 
     setLoading(false)
@@ -175,9 +164,7 @@ export function useAuthForm(mode: 'login' | 'signup' = 'login'): [UseAuthFormSta
     email,
     password,
     ...(mode === 'signup' && {
-      confirmPassword,
-      orcidId,
-      academicWebsite
+      confirmPassword
     }),
     loading,
     error,
@@ -188,9 +175,7 @@ export function useAuthForm(mode: 'login' | 'signup' = 'login'): [UseAuthFormSta
     setEmail,
     setPassword,
     ...(mode === 'signup' && {
-      setConfirmPassword,
-      setOrcidId,
-      setAcademicWebsite
+      setConfirmPassword
     }),
     setError,
     setSuccess,

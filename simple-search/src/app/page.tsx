@@ -1276,15 +1276,7 @@ export default function Home() {
       );
     }
   } else if (!user) {
-    mainFeedContent = (
-      <div className="space-y-4">
-        <div className="rounded-xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-4 text-center">
-          <p className="text-sm font-semibold text-sky-700">Featured Research</p>
-          <p className="text-xs text-sky-600 mt-1">Explore groundbreaking papers or register to get your personalised research feed!</p>
-        </div>
-        {renderResultList(SAMPLE_PAPERS, 'Featured pick')}
-      </div>
-    );
+    mainFeedContent = renderResultList(SAMPLE_PAPERS, 'Featured pick');
   } else {
     mainFeedContent = (
       <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">
@@ -1907,6 +1899,22 @@ export default function Home() {
           <section
             className={`min-w-0 transition-all duration-300 ${sidebarVisible ? 'xl:basis-[40%]' : 'xl:basis-[50%]'} xl:grow-0 ${FEED_CARD_CLASSES}`}
           >
+            {/* Share Discovery Tile */}
+            <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-slate-100/80 p-5 text-slate-600 cursor-not-allowed opacity-60">
+              <div className="flex flex-col gap-3 w-full">
+                <div className="flex items-center gap-2">
+                  <span>🧬</span>
+                  <span className="text-sm font-semibold text-slate-700">Share Discovery</span>
+                </div>
+                <textarea
+                  disabled
+                  rows={3}
+                  placeholder="Share your work that is not publishable to help science move faster"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-400 placeholder:text-slate-400 cursor-not-allowed resize-none"
+                />
+              </div>
+            </div>
+
             <header className="flex flex-col gap-6">
               <div className="flex items-center justify-between">
                 <div className="flex flex-col gap-1">

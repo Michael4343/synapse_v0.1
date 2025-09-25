@@ -5,16 +5,11 @@ import { User, Session, AuthError } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
 import { supabase } from './supabase'
 
-interface ProfileData {
-  orcidId?: string | null
-  academicWebsite?: string | null
-}
-
 interface AuthContextType {
   user: User | null
   session: Session | null
   loading: boolean
-  signUp: (email: string, password: string, profileData?: ProfileData) => Promise<{ error: AuthError | null }>
+  signUp: (email: string, password: string) => Promise<{ error: AuthError | null }>
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>
   signInWithGoogle: () => Promise<{ error: AuthError | null }>
   signOut: () => Promise<{ error: AuthError | null }>
@@ -81,34 +76,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return () => subscription.unsubscribe()
   }, [router])
 
-  const signUp = async (email: string, password: string, profileData?: ProfileData) => {
+  const signUp = async (email: string, password: string) => {
     try {
-      const { data, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback`
         }
       })
-
-      // If signup was successful and we have profile data, update the profile
-      if (!error && data.user && profileData) {
-        const { orcidId, academicWebsite } = profileData
-
-        // Update the profile with academic fields
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({
-            orcid_id: orcidId || null,
-            academic_website: academicWebsite || null
-          })
-          .eq('id', data.user.id)
-
-        if (profileError) {
-          console.error('Profile update error:', profileError)
-          // Don't fail the signup if profile update fails
-        }
-      }
 
       return { error }
     } catch (error) {
