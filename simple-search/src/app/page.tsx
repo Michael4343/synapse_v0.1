@@ -1900,9 +1900,9 @@ export default function Home() {
             {/* Share Discovery Tile */}
             <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-slate-100/80 p-5 text-slate-600 cursor-not-allowed opacity-60">
               <div className="flex flex-col gap-3 w-full">
-                <div className="flex items-center gap-2">
-                  <span>🧬</span>
-                  <span className="text-sm font-semibold text-slate-700">Share Wisdom</span>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">Evidentia</span>
+                  <h1 className="text-3xl font-semibold text-slate-900">Share Wisdom</h1>
                 </div>
                 <textarea
                   disabled
@@ -1916,7 +1916,6 @@ export default function Home() {
             <header className="flex flex-col gap-6">
               <div className="flex items-center justify-between">
                 <div className="flex flex-col gap-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">Evidentia</span>
                   <div className="flex items-center gap-2">
                     <h1 className="text-3xl font-semibold text-slate-900">Research Feed</h1>
                   </div>
