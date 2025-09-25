@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { StarRating } from './star-rating'
+import { usePostHogTracking } from '../hooks/usePostHogTracking'
 
 interface ApiSearchResult {
   id: string
@@ -49,6 +50,8 @@ const BUTTON_SECONDARY_CLASSES = 'inline-flex items-center justify-center rounde
 const RATING_CONTAINER_CLASSES = 'flex flex-col items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-6'
 
 export function RateModal({ isOpen, paper, onClose, onRated, existingRating }: RateModalProps) {
+  const tracking = usePostHogTracking()
+
   const [rating, setRating] = useState<number>(0)
   const [comment, setComment] = useState('')
   const [loading, setLoading] = useState(false)
@@ -124,10 +127,15 @@ export function RateModal({ isOpen, paper, onClose, onRated, existingRating }: R
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        setError(errorData.error || `Failed to ${isUpdate ? 'update' : 'submit'} rating`)
+        const errorMessage = errorData.error || `Failed to ${isUpdate ? 'update' : 'submit'} rating`
+        setError(errorMessage)
+        tracking.trackError('rating_api_error', errorMessage, 'rating_submission')
         setLoading(false)
         return
       }
+
+      // Track successful rating
+      tracking.trackPaperRated(paper.semanticScholarId, paper.title, rating)
 
       const successMessage = isUpdate ? 'Rating updated successfully!' : 'Rating submitted successfully!'
       setSuccess(successMessage)
@@ -140,6 +148,7 @@ export function RateModal({ isOpen, paper, onClose, onRated, existingRating }: R
     } catch (error) {
       console.error('Rating submission failed:', error)
       setError('Something went wrong. Please try again.')
+      tracking.trackError('rating_submission_exception', (error as Error).message, 'rating_modal')
     } finally {
       setLoading(false)
     }

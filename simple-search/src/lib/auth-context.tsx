@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { User, Session, AuthError } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
 import { createClient } from './supabase'
+import { usePostHogTracking } from '../hooks/usePostHogTracking'
 
 interface AuthContextType {
   user: User | null
@@ -36,6 +37,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [loading, setLoading] = useState(true)
   const router = useRouter()
   const supabase = createClient()
+  const tracking = usePostHogTracking()
 
   useEffect(() => {
     // Get initial session
@@ -65,6 +67,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUser(session?.user ?? null)
         setLoading(false)
 
+        // Handle successful sign in (especially for Google OAuth redirects)
+        if (event === 'SIGNED_IN' && session?.user) {
+          const provider = session.user.app_metadata?.provider
+          const method = provider === 'google' ? 'google' : 'email'
+          tracking.trackLoginCompleted(session.user.id, method)
+        }
+
         // Handle sign out
         if (event === 'SIGNED_OUT') {
           setUser(null)
@@ -78,6 +87,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [router, supabase.auth])
 
   const signUp = async (email: string, password: string) => {
+    tracking.trackSignupAttempted('email')
+
     try {
       const { error } = await supabase.auth.signUp({
         email,
@@ -87,27 +98,47 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
       })
 
+      if (!error) {
+        // Note: User ID will be available after email confirmation
+        tracking.trackSignupCompleted(email, 'email')
+      } else {
+        tracking.trackError('signup_error', error.message, 'email_signup')
+      }
+
       return { error }
     } catch (error) {
       console.error('Sign up error:', error)
+      tracking.trackError('signup_exception', (error as Error).message, 'email_signup')
       return { error: error as AuthError }
     }
   }
 
   const signIn = async (email: string, password: string) => {
+    tracking.trackLoginAttempted('email')
+
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { error, data } = await supabase.auth.signInWithPassword({
         email,
         password
       })
+
+      if (!error && data.user) {
+        tracking.trackLoginCompleted(data.user.id, 'email')
+      } else if (error) {
+        tracking.trackError('login_error', error.message, 'email_login')
+      }
+
       return { error }
     } catch (error) {
       console.error('Sign in error:', error)
+      tracking.trackError('login_exception', (error as Error).message, 'email_login')
       return { error: error as AuthError }
     }
   }
 
   const signInWithGoogle = async () => {
+    tracking.trackLoginAttempted('google')
+
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -115,9 +146,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
           redirectTo: `${window.location.origin}/auth/callback`
         }
       })
+
+      if (error) {
+        tracking.trackError('google_login_error', error.message, 'google_oauth')
+      }
+      // Note: Success tracking will happen in the auth state change handler
+
       return { error }
     } catch (error) {
       console.error('Google sign in error:', error)
+      tracking.trackError('google_login_exception', (error as Error).message, 'google_oauth')
       return { error: error as AuthError }
     }
   }
@@ -125,9 +163,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const signOut = async () => {
     try {
       const { error } = await supabase.auth.signOut()
+
+      if (!error) {
+        tracking.trackLogoutCompleted()
+      } else {
+        tracking.trackError('logout_error', error.message, 'signout')
+      }
+
       return { error }
     } catch (error) {
       console.error('Sign out error:', error)
+      tracking.trackError('logout_exception', (error as Error).message, 'signout')
       return { error: error as AuthError }
     }
   }

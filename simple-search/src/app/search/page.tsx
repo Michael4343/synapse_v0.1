@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { usePostHogTracking } from '../../hooks/usePostHogTracking'
 
 interface ApiSearchResult {
   id: string
@@ -59,6 +60,7 @@ function formatMeta(result: ApiSearchResult) {
 function SearchContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const tracking = usePostHogTracking()
 
   const [inputValue, setInputValue] = useState('')
   const [activeQuery, setActiveQuery] = useState('')
@@ -79,6 +81,10 @@ function SearchContent() {
       return
     }
 
+    // Track search query
+    const searchStartTime = Date.now()
+    tracking.trackSearchQuery(trimmed)
+
     setLoading(true)
     setError('')
     setCached(false)
@@ -98,16 +104,27 @@ function SearchContent() {
         const message = typeof payload.error === 'string' ? payload.error : 'Unable to fetch results right now.'
         setError(message)
         setCached(false)
+
+        // Track API error
+        tracking.trackError('search_api_error', message, 'search_api_response')
         return
       }
 
       const payload = await response.json()
-      setResults(Array.isArray(payload.results) ? payload.results : [])
+      const results = Array.isArray(payload.results) ? payload.results : []
+      setResults(results)
       setCached(Boolean(payload.cached))
+
+      // Track search results
+      const searchDuration = Date.now() - searchStartTime
+      tracking.trackSearchResults(trimmed, results.length, searchDuration)
     } catch (networkError) {
       console.error('Search request failed', networkError)
       setError('We could not reach the search service. Please try again.')
       setCached(false)
+
+      // Track search error
+      tracking.trackError('search_network_error', (networkError as Error).message, 'search_request')
     } finally {
       setLoading(false)
     }
@@ -142,6 +159,9 @@ function SearchContent() {
   const handleCompile = async (paper: ApiSearchResult) => {
     setCompilingPaper(paper.id)
     setCompileMessage('Starting deep research...')
+
+    // Track research compilation attempt
+    tracking.trackResearchCompiled(paper.title, 1)
 
     try {
       const response = await fetch('/api/research/compile', {
@@ -298,6 +318,7 @@ function SearchContent() {
                       target={result.url ? '_blank' : undefined}
                       rel={result.url ? 'noopener noreferrer' : undefined}
                       className="block text-base font-semibold text-slate-900 transition group-hover:text-blue-700"
+                      onClick={() => tracking.trackPaperClicked(result.id, result.title, result.source)}
                     >
                       {result.title}
                     </a>
