@@ -1,4 +1,4 @@
-import { DEFAULT_PROFILE_PERSONALIZATION, ProfilePersonalization, TopicCluster } from './profile-types'
+import { DEFAULT_PROFILE_PERSONALIZATION, ProfilePersonalization, TopicCluster, AuthorFocus, VenueFocus } from './profile-types'
 
 const DEFAULT_MODEL = process.env.PROFILE_ENRICHMENT_MODEL || 'gemini-2.5-flash'
 
@@ -144,19 +144,25 @@ function normalisePersonalization(payload: LlmPayload): ProfilePersonalization {
       if (!author?.name) {
         return null
       }
-      const relation = author.relation === 'self' || author.relation === 'collaborator' || author.relation === 'inspiration'
-        ? author.relation
-        : 'collaborator'
-      const source = author.source === 'manual' || author.source === 'orcid' ? author.source : 'llm'
-      return {
+
+      const authorFocus: AuthorFocus = {
         name: String(author.name),
-        affiliation: author.affiliation ? String(author.affiliation) : undefined,
-        relation,
         priority: typeof author.priority === 'number' ? author.priority : index + 1,
-        source,
+        source: (author.source === 'manual' || author.source === 'orcid' ? author.source : 'llm') as 'llm' | 'manual' | 'orcid',
       }
+
+      // Add optional properties if they have valid values
+      if (author.affiliation) {
+        authorFocus.affiliation = String(author.affiliation)
+      }
+
+      if (author.relation === 'self' || author.relation === 'collaborator' || author.relation === 'inspiration') {
+        authorFocus.relation = author.relation
+      }
+
+      return authorFocus
     })
-    .filter((author): author is ProfilePersonalization['author_focus'][number] => Boolean(author))
+    .filter((author): author is AuthorFocus => Boolean(author))
 
   const venueFocus = Array.isArray(payload.venue_focus) ? payload.venue_focus : []
   personalization.venue_focus = venueFocus
@@ -164,18 +170,21 @@ function normalisePersonalization(payload: LlmPayload): ProfilePersonalization {
       if (!venue?.name) {
         return null
       }
-      const type = venue.type === 'journal' || venue.type === 'conference' || venue.type === 'workshop' || venue.type === 'preprint-server'
-        ? venue.type
-        : undefined
-      const source = venue.source === 'manual' || venue.source === 'orcid' ? venue.source : 'llm'
-      return {
+
+      const venueFocus: VenueFocus = {
         name: String(venue.name),
-        type,
         priority: typeof venue.priority === 'number' ? venue.priority : index + 1,
-        source,
+        source: (venue.source === 'manual' || venue.source === 'orcid' ? venue.source : 'llm') as 'llm' | 'manual' | 'orcid',
       }
+
+      // Add optional type if it has a valid value
+      if (venue.type === 'journal' || venue.type === 'conference' || venue.type === 'workshop' || venue.type === 'preprint-server') {
+        venueFocus.type = venue.type
+      }
+
+      return venueFocus
     })
-    .filter((venue): venue is ProfilePersonalization['venue_focus'][number] => Boolean(venue))
+    .filter((venue): venue is VenueFocus => Boolean(venue))
 
   if (payload.filters) {
     personalization.filters = {
