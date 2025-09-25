@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase-server'
+import { createClient } from '../../../../lib/supabase-server'
 
 import { fetchOrcidWorks, generateProfilePersonalization } from '../../../../lib/profile-enrichment'
 import { DEFAULT_PROFILE_PERSONALIZATION, ProfilePersonalization } from '../../../../lib/profile-types'
