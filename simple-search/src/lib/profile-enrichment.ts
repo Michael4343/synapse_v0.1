@@ -110,7 +110,7 @@ function normalisePersonalization(payload: LlmPayload): ProfilePersonalization {
         methods: Array.isArray(cluster.methods) ? cluster.methods.filter(Boolean).map(String) : [],
         applications: Array.isArray(cluster.applications) ? cluster.applications.filter(Boolean).map(String) : [],
         priority: typeof cluster.priority === 'number' ? cluster.priority : index + 1,
-        source: cluster.source === 'manual' || cluster.source === 'orcid' ? cluster.source : 'llm',
+        source: (cluster.source === 'manual' || cluster.source === 'orcid' ? cluster.source : 'llm') as 'llm' | 'manual' | 'orcid',
         rationale: cluster.rationale ? String(cluster.rationale) : undefined,
       }
     })
