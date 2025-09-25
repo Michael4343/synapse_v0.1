@@ -75,7 +75,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     )
 
     return () => subscription.unsubscribe()
-  }, [router])
+  }, [router, supabase.auth])
 
   const signUp = async (email: string, password: string) => {
     try {

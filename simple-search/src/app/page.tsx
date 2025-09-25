@@ -372,12 +372,14 @@ function createKeywordClusters(input: string) {
     const keywords = line.split(/,/).map((keyword) => keyword.trim()).filter((keyword) => keyword.length > 0)
 
     return {
+      id: `manual-${Date.now()}-${index}`, // Generate unique ID
       label: keywords[0] || `Cluster ${index + 1}`, // Use first keyword as label
       priority: index + 1, // Order by appearance
       keywords: keywords,
       synonyms: [],
       methods: [],
-      applications: []
+      applications: [],
+      source: 'manual' as const // Mark as manually created
     }
   }).slice(0, 10) // Limit to 10 clusters max
 }
