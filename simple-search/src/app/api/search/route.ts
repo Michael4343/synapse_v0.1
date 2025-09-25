@@ -93,7 +93,7 @@ async function getCachedResults(query: string): Promise<{ results: StoredSearchR
 
   const { data: results, error: resultsError } = await supabaseAdmin
     .from(TABLES.SEARCH_RESULTS)
-    .select<StoredSearchResult>('*')
+    .select('*')
     .in('id', resultIds)
 
   if (resultsError) {
@@ -216,7 +216,7 @@ async function storeResults(query: string, papers: SemanticScholarPaper[]) {
     .upsert(upsertPayload, {
       onConflict: 'semantic_scholar_id',
     })
-    .select<StoredSearchResult>()
+    .select()
 
   if (upsertError) {
     throw upsertError
