@@ -56,9 +56,4 @@ Deep Research Integration Plan
       - Draft formatter prompt and schema.                                                         
       - Prototype the two-step call outside the app (e.g., in debug/perplexity-api-test.js).       
       - Update API route once confidence in formatter output is established.                       
-
-▌ Summarize recent commits                                                                         
-
-⏎ send   Ctrl+J newline   Ctrl+T transcript   Ctrl+C quit   429K tokens used   68% context left    
-
                                                                                                                                                                                                       

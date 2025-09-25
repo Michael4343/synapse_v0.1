@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { LogOut, UserCog, X } from 'lucide-react';
 import { useAuth } from '../lib/auth-context';
 import { useAuthModal, getUserDisplayName } from '../lib/auth-hooks';
-import { supabase } from '../lib/supabase';
+import { createClient } from '../lib/supabase';
 import { AuthModal } from '../components/auth-modal';
 import type { ProfilePersonalization } from '../lib/profile-types';
 import { SaveToListModal } from '../components/save-to-list-modal';
@@ -475,6 +475,7 @@ export default function Home() {
   }, [user]);
 
   const getAuthHeaders = useCallback(async () => {
+    const supabase = createClient();
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token;
     return token ? { Authorization: `Bearer ${token}` } : {};
@@ -571,6 +572,7 @@ export default function Home() {
     setProfileError('');
 
     try {
+      const supabase = createClient();
       const { data, error } = await supabase
         .from('profiles')
         .select('orcid_id, academic_website, profile_personalization, last_profile_enriched_at, profile_enrichment_version')
@@ -857,6 +859,7 @@ export default function Home() {
         };
 
         // Save to profile
+        const supabase = createClient();
         const { error } = await supabase
           .from('profiles')
           .update({
@@ -1585,6 +1588,7 @@ export default function Home() {
     setProfileSaving(true);
 
     try {
+      const supabase = createClient();
       const { error } = await supabase
         .from('profiles')
         .update({

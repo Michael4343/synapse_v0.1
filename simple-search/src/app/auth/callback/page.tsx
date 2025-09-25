@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '../../../lib/supabase'
+import { createClient } from '../../../lib/supabase'
 
 export default function AuthCallback() {
   const router = useRouter()
@@ -10,6 +10,7 @@ export default function AuthCallback() {
   useEffect(() => {
     const handleAuthCallback = async () => {
       try {
+        const supabase = createClient()
         const { data, error } = await supabase.auth.getSession()
 
         if (error) {
