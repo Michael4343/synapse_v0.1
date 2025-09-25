@@ -852,10 +852,15 @@ export default function Home() {
 
       try {
         // Create the personalization object with our simple keyword clusters
-        const newPersonalization = {
+        const newPersonalization: ProfilePersonalization = {
           topic_clusters: keywordClusters,
-          created_at: new Date().toISOString(),
-          version: 'keyword-based'
+          author_focus: [],
+          venue_focus: [],
+          filters: {
+            recency_days: 1,
+            publication_types: ['journal', 'conference', 'preprint'],
+            include_preprints: true,
+          }
         };
 
         // Save to profile
