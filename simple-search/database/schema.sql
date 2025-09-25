@@ -1,4 +1,4 @@
--- Database schema for Synapse Academic Research Aggregator
+-- Database schema for Evidentia Academic Research Aggregator
 -- Run these commands in your Supabase SQL editor
 
 -- Enable UUID extension if not already enabled
@@ -93,6 +93,31 @@ CREATE POLICY "Allow public insert on search_results"
 CREATE POLICY "Allow public access on search_result_queries"
     ON search_result_queries FOR ALL
     USING (true);
+
+-- Ensure backend service role can fully manage cached search data
+GRANT USAGE ON SCHEMA public TO service_role;
+GRANT ALL PRIVILEGES ON TABLE search_queries TO service_role;
+GRANT ALL PRIVILEGES ON TABLE search_results TO service_role;
+GRANT ALL PRIVILEGES ON TABLE search_result_queries TO service_role;
+
+-- Allow authenticated users to manage their own profile records
+GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON TABLE profiles TO authenticated;
+GRANT ALL PRIVILEGES ON TABLE profiles TO service_role;
+
+-- Allow authenticated users to manage lists and ratings
+GRANT SELECT, USAGE ON SEQUENCE user_lists_id_seq TO authenticated;
+GRANT SELECT, USAGE ON SEQUENCE list_items_id_seq TO authenticated;
+GRANT SELECT, USAGE ON SEQUENCE paper_ratings_id_seq TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE user_lists TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE list_items TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE paper_ratings TO authenticated;
+GRANT ALL PRIVILEGES ON TABLE user_lists TO service_role;
+GRANT ALL PRIVILEGES ON TABLE list_items TO service_role;
+GRANT ALL PRIVILEGES ON TABLE paper_ratings TO service_role;
+GRANT ALL PRIVILEGES ON SEQUENCE user_lists_id_seq TO service_role;
+GRANT ALL PRIVILEGES ON SEQUENCE list_items_id_seq TO service_role;
+GRANT ALL PRIVILEGES ON SEQUENCE paper_ratings_id_seq TO service_role;
 
 -- Sample data for testing (optional)
 -- INSERT INTO search_queries (query) VALUES ('machine learning');

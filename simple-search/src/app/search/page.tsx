@@ -195,7 +195,7 @@ export default function SearchPage() {
             ←
           </Link>
           <div>
-            <p className="text-sm font-medium text-slate-500">Synapse Explorer</p>
+            <p className="text-sm font-medium text-slate-500">Evidentia Explorer</p>
             <h1 className="text-lg font-semibold text-slate-900">Search academic literature</h1>
           </div>
         </div>

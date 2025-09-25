@@ -1,6 +1,6 @@
 # AGENTS.md - Collaboration Guide
 
-This document bootstraps shared conventions for any agent working in the `synapse v0.1` workspace.
+This document bootstraps shared conventions for any agent working in the `evidentia v0.1` workspace.
 
 ## Mission
 - Deliver small, working improvements that follow the "simple, working, maintainable" mantra from `CLAUDE.md`

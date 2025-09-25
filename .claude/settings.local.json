@@ -6,7 +6,7 @@
       "Bash(npm install)",
       "Bash(npx next dev:*)",
       "Bash(npm install:*)",
-      "Read(//mnt/c/Users/mickl/Desktop/synapse/**)",
+      "Read(//mnt/c/Users/mickl/Desktop/evidentia/**)",
       "Bash(grep:*)",
       "Bash(supabase db:*)",
       "WebFetch(domain:ai.google.dev)",

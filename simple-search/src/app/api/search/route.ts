@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { supabaseAdmin } from '../../../lib/supabase-server'
 import { TABLES } from '../../../lib/supabase'
+import { hydrateSemanticScholarAbstracts } from '../../../lib/semantic-scholar-abstract'
 
 const SEMANTIC_SCHOLAR_ENDPOINT = 'https://api.semanticscholar.org/graph/v1/paper/search'
 const SEMANTIC_SCHOLAR_FIELDS = [
@@ -114,12 +115,11 @@ async function getCachedResults(query: string): Promise<{ results: StoredSearchR
     fresh: isFresh,
   }
 }
-
 async function fetchSemanticScholar(query: string, attempt = 1): Promise<SemanticScholarPaper[]> {
   const apiKey = process.env.SEMANTIC_SCHOLAR_API_KEY
   const userAgent =
     process.env.SEMANTIC_SCHOLAR_USER_AGENT ||
-    'SynapseAcademicAggregator/0.1 (contact: research@synapse.local)'
+    'EvidentiaAcademicAggregator/0.1 (contact: research@evidentia.local)'
 
   const params = new URLSearchParams({
     query,
@@ -153,7 +153,11 @@ async function fetchSemanticScholar(query: string, attempt = 1): Promise<Semanti
   const payload = await response.json()
   const papers: SemanticScholarPaper[] = Array.isArray(payload.data) ? payload.data : []
 
-  return papers
+  if (!papers.length) {
+    return papers
+  }
+
+  return hydrateSemanticScholarAbstracts(papers, userAgent)
 }
 
 function transformPaper(paper: SemanticScholarPaper) {

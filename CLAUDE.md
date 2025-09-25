@@ -137,9 +137,12 @@ npm run lint     # Check code quality
 ### Project Overview
 Building a Next.js + Supabase academic research aggregation platform that allows researchers to search across multiple academic repositories and view results in a unified feed.
 
+**✅ Recent Updates:**
+- **Rebrand Complete (v0.1.1)**: Successfully rebranded from "Synapse" to "Evidentia" across all frontend UI, API user agents, configuration files, and documentation. All references have been updated to maintain consistent branding throughout the application.
+
 ### Current Directory Structure
 ```
-/synapse v0.1/
+/evidentia v0.1/
 ├── AGENTS.md                     # Collaboration guardrails for all agents
 ├── CLAUDE.md                     # This file - project guidance
 ├── academic_repos.md             # API availability reference

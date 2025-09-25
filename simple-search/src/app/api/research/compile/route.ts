@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
+import { hydrateSemanticScholarAbstracts } from '../../../../lib/semantic-scholar-abstract'
 
 interface ApiSearchResult {
   id: string
@@ -31,7 +32,7 @@ const SEMANTIC_SCHOLAR_FIELDS = [
   'openAccessPdf',
 ].join(',')
 
-const SEMANTIC_SCHOLAR_USER_AGENT_FALLBACK = 'SynapseAcademicAggregator/0.1 (contact: research@synapse.local)'
+const SEMANTIC_SCHOLAR_USER_AGENT_FALLBACK = 'EvidentiaAcademicAggregator/0.1 (contact: research@evidentia.local)'
 const MAX_SEARCH_FALLBACKS = 5
 
 interface SemanticScholarAuthor {
@@ -507,15 +508,30 @@ async function fetchSemanticScholarBatch(ids: string[], apiKey: string | undefin
       return new Map()
     }
 
-    const result = new Map<string, SemanticScholarPaper>()
+    const validEntries: Array<{ requestId: string; paper: SemanticScholarPaper }> = []
 
     payload.forEach((item, index) => {
       const requestId = ids[index]
-      if (!item || typeof item !== 'object' || 'error' in item) {
+      if (!requestId || !item || typeof item !== 'object' || 'error' in item) {
         return
       }
 
-      const paper = item as SemanticScholarPaper
+      validEntries.push({ requestId, paper: item as SemanticScholarPaper })
+    })
+
+    if (!validEntries.length) {
+      return new Map()
+    }
+
+    const hydratedPapers = await hydrateSemanticScholarAbstracts(
+      validEntries.map((entry) => entry.paper),
+      userAgent
+    )
+
+    const result = new Map<string, SemanticScholarPaper>()
+
+    hydratedPapers.forEach((paper, index) => {
+      const requestId = validEntries[index].requestId
       result.set(requestId, paper)
       if (paper.paperId) {
         result.set(paper.paperId, paper)
@@ -565,7 +581,8 @@ async function searchSemanticScholarByTitle(title: string, apiKey: string | unde
       return null
     }
 
-    return first as SemanticScholarPaper
+    const [hydrated] = await hydrateSemanticScholarAbstracts([first as SemanticScholarPaper], userAgent)
+    return hydrated ?? null
   } catch (error) {
     console.error('Semantic Scholar fallback search error', error)
     return null

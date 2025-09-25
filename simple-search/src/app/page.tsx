@@ -9,6 +9,8 @@ import { supabase } from '../lib/supabase';
 import { AuthModal } from '../components/auth-modal';
 import type { ProfilePersonalization } from '../lib/profile-types';
 import { SaveToListModal } from '../components/save-to-list-modal';
+import { RateModal } from '../components/rate-modal';
+import { StarRating } from '../components/star-rating';
 
 interface ApiSearchResult {
   id: string
@@ -30,6 +32,17 @@ interface UserListSummary {
   name: string
   items_count: number
   status?: 'loading' | 'ready'
+}
+
+interface PaperRating {
+  id: number
+  user_id: string
+  paper_semantic_scholar_id: string
+  paper_title: string
+  rating: number
+  comment: string | null
+  created_at: string
+  updated_at: string
 }
 
 const FEED_SKELETON_ITEMS = Array.from({ length: 6 })
@@ -115,19 +128,17 @@ const TILE_ACTIONS: Array<{
   {
     id: 'compile-claims',
     label: 'Compile Similar Claims',
-    description: 'Collect papers that make comparable findings or claims.',
   },
   {
     id: 'compile-methods',
     label: 'Compile Similar Methods',
     disabled: true,
-    description: 'Discover and bundle papers that share methodological approaches.',
   },
   {
     id: 'rate',
-    label: 'Rate',
+    label: 'Comment',
     disabled: true,
-    description: 'Give papers a 1–5 rating to triage quickly.',
+    description: 'Comment and rate this paper.',
   },
   {
     id: 'share',
@@ -412,6 +423,10 @@ export default function Home() {
   const [profileEnrichmentError, setProfileEnrichmentError] = useState('');
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [paperToSave, setPaperToSave] = useState<ApiSearchResult | null>(null);
+  const [rateModalOpen, setRateModalOpen] = useState(false);
+  const [paperToRate, setPaperToRate] = useState<ApiSearchResult | null>(null);
+  const [currentPaperRating, setCurrentPaperRating] = useState<PaperRating | null>(null);
+  const [paperRatings, setPaperRatings] = useState<Map<string, PaperRating>>(new Map());
   const [userLists, setUserLists] = useState<UserListSummary[]>([]);
   const [listsLoading, setListsLoading] = useState(false);
 
@@ -986,6 +1001,7 @@ export default function Home() {
         {uniqueResults.map((result) => {
           const isSelected = selectedPaper?.id === result.id;
           const primaryLink = getPrimaryLink(result);
+          const userRating = paperRatings.get(result.semanticScholarId);
 
           return (
             <article
@@ -1010,6 +1026,18 @@ export default function Home() {
                 <p className="text-sm text-slate-600">{formatAuthors(result.authors)}</p>
                 {formatMeta(result) && (
                   <p className="text-xs text-slate-500">{formatMeta(result)}</p>
+                )}
+                {userRating && (
+                  <div className="flex items-center gap-2">
+                    <StarRating
+                      rating={userRating.rating}
+                      interactive={false}
+                      size="sm"
+                    />
+                    <span className="text-xs text-slate-600">
+                      Rated {userRating.rating}/5
+                    </span>
+                  </div>
                 )}
                 {primaryLink && (
                   <a
@@ -1188,12 +1216,9 @@ export default function Home() {
   } else if (isListViewActive && listItems.length > 0) {
     mainFeedContent = (
       <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <h2 className="text-lg font-semibold text-slate-900">
-            {userLists.find((list) => list.id === selectedListId)?.name || 'Selected List'}
-          </h2>
-          <span className="text-sm text-slate-500">({listItems.length} papers)</span>
-        </div>
+        <h2 className="text-lg font-semibold text-slate-900">
+          {userLists.find((list) => list.id === selectedListId)?.name || 'Selected List'}
+        </h2>
         {renderResultList(listItems, 'Saved paper')}
       </div>
     );
@@ -1290,6 +1315,97 @@ export default function Home() {
 
   const handlePaperSaved = () => {
     console.log('Paper saved successfully!');
+  };
+
+  const fetchPaperRating = useCallback(async (paperId: string) => {
+    if (!user) return null;
+
+    try {
+      const response = await fetch(`/api/ratings/${paperId}`);
+      if (response.ok) {
+        const data = await response.json();
+        return data.rating;
+      }
+    } catch (error) {
+      console.error('Failed to fetch paper rating:', error);
+    }
+    return null;
+  }, [user]);
+
+  const fetchPaperRatings = useCallback(async (papers: ApiSearchResult[]) => {
+    if (!user || papers.length === 0) return;
+
+    try {
+      const response = await fetch('/api/ratings');
+      if (response.ok) {
+        const data = await response.json();
+        const ratings = data.ratings as PaperRating[];
+
+        // Create a map of paper ID to rating
+        const ratingsMap = new Map<string, PaperRating>();
+        ratings.forEach(rating => {
+          ratingsMap.set(rating.paper_semantic_scholar_id, rating);
+        });
+
+        setPaperRatings(ratingsMap);
+      }
+    } catch (error) {
+      console.error('Failed to fetch paper ratings:', error);
+    }
+  }, [user]);
+
+  // Fetch ratings for keyword search results
+  useEffect(() => {
+    if (keywordResults.length > 0) {
+      fetchPaperRatings(keywordResults);
+    }
+  }, [keywordResults, fetchPaperRatings]);
+
+  // Fetch ratings for personal feed results
+  useEffect(() => {
+    if (personalFeedResults.length > 0) {
+      fetchPaperRatings(personalFeedResults);
+    }
+  }, [personalFeedResults, fetchPaperRatings]);
+
+  // Fetch ratings for list items
+  useEffect(() => {
+    if (listItems.length > 0) {
+      fetchPaperRatings(listItems);
+    }
+  }, [listItems, fetchPaperRatings]);
+
+  const handleRateSelectedPaper = async () => {
+    if (!selectedPaper) return;
+
+    if (!user) {
+      authModal.openSignup();
+      return;
+    }
+
+    // Fetch existing rating if any
+    const existingRating = await fetchPaperRating(selectedPaper.semanticScholarId);
+    setCurrentPaperRating(existingRating);
+    setPaperToRate(selectedPaper);
+    setRateModalOpen(true);
+  };
+
+  const handleRateModalClose = () => {
+    setRateModalOpen(false);
+    setPaperToRate(null);
+    setCurrentPaperRating(null);
+  };
+
+  const handlePaperRated = () => {
+    console.log('Paper rated successfully!');
+    // Refresh ratings data to update UI
+    const currentResults = keywordResults.length > 0 ? keywordResults
+      : personalFeedResults.length > 0 ? personalFeedResults
+      : listItems.length > 0 ? listItems : [];
+
+    if (currentResults.length > 0) {
+      fetchPaperRatings(currentResults);
+    }
   };
 
   const handleListClick = (listId: number) => {
@@ -1389,11 +1505,11 @@ export default function Home() {
       setCompileState({
         actionId,
         status: 'success',
-        message: `Created “${createdList.name}” with ${createdList.items_count} papers. Open it from your library when you’re ready.`,
+        message: '',
         tempListId: null,
         listName: createdList.name,
         listId: createdList.id,
-        summary: result.researchSummary ?? null,
+        summary: null,
       });
 
       setUserLists((previous) => {
@@ -1678,7 +1794,7 @@ export default function Home() {
                         </button>
                         {signOutConfirmVisible && (
                           <div className="absolute right-0 top-full mt-2 w-44 rounded-lg border border-slate-200 bg-white shadow-sm">
-                            <p className="px-3 py-2 text-xs text-slate-600">Sign out of Synapse?</p>
+                            <p className="px-3 py-2 text-xs text-slate-600">Sign out of Evidentia?</p>
                             <div className="grid grid-cols-2 border-t border-slate-200 text-xs">
                               <button
                                 type="button"
@@ -1794,7 +1910,7 @@ export default function Home() {
             <header className="flex flex-col gap-6">
               <div className="flex items-center justify-between">
                 <div className="flex flex-col gap-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">Synapse</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">Evidentia</span>
                   <div className="flex items-center gap-2">
                     <h1 className="text-3xl font-semibold text-slate-900">Research Feed</h1>
                   </div>
@@ -1972,6 +2088,18 @@ export default function Home() {
                   {metaSummary && (
                     <p className="text-xs text-slate-600">{metaSummary}</p>
                   )}
+                  {selectedPaper && paperRatings.get(selectedPaper.semanticScholarId) && (
+                    <div className="flex items-center gap-2 rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2">
+                      <StarRating
+                        rating={paperRatings.get(selectedPaper.semanticScholarId)!.rating}
+                        interactive={false}
+                        size="sm"
+                      />
+                      <span className="text-sm font-medium text-yellow-800">
+                        Your rating: {paperRatings.get(selectedPaper.semanticScholarId)!.rating}/5
+                      </span>
+                    </div>
+                  )}
                 </div>
 
 
@@ -2001,19 +2129,28 @@ export default function Home() {
                       : action.id === 'share'
                       ? 'sm:col-start-2 sm:row-start-2'
                       : ''
+
+                  // Handle rating-specific display logic
+                  const selectedPaperRating = selectedPaper ? paperRatings.get(selectedPaper.semanticScholarId) : null
+                  const displayLabel = action.id === 'rate' && selectedPaperRating
+                    ? 'Update Rating'
+                    : action.label
+                  const displayDescription = action.id === 'rate' && selectedPaperRating
+                    ? `Currently rated ${selectedPaperRating.rating}/5 star${selectedPaperRating.rating === 1 ? '' : 's'}`
+                    : action.description
                   const content = (
                     <div className="flex h-full flex-col gap-2">
                       <span className={ACTION_LABEL_CLASSES}>
-                        {action.label}
+                        {displayLabel}
                         {showSpinner && (
                           <span className="ml-2 inline-flex items-center" aria-hidden="true">
                             <span className={ACTION_SPINNER_CLASSES} />
                           </span>
                         )}
                       </span>
-                      {action.description && (
+                      {displayDescription && (
                         <span className={`${ACTION_DESCRIPTION_CLASSES} ${(disableAction && !isActiveCompileAction) ? 'text-slate-400' : ''}`}>
-                          {action.description}
+                          {displayDescription}
                         </span>
                       )}
                       {statusMessage && (
@@ -2049,6 +2186,10 @@ export default function Home() {
                           void handleCompileAction(action.id, action.label)
                           return
                         }
+                        if (action.id === 'rate') {
+                          void handleRateSelectedPaper()
+                          return
+                        }
                         console.log(`${action.label} clicked for`, selectedPaper.id)
                       }}
                     >
@@ -2059,11 +2200,6 @@ export default function Home() {
               </div>
 
               <section className="space-y-6">
-                {compileState.status === 'success' && compileState.summary && !containsResearchPromptArtifacts(compileState.summary) && (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-                    {compileState.summary}
-                  </div>
-                )}
                 <div>
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Authors</h3>
                   <p className="mt-2 text-sm text-slate-700">
@@ -2120,6 +2256,14 @@ export default function Home() {
         onSaved={handlePaperSaved}
         userLists={userLists}
         setUserLists={setUserLists}
+      />
+      {/* Rate Modal */}
+      <RateModal
+        isOpen={rateModalOpen}
+        paper={paperToRate}
+        onClose={handleRateModalClose}
+        onRated={handlePaperRated}
+        existingRating={currentPaperRating}
       />
       {profileEditorVisible && (
         <div
