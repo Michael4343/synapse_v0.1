@@ -30,7 +30,7 @@ interface SaveToListModalProps {
   onClose: () => void
   onSaved: () => void
   userLists: UserList[]
-  setUserLists: (lists: UserList[]) => void
+  setUserLists: React.Dispatch<React.SetStateAction<UserList[]>>
 }
 
 const MODAL_CONTAINER_CLASSES = 'fixed inset-0 z-50 flex items-center justify-center px-4 py-4 overflow-y-auto'
