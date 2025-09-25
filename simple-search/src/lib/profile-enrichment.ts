@@ -102,17 +102,35 @@ function normalisePersonalization(payload: LlmPayload): ProfilePersonalization {
       if (!keywords.length && !cluster.label) {
         return null
       }
-      return {
+      const topicCluster: TopicCluster = {
         id: cluster.id || `cluster-${index + 1}`,
         label: cluster.label || keywords[0] || `Cluster ${index + 1}`,
         keywords,
-        synonyms: Array.isArray(cluster.synonyms) ? cluster.synonyms.filter(Boolean).map(String) : [],
-        methods: Array.isArray(cluster.methods) ? cluster.methods.filter(Boolean).map(String) : [],
-        applications: Array.isArray(cluster.applications) ? cluster.applications.filter(Boolean).map(String) : [],
         priority: typeof cluster.priority === 'number' ? cluster.priority : index + 1,
         source: (cluster.source === 'manual' || cluster.source === 'orcid' ? cluster.source : 'llm') as 'llm' | 'manual' | 'orcid',
-        rationale: cluster.rationale ? String(cluster.rationale) : undefined,
       }
+
+      // Add optional properties only if they have meaningful values
+      const synonyms = Array.isArray(cluster.synonyms) ? cluster.synonyms.filter(Boolean).map(String) : []
+      if (synonyms.length > 0) {
+        topicCluster.synonyms = synonyms
+      }
+
+      const methods = Array.isArray(cluster.methods) ? cluster.methods.filter(Boolean).map(String) : []
+      if (methods.length > 0) {
+        topicCluster.methods = methods
+      }
+
+      const applications = Array.isArray(cluster.applications) ? cluster.applications.filter(Boolean).map(String) : []
+      if (applications.length > 0) {
+        topicCluster.applications = applications
+      }
+
+      if (cluster.rationale) {
+        topicCluster.rationale = String(cluster.rationale)
+      }
+
+      return topicCluster
     })
     .filter((cluster): cluster is TopicCluster => Boolean(cluster))
 
