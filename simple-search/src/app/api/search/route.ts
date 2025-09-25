@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { supabaseAdmin } from '../../../lib/supabase-server'
-import { TABLES } from '../../../lib/supabase'
-import { hydrateSemanticScholarAbstracts } from '../../../lib/semantic-scholar-abstract'
+import { supabaseAdmin } from '@/lib/supabase-server'
+import { TABLES } from '@/lib/supabase'
+import { hydrateSemanticScholarAbstracts } from '@/lib/semantic-scholar-abstract'
 
 const SEMANTIC_SCHOLAR_ENDPOINT = 'https://api.semanticscholar.org/graph/v1/paper/search'
 const SEMANTIC_SCHOLAR_FIELDS = [

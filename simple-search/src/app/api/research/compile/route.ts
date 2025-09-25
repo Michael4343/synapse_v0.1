@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '../../../../../lib/supabase-server'
-import { hydrateSemanticScholarAbstracts } from '../../../../lib/semantic-scholar-abstract'
+import { createClient } from '@/lib/supabase-server'
+import { hydrateSemanticScholarAbstracts } from '@/lib/semantic-scholar-abstract'
 
 interface ApiSearchResult {
   id: string
