@@ -138,13 +138,11 @@ const TILE_ACTIONS: Array<{
     id: 'rate',
     label: 'Comment',
     disabled: true,
-    description: 'Comment and rate this paper.',
   },
   {
     id: 'share',
     label: 'Share',
     disabled: true,
-    description: 'Send papers to collaborators in one click.',
   },
 ]
 
@@ -164,7 +162,7 @@ const DETAIL_SHELL_CLASSES = 'w-full rounded-3xl border border-slate-200 bg-whit
 const DETAIL_HERO_CLASSES = 'rounded-3xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-6 shadow-inner';
 const TILE_BASE_CLASSES = 'group relative flex cursor-pointer flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 transition duration-150 hover:border-slate-300 hover:bg-slate-50';
 const TILE_SELECTED_CLASSES = 'border-sky-400 bg-sky-50 ring-1 ring-sky-100';
-const ACTION_LIST_CLASSES = 'grid w-full gap-3 sm:grid-cols-2';
+const ACTION_LIST_CLASSES = 'grid w-full gap-2 grid-cols-1 sm:grid-cols-4';
 const ACTION_ITEM_BASE_CLASSES = 'flex h-full flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition';
 const ACTION_ITEM_INTERACTIVE_CLASSES = 'cursor-pointer hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-[0_12px_30px_rgba(56,189,248,0.12)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-none disabled:hover:border-slate-200';
 const ACTION_ITEM_DISABLED_CLASSES = 'cursor-not-allowed opacity-70';
@@ -1904,7 +1902,7 @@ export default function Home() {
               <div className="flex flex-col gap-3 w-full">
                 <div className="flex items-center gap-2">
                   <span>🧬</span>
-                  <span className="text-sm font-semibold text-slate-700">Share Discovery</span>
+                  <span className="text-sm font-semibold text-slate-700">Share Wisdom</span>
                 </div>
                 <textarea
                   disabled
@@ -2127,16 +2125,7 @@ export default function Home() {
                       ? 'text-emerald-600'
                       : 'text-sky-600'
                   const showSpinner = isActiveCompileAction && compileState.status === 'loading'
-                  const layoutClasses =
-                    action.id === 'compile-claims'
-                      ? 'sm:col-start-1 sm:row-start-1'
-                      : action.id === 'compile-methods'
-                      ? 'sm:col-start-1 sm:row-start-2'
-                      : action.id === 'rate'
-                      ? 'sm:col-start-2 sm:row-start-1'
-                      : action.id === 'share'
-                      ? 'sm:col-start-2 sm:row-start-2'
-                      : ''
+                  const layoutClasses = ''
 
                   // Handle rating-specific display logic
                   const selectedPaperRating = selectedPaper ? paperRatings.get(selectedPaper.semanticScholarId) : null
