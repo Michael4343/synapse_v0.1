@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { LogOut, UserCog, X } from 'lucide-react';
+import { LogOut, Rss, UserCog, X } from 'lucide-react';
 import { useAuth } from '../lib/auth-context';
 import { useAuthModal, getUserDisplayName } from '../lib/auth-hooks';
 import { createClient } from '../lib/supabase';
@@ -1831,8 +1831,15 @@ export default function Home() {
                     onClick={handleRefreshPersonalFeed}
                     className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-slate-300 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-100"
                   >
-                    <p className="text-sm font-semibold text-slate-900">{getUserDisplayName(user)}</p>
-                    <p className="text-xs text-slate-600 mt-1">Click to view today&rsquo;s personalised feed.</p>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-shrink-0">
+                        <Rss className="h-5 w-5 text-slate-600" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-slate-900">Your Personal Feed</p>
+                        <p className="text-xs text-slate-600 mt-1">Click to view today&rsquo;s personalised content</p>
+                      </div>
+                    </div>
                   </button>
                   {listsLoading ? (
                     <div className="flex items-center gap-2 text-sm text-slate-500">
