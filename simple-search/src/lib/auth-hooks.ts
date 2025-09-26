@@ -91,7 +91,7 @@ export function useAuthForm(mode: 'login' | 'signup' = 'login'): [UseAuthFormSta
       setError(getErrorMessage(authError))
       setLoading(false)
     } else {
-      setSuccess('Successfully signed in! Welcome back.')
+      setSuccess('Successfully signed in!')
       setLoading(false)
     }
   }

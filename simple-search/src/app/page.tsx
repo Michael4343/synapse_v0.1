@@ -1778,8 +1778,7 @@ export default function Home() {
                 <>
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1">
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">Account</span>
-                      <h2 className="text-xl font-semibold text-slate-900">Welcome back</h2>
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">Evidentia</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
@@ -1903,8 +1902,7 @@ export default function Home() {
               ) : (
                 <>
                   <div className="space-y-1">
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">Account</span>
-                    <h2 className="text-xl font-semibold text-slate-900">Your Library</h2>
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">Evidentia</span>
                   </div>
                 <div className="flex flex-col gap-3">
                   <button
@@ -1930,28 +1928,10 @@ export default function Home() {
           <section
             className={`min-w-0 transition-all duration-300 ${sidebarVisible ? 'xl:basis-[40%]' : 'xl:basis-[50%]'} xl:grow-0 ${FEED_CARD_CLASSES}`}
           >
-            {/* Share Discovery Tile */}
-            <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-100/80 p-3 text-slate-600 cursor-not-allowed opacity-60">
-              <div className="flex flex-col gap-2 w-full">
-                <div className="flex flex-col gap-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">Evidentia</span>
-                  <h1 className="text-3xl font-semibold text-slate-900">Share Wisdom</h1>
-                </div>
-                <textarea
-                  disabled
-                  rows={3}
-                  placeholder="Share your work that is not publishable to help science move faster"
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-400 placeholder:text-slate-400 cursor-not-allowed resize-none"
-                />
-              </div>
-            </div>
 
             <header className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2">
-                    <h1 className="text-3xl font-semibold text-slate-900">Research Feed</h1>
-                  </div>
                 </div>
                 <button
                   type="button"
@@ -1970,7 +1950,7 @@ export default function Home() {
                     type="text"
                     value={keywordQuery}
                     onChange={(e) => setKeywordQuery(e.target.value)}
-                    placeholder="Search keywords, topics, authors…"
+                    placeholder="Find the Science papers leave out"
                     className={SEARCH_INPUT_CLASSES}
                   />
                   <button
@@ -2111,6 +2091,18 @@ export default function Home() {
           >
             {selectedPaper ? (
               <div className="flex h-full flex-col gap-8">
+                {/* Share Discovery Tile */}
+                <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-100/80 p-3 text-slate-600 cursor-not-allowed opacity-60">
+                  <div className="flex flex-col gap-2 w-full">
+                    <textarea
+                      disabled
+                      rows={3}
+                      placeholder="Share your wisdom to help science move faster"
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-400 placeholder:text-slate-400 cursor-not-allowed resize-none"
+                    />
+                  </div>
+                </div>
+
                 <div className={`${DETAIL_HERO_CLASSES} flex flex-col gap-4`}>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-sky-600">Paper details</p>

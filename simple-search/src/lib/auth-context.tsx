@@ -84,7 +84,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     )
 
     return () => subscription.unsubscribe()
-  }, [router, supabase.auth])
+  }, [router, supabase.auth, tracking])
 
   const signUp = async (email: string, password: string) => {
     tracking.trackSignupAttempted('email')

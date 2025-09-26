@@ -148,6 +148,8 @@ Building a Next.js + Supabase academic research aggregation platform that allows
 ├── CLAUDE.md                     # This file - project guidance
 ├── academic_repos.md             # API availability reference
 ├── semantic_scholar.md           # Semantic Scholar endpoint quick reference
+├── /docs/                        # Documentation
+│   └── firecrawl-integration.md  # Details on Firecrawl integration
 ├── /plan/                        # Stage-based development plan
 │   ├── README.md                 # Plan overview and progress tracking
 │   ├── stage-1-foundation.md     # Project setup and infrastructure
@@ -171,10 +173,14 @@ Building a Next.js + Supabase academic research aggregation platform that allows
         ├── app/
         │   ├── api/
         │   │   ├── search/route.ts          # Supabase-backed Semantic Scholar proxy
+        │   │   ├── papers/
+        │   │   │   └── [id]/route.ts        # Fetch and scrape paper content
         │   │   └── lists/                   # List management API
         │   │       ├── route.ts             # Create/fetch user lists
         │   │       └── [id]/items/route.ts  # Add/remove papers from lists
         │   ├── search/page.tsx              # Keyword search UI with live tiles
+        │   ├── papers/
+        │   │   └── [id]/page.tsx            # Paper details page
         │   ├── page.tsx                     # Main dashboard with auth & lists
         │   └── layout.tsx                   # Root layout with auth provider
         ├── components/

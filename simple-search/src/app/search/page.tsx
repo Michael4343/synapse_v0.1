@@ -128,7 +128,7 @@ function SearchContent() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [tracking])
 
   useEffect(() => {
     const param = searchParams.get('q') ?? ''
@@ -313,15 +313,13 @@ function SearchContent() {
                   className="group flex h-full flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                 >
                   <div>
-                    <a
-                      href={result.url ?? '#'}
-                      target={result.url ? '_blank' : undefined}
-                      rel={result.url ? 'noopener noreferrer' : undefined}
+                    <Link
+                      href={`/papers/${result.id}`}
                       className="block text-base font-semibold text-slate-900 transition group-hover:text-blue-700"
                       onClick={() => tracking.trackPaperClicked(result.id, result.title, result.source)}
                     >
                       {result.title}
-                    </a>
+                    </Link>
                     <p className="mt-3 text-sm text-slate-600">
                       {formatAuthors(result.authors)}
                     </p>

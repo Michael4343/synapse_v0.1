@@ -1,6 +1,7 @@
 'use client'
 
 import { usePostHog } from '../providers/PostHogProvider'
+import { useMemo } from 'react'
 
 export interface TrackingProperties {
   [key: string]: any
@@ -187,7 +188,7 @@ export function usePostHogTracking() {
     }
   }
 
-  return {
+  return useMemo(() => ({
     // Core tracking
     track,
     trackPageView,
@@ -218,5 +219,5 @@ export function usePostHogTracking() {
 
     // Error tracking
     trackError
-  }
+  }), [posthog])
 }
