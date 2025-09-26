@@ -8,9 +8,10 @@ const FIRECRAWL_API_URL = 'https://api.firecrawl.dev/v2/scrape'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const paperId = params.id
+  const resolvedParams = await params
+  const paperId = resolvedParams.id
 
   if (!paperId) {
     return NextResponse.json({ error: 'Paper ID is required' }, { status: 400 })

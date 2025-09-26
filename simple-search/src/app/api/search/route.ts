@@ -89,15 +89,31 @@ function shouldWaitForRateLimit(hasApiKey: boolean): { shouldWait: boolean; wait
   const timeSinceLastRequest = Date.now() - lastRequestTime
 
   if (remaining <= 0) {
-    // Wait until oldest request in window expires
+    // Wait until oldest request in window expires, with jitter
     const oldestTimestamp = requestTimestamps[0] || 0
-    const waitMs = Math.max(0, RATE_LIMIT_WINDOW_MS - (Date.now() - oldestTimestamp) + 1000)
+    const baseWaitMs = RATE_LIMIT_WINDOW_MS - (Date.now() - oldestTimestamp) + 1000
+    const jitter = Math.random() * 5000 // Add 0-5s jitter to spread requests
+    const waitMs = Math.max(0, baseWaitMs + jitter)
     return { shouldWait: true, waitMs }
   }
 
-  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL_MS) {
-    // Enforce minimum interval between requests
-    const waitMs = MIN_REQUEST_INTERVAL_MS - timeSinceLastRequest
+  // Be more conservative when we're getting close to the limit
+  const limit = hasApiKey ? RATE_LIMIT_WITH_KEY : RATE_LIMIT_WITHOUT_KEY
+  const usageRatio = (limit - remaining) / limit
+
+  // Add progressive delays as we approach the limit
+  let minInterval = MIN_REQUEST_INTERVAL_MS
+  if (usageRatio > 0.8) {
+    minInterval = MIN_REQUEST_INTERVAL_MS * 3 // 3s when > 80% used
+  } else if (usageRatio > 0.6) {
+    minInterval = MIN_REQUEST_INTERVAL_MS * 2 // 2s when > 60% used
+  }
+
+  if (timeSinceLastRequest < minInterval) {
+    // Enforce minimum interval between requests with jitter
+    const baseWaitMs = minInterval - timeSinceLastRequest
+    const jitter = Math.random() * 500 // Add 0-500ms jitter
+    const waitMs = baseWaitMs + jitter
     return { shouldWait: true, waitMs }
   }
 
@@ -122,20 +138,31 @@ function isCircuitBreakerOpen(): boolean {
   const timeSinceLastFailure = Date.now() - lastFailureTime
   if (timeSinceLastFailure > CIRCUIT_BREAKER_COOLDOWN_MS) {
     // Reset circuit breaker after cooldown
+    console.log('Circuit breaker: resetting after cooldown')
     consecutiveFailures = 0
     return false
   }
 
+  const remainingCooldown = Math.ceil((CIRCUIT_BREAKER_COOLDOWN_MS - timeSinceLastFailure) / 1000 / 60)
+  console.log(`Circuit breaker: open, ~${remainingCooldown} minutes remaining`)
   return true
 }
 
 function recordSuccess() {
+  if (consecutiveFailures > 0) {
+    console.log(`Rate limiting: success after ${consecutiveFailures} failures`)
+  }
   consecutiveFailures = 0
 }
 
 function recordFailure() {
   consecutiveFailures++
   lastFailureTime = Date.now()
+  console.log(`Rate limiting: failure ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}`)
+
+  if (consecutiveFailures === MAX_CONSECUTIVE_FAILURES) {
+    console.log(`Circuit breaker: opening due to ${MAX_CONSECUTIVE_FAILURES} consecutive failures`)
+  }
 }
 
 function normaliseQuery(query: string) {

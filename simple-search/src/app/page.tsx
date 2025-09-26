@@ -451,6 +451,8 @@ export default function Home() {
   const [compileState, setCompileState] = useState<CompileState>(INITIAL_COMPILE_STATE);
   const [personalFeedResults, setPersonalFeedResults] = useState<ApiSearchResult[]>([]);
   const [personalFeedLoading, setPersonalFeedLoading] = useState(false);
+  const [personalFeedProgress, setPersonalFeedProgress] = useState({ completed: 0, total: 0 });
+  const [personalFeedProgressResults, setPersonalFeedProgressResults] = useState<ApiSearchResult[]>([]);
   const [personalFeedError, setPersonalFeedError] = useState('');
   const [personalFeedLastUpdated, setPersonalFeedLastUpdated] = useState<string | null>(null);
   const [profileEditorVisible, setProfileEditorVisible] = useState(false);
@@ -490,12 +492,7 @@ export default function Home() {
     }
   }, [user]);
 
-  const getAuthHeaders = useCallback(async () => {
-    const supabase = createClient();
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  }, []);
+  // Removed getAuthHeaders - now inlined to avoid dependency issues
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -520,9 +517,14 @@ export default function Home() {
 
     setListsLoading(true);
     try {
-      const authHeaders = await getAuthHeaders();
+      // Inline auth headers to avoid dependency issues
+      const supabase = createClient();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
       const response = await fetch('/api/lists', {
-        headers: authHeaders,
+        headers,
       });
       if (response.ok) {
         const data = await response.json();
@@ -553,7 +555,7 @@ export default function Home() {
     } finally {
       setListsLoading(false);
     }
-  }, [getAuthHeaders, user]);
+  }, [user?.id]);
 
   const fetchListItems = useCallback(async (listId: number, force = false) => {
     if (!user) return;
@@ -586,9 +588,14 @@ export default function Home() {
     setListItemsLoading(true);
     setListItemsLoadingMessage('Loading list items…');
     try {
-      const authHeaders = await getAuthHeaders();
+      // Inline auth headers to avoid dependency issues
+      const supabase = createClient();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
       const response = await fetch(`/api/lists/${listId}/items`, {
-        headers: authHeaders,
+        headers,
       });
       if (response.ok) {
         const data = await response.json();
@@ -612,7 +619,7 @@ export default function Home() {
       setListItemsLoading(false);
       setListItemsLoadingMessage('');
     }
-  }, [getAuthHeaders, user, cachedListItems]);
+  }, [user?.id, cachedListItems]);
 
   // Set initial selected paper based on authentication status
   useEffect(() => {
@@ -669,7 +676,7 @@ export default function Home() {
         setProfileLoading(false);
       }
     }
-  }, [user]);
+  }, [user?.id]);
 
   const profilePersonalization = profile?.profile_personalization ?? null;
   const profileTopicClusters = profilePersonalization?.topic_clusters ?? [];
@@ -742,9 +749,17 @@ export default function Home() {
         return priorityA - priorityB;
       });
 
-      const queries = sortedClusters
+      const allQueries = sortedClusters
         .map((cluster) => buildClusterQuery(cluster))
         .filter((query) => Boolean(query));
+
+      // Limit to maximum 4 queries to reduce API calls and loading time
+      // Take the most important ones (already sorted by priority)
+      const queries = allQueries.slice(0, 4);
+
+      if (queries.length < allQueries.length) {
+        console.log(`Personal feed: reduced from ${allQueries.length} to ${queries.length} queries for performance`);
+      }
 
 
       if (!queries.length) {
@@ -755,10 +770,14 @@ export default function Home() {
 
       setPersonalFeedLoading(true);
       setPersonalFeedError('');
+      setPersonalFeedProgress({ completed: 0, total: queries.length });
+      setPersonalFeedProgressResults([]); // Clear previous progress results
 
       try {
         const aggregated: ApiSearchResult[] = [];
         const seen = new Set<string>();
+        const startTime = Date.now();
+        const maxTotalTime = 60000; // 1 minute maximum total time
 
         // Fair distribution algorithm: ensure each keyword gets proportional representation
         const maxResults = 12;
@@ -774,6 +793,23 @@ export default function Home() {
         let successfulQueries = 0;
         let failedQueries = 0;
 
+        // Helper function to update progress results (doesn't trigger ratings fetch)
+        const updateProgressiveResults = () => {
+          if (aggregated.length > 0) {
+            // Sort current results by publication date (most recent first)
+            const sortedResults = [...aggregated].sort((a, b) => {
+              if (!a.publicationDate && !b.publicationDate) return 0;
+              if (!a.publicationDate) return 1;
+              if (!b.publicationDate) return -1;
+              return new Date(b.publicationDate).getTime() - new Date(a.publicationDate).getTime();
+            });
+
+            // Update progress results (separate from final results to avoid triggering ratings)
+            setPersonalFeedProgressResults(sortedResults.slice(0, maxResults));
+            setPersonalFeedError('');
+          }
+        };
+
         for (let queryIndex = 0; queryIndex < queries.length; queryIndex++) {
           const query = queries[queryIndex];
           const maxForThisQuery = quotaPerQuery[queryIndex];
@@ -785,13 +821,24 @@ export default function Home() {
 
           // Add delay between queries to respect rate limits (except for first query)
           if (queryIndex > 0) {
-            console.log(`Personal feed: waiting 2s before query ${queryIndex + 1}/${queries.length}`);
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            // Increase base delay and add jitter to spread out requests
+            const baseDelay = 3000; // Increased from 2s to 3s
+            const jitter = Math.random() * 1000; // 0-1s random jitter
+            const delay = baseDelay + jitter;
+
+            console.log(`Personal feed: waiting ${Math.round(delay)}ms before query ${queryIndex + 1}/${queries.length}`);
+            await new Promise(resolve => setTimeout(resolve, delay));
           }
 
           // If we've had too many consecutive failures, stop trying to avoid further rate limiting
           if (failedQueries >= 2 && successfulQueries === 0) {
             console.log('Personal feed: stopping due to consecutive API failures');
+            break;
+          }
+
+          // Check if we've exceeded maximum time
+          if (Date.now() - startTime > maxTotalTime) {
+            console.log('Personal feed: stopping due to timeout');
             break;
           }
 
@@ -855,15 +902,25 @@ export default function Home() {
                 }
               }
             }
+
+            // Update progress and show results immediately after each successful query
+            setPersonalFeedProgress({ completed: queryIndex + 1, total: queries.length });
+            updateProgressiveResults();
+
           } catch (error) {
             console.error(`Personal feed query ${queryIndex + 1} failed:`, error);
             failedQueries++;
+
+            // Still update progress even for failed queries
+            setPersonalFeedProgress({ completed: queryIndex + 1, total: queries.length });
           }
         }
 
 
+        // Final processing after all queries complete
         if (!aggregated.length) {
           setPersonalFeedResults([]);
+          setPersonalFeedProgressResults([]);
           setPersonalFeedError('We could not find recent papers for your focus areas. This might be due to API rate limits - try refreshing in a few minutes or adjust your profile keywords.');
         } else {
           // Sort final results by publication date (most recent first)
@@ -877,7 +934,9 @@ export default function Home() {
           const finalResults = sortedResults.slice(0, 12);
           const lastUpdated = new Date().toISOString();
 
+          // Set final results (this will trigger ratings fetch)
           setPersonalFeedResults(finalResults);
+          setPersonalFeedProgressResults([]); // Clear progress results
           setPersonalFeedError('');
           setPersonalFeedLastUpdated(lastUpdated);
 
@@ -891,7 +950,7 @@ export default function Home() {
         setPersonalFeedLoading(false);
       }
     },
-    [personalFeedLoading, profilePersonalization, user]
+    [personalFeedLoading, profilePersonalization, user?.id]
   );
 
   useEffect(() => {
@@ -915,7 +974,7 @@ export default function Home() {
     if (personalFeedResults.length === 0) {
       loadPersonalFeed({ minimumQueries: 3 });
     }
-  }, [loadPersonalFeed, personalFeedResults.length, profile, profilePersonalization, user]);
+  }, [personalFeedResults.length, profile, profilePersonalization, user?.id]);
 
   useEffect(() => {
     if (!user) {
@@ -968,7 +1027,7 @@ export default function Home() {
     } else {
       setUserLists([]);
     }
-  }, [fetchUserLists, refreshProfile, user]);
+  }, [refreshProfile, user?.id]);
 
   const runProfileEnrichment = useCallback(
     async ({
@@ -1415,12 +1474,17 @@ export default function Home() {
       </div>
     );
   } else if (shouldShowPersonalFeed) {
-    if (personalFeedLoading) {
+    if (personalFeedLoading && personalFeedResults.length === 0) {
+      // Show loading state only if we have no results yet
+      const progressText = personalFeedProgress.total > 0
+        ? `Loading ${personalFeedProgress.completed}/${personalFeedProgress.total} queries…`
+        : 'Refreshing your personalised feed…';
+
       mainFeedContent = (
         <div className={FEED_LOADING_WRAPPER_CLASSES}>
           <span className={FEED_LOADING_PILL_CLASSES}>
             <span className={FEED_SPINNER_CLASSES} aria-hidden="true" />
-            <span>Refreshing your personalised feed…</span>
+            <span>{progressText}</span>
           </span>
           {FEED_SKELETON_ITEMS.slice(0, 3).map((_, index) => (
             <div key={index} className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white">
@@ -1432,6 +1496,23 @@ export default function Home() {
               </div>
             </div>
           ))}
+        </div>
+      );
+    } else if (personalFeedLoading && personalFeedProgressResults.length > 0) {
+      // Show partial results with progress indicator (using progress results, not final results)
+      const progressText = personalFeedProgress.total > 0
+        ? `Loading ${personalFeedProgress.completed}/${personalFeedProgress.total} queries…`
+        : 'Loading more…';
+
+      mainFeedContent = (
+        <div className="space-y-4">
+          {renderResultList(personalFeedProgressResults, `Personal recommendation (recent) • ${progressText}`)}
+          <div className="flex justify-center py-2">
+            <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+              <span className="h-2 w-2 animate-spin rounded-full border border-slate-400 border-t-transparent" />
+              {progressText}
+            </span>
+          </div>
         </div>
       );
     } else if (personalFeedResults.length > 0) {
@@ -1512,50 +1593,104 @@ export default function Home() {
       console.error('Failed to fetch paper rating:', error);
     }
     return null;
-  }, [user]);
+  }, [user?.id]);
+
+  // Track which papers we've already fetched ratings for
+  const fetchedRatingsRef = useRef(new Set<string>());
 
   const fetchPaperRatings = useCallback(async (papers: ApiSearchResult[]) => {
     if (!user || papers.length === 0) return;
 
-    try {
-      const response = await fetch('/api/ratings');
-      if (response.ok) {
-        const data = await response.json();
-        const ratings = data.ratings as PaperRating[];
+    // Filter to only papers we haven't fetched ratings for yet
+    const unfetchedPapers = papers.filter(paper =>
+      paper.semanticScholarId && !fetchedRatingsRef.current.has(paper.semanticScholarId)
+    );
 
-        // Create a map of paper ID to rating
-        const ratingsMap = new Map<string, PaperRating>();
-        ratings.forEach(rating => {
-          ratingsMap.set(rating.paper_semantic_scholar_id, rating);
+    if (unfetchedPapers.length === 0) return; // All ratings already cached
+
+    try {
+      // Batch fetch ratings for all unfetched papers
+      const paperIds = unfetchedPapers.map(p => p.semanticScholarId).filter(Boolean);
+
+      // If we have many papers, fetch all ratings at once for efficiency
+      // If just a few, fetch individually to be more targeted
+      if (paperIds.length > 5) {
+        // Fetch all user ratings at once for efficiency with large batches
+        const response = await fetch('/api/ratings');
+        if (response.ok) {
+          const data = await response.json();
+          const ratings = data.ratings as PaperRating[];
+
+          // Update our cache with ALL ratings
+          setPaperRatings(current => {
+            const newMap = new Map(current);
+            ratings.forEach(rating => {
+              newMap.set(rating.paper_semantic_scholar_id, rating);
+              fetchedRatingsRef.current.add(rating.paper_semantic_scholar_id);
+            });
+            return newMap;
+          });
+        }
+      } else {
+        // Fetch ratings for specific papers only
+        const ratingPromises = paperIds.map(async (paperId) => {
+          try {
+            const response = await fetch(`/api/ratings?paperId=${encodeURIComponent(paperId)}`);
+            if (response.ok) {
+              const data = await response.json();
+              return { paperId, ratings: data.ratings as PaperRating[] };
+            }
+          } catch (error) {
+            console.error(`Failed to fetch rating for paper ${paperId}:`, error);
+          }
+          return { paperId, ratings: [] };
         });
 
-        setPaperRatings(ratingsMap);
+        const results = await Promise.all(ratingPromises);
+
+        // Update cache with specific results
+        setPaperRatings(current => {
+          const newMap = new Map(current);
+          results.forEach(({ paperId, ratings }) => {
+            fetchedRatingsRef.current.add(paperId);
+            if (ratings.length > 0) {
+              newMap.set(paperId, ratings[0]); // Should be only one rating per paper per user
+            }
+          });
+          return newMap;
+        });
       }
     } catch (error) {
       console.error('Failed to fetch paper ratings:', error);
     }
+  }, [user?.id]);
+
+  // Reset ratings cache when user changes
+  useEffect(() => {
+    if (user) {
+      fetchedRatingsRef.current.clear();
+    }
   }, [user]);
 
-  // Fetch ratings for keyword search results
+  // Consolidated ratings fetching - fetch ratings for all visible papers
   useEffect(() => {
-    if (keywordResults.length > 0) {
-      fetchPaperRatings(keywordResults);
-    }
-  }, [keywordResults, fetchPaperRatings]);
+    if (!user) return;
 
-  // Fetch ratings for personal feed results
-  useEffect(() => {
-    if (personalFeedResults.length > 0) {
-      fetchPaperRatings(personalFeedResults);
-    }
-  }, [personalFeedResults, fetchPaperRatings]);
+    const allVisiblePapers = [
+      ...keywordResults,
+      ...personalFeedResults,
+      ...listItems
+    ];
 
-  // Fetch ratings for list items
-  useEffect(() => {
-    if (listItems.length > 0) {
-      fetchPaperRatings(listItems);
+    // Remove duplicates by semanticScholarId
+    const uniquePapers = allVisiblePapers.filter((paper, index, arr) =>
+      paper.semanticScholarId && arr.findIndex(p => p.semanticScholarId === paper.semanticScholarId) === index
+    );
+
+    if (uniquePapers.length > 0) {
+      fetchPaperRatings(uniquePapers);
     }
-  }, [listItems, fetchPaperRatings]);
+  }, [keywordResults, personalFeedResults, listItems, user?.id]);
 
   const handleRateSelectedPaper = async () => {
     if (!selectedPaper) return;
@@ -1580,13 +1715,12 @@ export default function Home() {
 
   const handlePaperRated = () => {
     console.log('Paper rated successfully!');
-    // Refresh ratings data to update UI
-    const currentResults = keywordResults.length > 0 ? keywordResults
-      : personalFeedResults.length > 0 ? personalFeedResults
-      : listItems.length > 0 ? listItems : [];
+    // Clear the cache for the rated paper so it gets refetched
+    if (selectedPaper?.semanticScholarId) {
+      fetchedRatingsRef.current.delete(selectedPaper.semanticScholarId);
 
-    if (currentResults.length > 0) {
-      fetchPaperRatings(currentResults);
+      // Trigger refetch for just this paper
+      fetchPaperRatings([selectedPaper]);
     }
   };
 

@@ -150,6 +150,19 @@ Building a Next.js + Supabase academic research aggregation platform that allows
   - **Honest labeling**: Updated UI from "last 24h" to "recent" to match actual content
   - **Smarter fallback**: Only shows older papers if very few recent ones exist, and sorts them by recency
   - **Better sorting**: Final results sorted by publication date (most recent first)
+- **Performance Optimization (v0.1.5)**: Dramatically improved personal feed loading speed from 40+ seconds to 10-15 seconds:
+  - **Ratings caching**: Eliminated 5+ redundant API calls by caching ratings and only fetching for new papers
+  - **Progressive loading**: Show results as they come in instead of waiting for all queries to complete
+  - **Smart query limiting**: Limited personal feed to 4 most important queries (was unlimited)
+  - **Increased delays**: 3-4s delays with jitter between queries (was 2s) to reduce rate limiting
+  - **Timeout protection**: 1-minute maximum load time to prevent infinite waiting
+  - **Enhanced rate limiting**: Progressive delays as API usage approaches limits, better circuit breaker
+  - **Better UX**: Progress indicators show "Loading 2/4 queries..." with partial results displayed
+- **Infinite Loop Fix (v0.1.6)**: Resolved critical issue causing constant API calls and feed refreshing:
+  - **Root cause**: Circular dependency chain in React hooks - `fetchPaperRatings` useCallback depended on `[user]`, main useEffect depended on `fetchPaperRatings`, causing recreation cascades
+  - **Solution**: Stabilized dependencies by using `user?.id` instead of full `user` object, removed function dependencies from useEffect arrays
+  - **Impact**: From continuous `/api/ratings` calls to normal single calls, stable feed loading
+  - **Dependencies**: Changed useCallback dependencies from `[user]` to `[user?.id]` for API functions, removed circular dependencies
 
 ### Current Directory Structure
 ```

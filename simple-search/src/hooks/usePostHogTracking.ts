@@ -219,5 +219,5 @@ export function usePostHogTracking() {
 
     // Error tracking
     trackError
-  }), [posthog])
+  }), [posthog, track, trackPageView, setUserProperties, trackSignupAttempted, trackSignupCompleted, trackLoginAttempted, trackLoginCompleted, trackLogoutCompleted, trackSearchQuery, trackSearchResults, trackListCreated, trackPaperSavedToList, trackPaperClicked, trackPaperRated, trackResearchCompiled, trackProfileEnriched, trackError])
 }
