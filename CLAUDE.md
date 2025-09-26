@@ -145,6 +145,11 @@ Building a Next.js + Supabase academic research aggregation platform that allows
   - **Client-side**: Added 2-second delays between personal feed queries, early failure termination, and better error messaging
   - **Caching**: Improved cache utilization with graceful fallbacks to older results when API is rate-limited
   - **Reliability**: Personal feed now handles API failures gracefully and provides informative user feedback
+- **Personal Feed Time Filtering (v0.1.4)**: Fixed misleading "last 24h" labels showing months-old papers:
+  - **Realistic timeframe**: Changed from 24-hour to 7-day window for academic publishing patterns
+  - **Honest labeling**: Updated UI from "last 24h" to "recent" to match actual content
+  - **Smarter fallback**: Only shows older papers if very few recent ones exist, and sorts them by recency
+  - **Better sorting**: Final results sorted by publication date (most recent first)
 
 ### Current Directory Structure
 ```

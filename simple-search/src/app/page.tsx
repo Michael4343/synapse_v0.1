@@ -11,6 +11,18 @@ import type { ProfilePersonalization } from '../lib/profile-types';
 import { SaveToListModal } from '../components/save-to-list-modal';
 import { RateModal } from '../components/rate-modal';
 import { StarRating } from '../components/star-rating';
+import {
+  getCachedData,
+  setCachedData,
+  isCacheStale,
+  clearCachedData,
+  PERSONAL_FEED_CACHE_KEY,
+  PERSONAL_FEED_TTL_MS,
+  LIST_METADATA_CACHE_KEY,
+  LIST_METADATA_TTL_MS,
+  LIST_ITEMS_CACHE_KEY,
+  LIST_ITEMS_TTL_MS
+} from '../lib/cache-utils';
 
 interface ApiSearchResult {
   id: string
@@ -435,6 +447,7 @@ export default function Home() {
   const [listItems, setListItems] = useState<ApiSearchResult[]>([]);
   const [listItemsLoading, setListItemsLoading] = useState(false);
   const [listItemsLoadingMessage, setListItemsLoadingMessage] = useState('');
+  const [cachedListItems, setCachedListItems] = useState<Map<number, ApiSearchResult[]>>(new Map());
   const [compileState, setCompileState] = useState<CompileState>(INITIAL_COMPILE_STATE);
   const [personalFeedResults, setPersonalFeedResults] = useState<ApiSearchResult[]>([]);
   const [personalFeedLoading, setPersonalFeedLoading] = useState(false);
@@ -491,8 +504,19 @@ export default function Home() {
     };
   }, []);
 
-  const fetchUserLists = useCallback(async () => {
+  const fetchUserLists = useCallback(async (force = false) => {
     if (!user) return;
+
+    const listCacheKey = `${LIST_METADATA_CACHE_KEY}-${user.id}`;
+
+    // Check for cached data first
+    if (!force) {
+      const cachedLists = getCachedData<UserListSummary[]>(listCacheKey, LIST_METADATA_TTL_MS);
+      if (cachedLists) {
+        setUserLists(cachedLists);
+        return; // Use cached data
+      }
+    }
 
     setListsLoading(true);
     try {
@@ -511,6 +535,9 @@ export default function Home() {
             status: 'ready' as const,
           }));
 
+          // Cache the successful result
+          setCachedData(listCacheKey, readyLists, LIST_METADATA_TTL_MS);
+
           if (previous.length === 0) {
             return readyLists;
           }
@@ -528,8 +555,33 @@ export default function Home() {
     }
   }, [getAuthHeaders, user]);
 
-  const fetchListItems = useCallback(async (listId: number) => {
+  const fetchListItems = useCallback(async (listId: number, force = false) => {
     if (!user) return;
+
+    // Check if we have cached items for this list first
+    if (!force && cachedListItems.has(listId)) {
+      const cachedItems = cachedListItems.get(listId)!;
+      setListItems(cachedItems);
+      if (cachedItems.length > 0) {
+        setSelectedPaper(cachedItems[0]);
+      }
+      return; // Use cached data instantly
+    }
+
+    // Also check localStorage cache
+    if (!force) {
+      const listItemsCacheKey = `${LIST_ITEMS_CACHE_KEY}-${user.id}-${listId}`;
+      const cachedItems = getCachedData<ApiSearchResult[]>(listItemsCacheKey, LIST_ITEMS_TTL_MS);
+      if (cachedItems) {
+        setListItems(cachedItems);
+        // Also update memory cache
+        setCachedListItems(prev => new Map(prev).set(listId, cachedItems));
+        if (cachedItems.length > 0) {
+          setSelectedPaper(cachedItems[0]);
+        }
+        return;
+      }
+    }
 
     setListItemsLoading(true);
     setListItemsLoadingMessage('Loading list items…');
@@ -541,7 +593,14 @@ export default function Home() {
       if (response.ok) {
         const data = await response.json();
         const papers = data.list?.items?.map((item: any) => item.paper_data) || [];
+
         setListItems(papers);
+
+        // Cache in both memory and localStorage
+        setCachedListItems(prev => new Map(prev).set(listId, papers));
+        const listItemsCacheKey = `${LIST_ITEMS_CACHE_KEY}-${user.id}-${listId}`;
+        setCachedData(listItemsCacheKey, papers, LIST_ITEMS_TTL_MS);
+
         // Auto-select first paper if available
         if (papers.length > 0) {
           setSelectedPaper(papers[0]);
@@ -553,7 +612,7 @@ export default function Home() {
       setListItemsLoading(false);
       setListItemsLoadingMessage('');
     }
-  }, [getAuthHeaders, user]);
+  }, [getAuthHeaders, user, cachedListItems]);
 
   // Set initial selected paper based on authentication status
   useEffect(() => {
@@ -647,6 +706,32 @@ export default function Home() {
         return;
       }
 
+      // Create cache key based on user and personalization
+      const cacheKey = `${PERSONAL_FEED_CACHE_KEY}-${user.id}-${JSON.stringify(activePersonalization.topic_clusters)}`;
+
+      // Check if we have fresh cached data and should use it
+      if (!force && !personalFeedLoading) {
+        const cachedResults = getCachedData<{
+          results: ApiSearchResult[];
+          lastUpdated: string;
+        }>(cacheKey, PERSONAL_FEED_TTL_MS);
+
+        if (cachedResults) {
+          // Load cached data immediately
+          setPersonalFeedResults(cachedResults.results);
+          setPersonalFeedError('');
+          setPersonalFeedLastUpdated(cachedResults.lastUpdated);
+
+          // If cache is getting stale (>12 hours), refresh in background
+          const isStale = isCacheStale(cacheKey, PERSONAL_FEED_TTL_MS / 2);
+          if (!isStale) {
+            return; // Fresh cache, no need to fetch
+          }
+          // If stale, continue to fetch but don't show loading state
+          console.log('Personal feed: refreshing stale cache in background');
+        }
+      }
+
       if (personalFeedLoading && !force) {
         return;
       }
@@ -685,7 +770,7 @@ export default function Home() {
           resultsPerQuery + (index < remainderSlots ? 1 : 0)
         );
 
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
         let successfulQueries = 0;
         let failedQueries = 0;
 
@@ -729,18 +814,18 @@ export default function Home() {
             const results = Array.isArray(payload.results) ? payload.results : [];
             successfulQueries++;
 
-            // Add results, prioritizing recent ones but not strictly requiring 24h
+            // Add results, prioritizing recent ones (within 7 days)
             const recentResults = results.filter(result => {
               if (seen.has(result.id)) return false;
-              return result.publicationDate && new Date(result.publicationDate) > twentyFourHoursAgo;
+              return result.publicationDate && new Date(result.publicationDate) > sevenDaysAgo;
             });
 
             const olderResults = results.filter(result => {
               if (seen.has(result.id)) return false;
-              return !result.publicationDate || new Date(result.publicationDate) <= twentyFourHoursAgo;
+              return !result.publicationDate || new Date(result.publicationDate) <= sevenDaysAgo;
             });
 
-            // First add recent results
+            // First add recent results (within 7 days)
             for (const result of recentResults) {
               if (addedForThisQuery < maxForThisQuery && aggregated.length < maxResults) {
                 aggregated.push(result);
@@ -751,12 +836,23 @@ export default function Home() {
               }
             }
 
-            // If we still have quota and not enough recent results, add older ones
-            if (addedForThisQuery < maxForThisQuery && aggregated.length < maxResults) {
-              for (const result of olderResults.slice(0, maxForThisQuery - addedForThisQuery)) {
-                aggregated.push(result);
-                seen.add(result.id);
-                addedForThisQuery++;
+            // Only add older results if we have very few recent ones (less than half quota)
+            // This prevents showing months-old papers as "recent"
+            if (addedForThisQuery < Math.ceil(maxForThisQuery / 2) && aggregated.length < maxResults) {
+              // Sort older results by recency and only take the most recent ones
+              const sortedOlderResults = olderResults
+                .filter(result => result.publicationDate) // Only papers with dates
+                .sort((a, b) => new Date(b.publicationDate!).getTime() - new Date(a.publicationDate!).getTime())
+                .slice(0, maxForThisQuery - addedForThisQuery);
+
+              for (const result of sortedOlderResults) {
+                if (addedForThisQuery < maxForThisQuery && aggregated.length < maxResults) {
+                  aggregated.push(result);
+                  seen.add(result.id);
+                  addedForThisQuery++;
+                } else {
+                  break;
+                }
               }
             }
           } catch (error) {
@@ -768,11 +864,28 @@ export default function Home() {
 
         if (!aggregated.length) {
           setPersonalFeedResults([]);
-          setPersonalFeedError('We could not find papers for your focus areas. This might be due to API rate limits - try refreshing in a few minutes or adjust your profile keywords.');
+          setPersonalFeedError('We could not find recent papers for your focus areas. This might be due to API rate limits - try refreshing in a few minutes or adjust your profile keywords.');
         } else {
-          setPersonalFeedResults(aggregated.slice(0, 12));
+          // Sort final results by publication date (most recent first)
+          const sortedResults = aggregated.sort((a, b) => {
+            if (!a.publicationDate && !b.publicationDate) return 0;
+            if (!a.publicationDate) return 1;
+            if (!b.publicationDate) return -1;
+            return new Date(b.publicationDate).getTime() - new Date(a.publicationDate).getTime();
+          });
+
+          const finalResults = sortedResults.slice(0, 12);
+          const lastUpdated = new Date().toISOString();
+
+          setPersonalFeedResults(finalResults);
           setPersonalFeedError('');
-          setPersonalFeedLastUpdated(new Date().toISOString());
+          setPersonalFeedLastUpdated(lastUpdated);
+
+          // Cache the successful results
+          setCachedData(cacheKey, {
+            results: finalResults,
+            lastUpdated: lastUpdated
+          }, PERSONAL_FEED_TTL_MS);
         }
       } finally {
         setPersonalFeedLoading(false);
@@ -1322,7 +1435,7 @@ export default function Home() {
         </div>
       );
     } else if (personalFeedResults.length > 0) {
-      mainFeedContent = renderResultList(personalFeedResults, 'Personal recommendation (last 24h)');
+      mainFeedContent = renderResultList(personalFeedResults, 'Personal recommendation (recent)');
     } else {
       mainFeedContent = (
         <div className="rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center text-sm text-slate-600">
@@ -1360,8 +1473,30 @@ export default function Home() {
     setPaperToSave(null);
   };
 
-  const handlePaperSaved = () => {
+  const handlePaperSaved = (listId?: number) => {
     console.log('Paper saved successfully!');
+
+    // Invalidate list metadata cache to reflect updated item counts
+    if (user) {
+      const listCacheKey = `${LIST_METADATA_CACHE_KEY}-${user.id}`;
+      clearCachedData(listCacheKey);
+
+      // Invalidate specific list items cache if we know which list was updated
+      if (listId) {
+        const listItemsCacheKey = `${LIST_ITEMS_CACHE_KEY}-${user.id}-${listId}`;
+        clearCachedData(listItemsCacheKey);
+
+        // Also clear from memory cache
+        setCachedListItems(prev => {
+          const newCache = new Map(prev);
+          newCache.delete(listId);
+          return newCache;
+        });
+      }
+
+      // Refresh list metadata to show updated counts
+      fetchUserLists(true);
+    }
   };
 
   const fetchPaperRating = useCallback(async (paperId: string) => {
@@ -1783,8 +1918,30 @@ export default function Home() {
 
   const handleConfirmSignOut = useCallback(() => {
     setSignOutConfirmVisible(false);
+    // Clear all user-specific cached data on sign out
+    if (user) {
+      try {
+        const userCacheKeys = [
+          `${PERSONAL_FEED_CACHE_KEY}-${user.id}`,
+          `${LIST_METADATA_CACHE_KEY}-${user.id}`,
+          `${LIST_ITEMS_CACHE_KEY}-${user.id}`
+        ];
+
+        Object.keys(localStorage).forEach(key => {
+          // Clear any cache entries that start with user-specific keys
+          if (userCacheKeys.some(cacheKey => key.startsWith(cacheKey))) {
+            clearCachedData(key);
+          }
+        });
+
+        // Clear memory cache as well
+        setCachedListItems(new Map());
+      } catch (error) {
+        console.warn('Failed to clear cache on sign out:', error);
+      }
+    }
     signOut();
-  }, [signOut]);
+  }, [signOut, user]);
 
   const openProfileEditor = useCallback(() => {
     setProfileEditorVisible(true);

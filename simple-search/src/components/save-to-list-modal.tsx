@@ -29,7 +29,7 @@ interface SaveToListModalProps {
   isOpen: boolean
   paper: ApiSearchResult | null
   onClose: () => void
-  onSaved: () => void
+  onSaved: (listId?: number) => void
   userLists: UserList[]
   setUserLists: React.Dispatch<React.SetStateAction<UserList[]>>
 }
@@ -178,7 +178,7 @@ export function SaveToListModal({ isOpen, paper, onClose, onSaved, userLists, se
 
       setSuccess('Paper saved successfully!')
       setTimeout(() => {
-        onSaved()
+        onSaved(targetListId)
         onClose()
       }, 2000)
 

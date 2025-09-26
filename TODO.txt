@@ -1,15 +1,15 @@
 TODO
-
-Make sharing feature smaller like X
-fix feed list height so its more user friendly (abstract should be in line so feed tiles should scroll)
-Add scraper to fill out site
 improve list speed load
+
+Add scraper to fill out site
+fix feed list height so its more user friendly (abstract should be in line so feed tiles should scroll)
+add mock request pdf from author
+Improve compile similar claims
 
 
 
 
 compile similar methods to reading list
 Implement 5 star rating
-Implement share
-
+Make sharing feature smaller like X
 compile claims actually say what claims are
