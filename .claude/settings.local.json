@@ -12,7 +12,11 @@
       "WebFetch(domain:ai.google.dev)",
       "WebFetch(domain:github.com)",
       "WebSearch",
-      "WebFetch(domain:docs.perplexity.ai)"
+      "WebFetch(domain:docs.perplexity.ai)",
+      "WebFetch(domain:docs.firecrawl.dev)",
+      "Bash(curl:*)",
+      "Bash(for:*)",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []

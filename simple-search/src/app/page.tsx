@@ -11,6 +11,8 @@ import type { ProfilePersonalization } from '../lib/profile-types';
 import { SaveToListModal } from '../components/save-to-list-modal';
 import { RateModal } from '../components/rate-modal';
 import { StarRating } from '../components/star-rating';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   getCachedData,
   setCachedData,
@@ -461,6 +463,9 @@ export default function Home() {
   const [personalFeedLastUpdated, setPersonalFeedLastUpdated] = useState<string | null>(null);
   const [profileEditorVisible, setProfileEditorVisible] = useState(false);
   const [signOutConfirmVisible, setSignOutConfirmVisible] = useState(false);
+  const [scrapedContent, setScrapedContent] = useState<string | null>(null);
+  const [scrapedContentLoading, setScrapedContentLoading] = useState(false);
+  const [scrapedContentError, setScrapedContentError] = useState('');
 
   const profileManualKeywordsRef = useRef('');
   const isMountedRef = useRef(true);
@@ -733,13 +738,9 @@ export default function Home() {
           setPersonalFeedError('');
           setPersonalFeedLastUpdated(cachedResults.lastUpdated);
 
-          // If cache is getting stale (>12 hours), refresh in background
-          const isStale = isCacheStale(cacheKey, PERSONAL_FEED_TTL_MS / 2);
-          if (!isStale) {
-            return; // Fresh cache, no need to fetch
-          }
-          // If stale, continue to fetch but don't show loading state
-          console.log('Personal feed: refreshing stale cache in background');
+          // Use cache for full 24 hours - no background refresh
+          console.log('Personal feed: using cached data, valid for 24 hours');
+          return; // Use cache until it expires completely
         }
       }
 
@@ -965,20 +966,11 @@ export default function Home() {
       return;
     }
 
-    const userHasKeywords = profile?.profile_personalization?.manual_keywords && profile.profile_personalization.manual_keywords.length > 0;
-    if (!userHasKeywords) {
-      setPersonalFeedResults([]);
-      return;
-    }
-
-   if (!profilePersonalization || !profilePersonalization.topic_clusters?.length) {
-     return;
-   }
-
+    // Only auto-load personal feed once per user, don't reload on profile changes
     if (personalFeedResults.length === 0) {
       loadPersonalFeed({ minimumQueries: 3 });
     }
-  }, [personalFeedResults.length, profile, profilePersonalization, user?.id]);
+  }, [user?.id]); // Removed profile dependencies to prevent constant reloading
 
   useEffect(() => {
     if (!user) {
@@ -1032,6 +1024,12 @@ export default function Home() {
       setUserLists([]);
     }
   }, [refreshProfile, user?.id]);
+
+  // Clear scraped content when selected paper changes
+  useEffect(() => {
+    setScrapedContent(null);
+    setScrapedContentError('');
+  }, [selectedPaper?.id]);
 
   const runProfileEnrichment = useCallback(
     async ({
@@ -1715,6 +1713,34 @@ export default function Home() {
     setRateModalOpen(false);
     setPaperToRate(null);
     setCurrentPaperRating(null);
+  };
+
+  const handleViewFullPaper = async () => {
+    if (!selectedPaper || !selectedPaper.id.startsWith('sample-')) {
+      return;
+    }
+
+    setScrapedContentLoading(true);
+    setScrapedContentError('');
+
+    try {
+      const response = await fetch(`/api/papers/${selectedPaper.id}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch paper content');
+      }
+
+      const data = await response.json();
+      setScrapedContent(data.scrapedContent || null);
+
+      if (!data.scrapedContent) {
+        setScrapedContentError('Full paper content is not available.');
+      }
+    } catch (error) {
+      console.error('Error fetching paper content:', error);
+      setScrapedContentError('Failed to load full paper content.');
+    } finally {
+      setScrapedContentLoading(false);
+    }
   };
 
   const handlePaperRated = () => {
@@ -2583,18 +2609,60 @@ export default function Home() {
                   </p>
                 </div>
 
-                <div className={DETAIL_METADATA_CLASSES}>
-                  {selectedPaperPrimaryLink && (
-                    <p>
-                      <a
-                        href={selectedPaperPrimaryLink.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={DETAIL_LINK_CLASSES}
+                {/* Scraped content section */}
+                {scrapedContent && (
+                  <div>
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Full Paper</h3>
+                    <div className="mt-2 prose prose-slate prose-sm max-w-none prose-headings:text-slate-900 prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-p:text-slate-700 prose-p:leading-relaxed prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline prose-code:text-slate-800 prose-code:bg-slate-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-slate-50 prose-pre:border prose-pre:border-slate-200 prose-blockquote:border-l-blue-500 prose-blockquote:bg-blue-50 prose-blockquote:py-2 prose-blockquote:px-3">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
                       >
-                        {selectedPaperPrimaryLink.label}
-                      </a>
-                    </p>
+                        {scrapedContent}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                )}
+
+                {scrapedContentError && (
+                  <div>
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Full Paper</h3>
+                    <div className="mt-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-600">
+                      {scrapedContentError}
+                    </div>
+                  </div>
+                )}
+
+                <div className={DETAIL_METADATA_CLASSES}>
+                  {selectedPaper.id.startsWith('sample-') ? (
+                    <button
+                      onClick={handleViewFullPaper}
+                      disabled={scrapedContentLoading}
+                      className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {scrapedContentLoading ? (
+                        <>
+                          <span className="animate-spin">⏳</span>
+                          Loading Full Paper...
+                        </>
+                      ) : (
+                        <>
+                          📄 View Full Paper
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    selectedPaperPrimaryLink && (
+                      <p>
+                        <a
+                          href={selectedPaperPrimaryLink.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={DETAIL_LINK_CLASSES}
+                        >
+                          {selectedPaperPrimaryLink.label}
+                        </a>
+                      </p>
+                    )
                   )}
                 </div>
               </section>

@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 interface PaperDetails {
   id: string
@@ -164,9 +166,34 @@ function PaperDetailPage() {
           </div>
 
           {paper.scrapedContent ? (
-            <div className="prose prose-slate mt-8 max-w-none">
-              <h3 className="text-lg font-semibold text-slate-800">Full Paper</h3>
-              <div dangerouslySetInnerHTML={{ __html: paper.scrapedContent.replace(/\n/g, '<br />') }} />
+            <div className="mt-8">
+              <h3 className="text-lg font-semibold text-slate-800 mb-4">Full Paper</h3>
+              <div className="prose prose-slate prose-lg max-w-none prose-headings:text-slate-900 prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-p:text-slate-700 prose-p:leading-relaxed prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline prose-code:text-slate-800 prose-code:bg-slate-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-slate-50 prose-pre:border prose-pre:border-slate-200 prose-blockquote:border-l-blue-500 prose-blockquote:bg-blue-50 prose-blockquote:py-2 prose-blockquote:px-4 prose-table:text-sm prose-th:bg-slate-50 prose-td:border-slate-200">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    h1: ({ children }) => <h1 className="text-2xl font-bold text-slate-900 mt-8 mb-4">{children}</h1>,
+                    h2: ({ children }) => <h2 className="text-xl font-semibold text-slate-800 mt-6 mb-3">{children}</h2>,
+                    h3: ({ children }) => <h3 className="text-lg font-semibold text-slate-700 mt-4 mb-2">{children}</h3>,
+                    p: ({ children }) => <p className="text-slate-700 leading-relaxed mb-4">{children}</p>,
+                    code: ({ className, children, ...props }) => {
+                      const match = /language-(\w+)/.exec(className || '')
+                      return match ? (
+                        <pre className="bg-slate-50 border border-slate-200 rounded-lg p-4 overflow-x-auto">
+                          <code className="text-sm text-slate-800" {...props}>{children}</code>
+                        </pre>
+                      ) : (
+                        <code className="text-slate-800 bg-slate-100 px-1 py-0.5 rounded text-sm" {...props}>{children}</code>
+                      )
+                    },
+                    blockquote: ({ children }) => (
+                      <blockquote className="border-l-4 border-blue-500 bg-blue-50 py-2 px-4 my-4 italic">{children}</blockquote>
+                    ),
+                  }}
+                >
+                  {paper.scrapedContent}
+                </ReactMarkdown>
+              </div>
             </div>
           ) : (
             <div className="mt-8 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center text-sm text-slate-500">
