@@ -157,7 +157,7 @@ const INITIAL_COMPILE_STATE: CompileState = {
 }
 
 const SHELL_CLASSES = 'min-h-screen bg-slate-50 text-slate-900';
-const FEED_CARD_CLASSES = 'space-y-8 rounded-3xl border border-slate-200 bg-white p-8 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
+const FEED_CARD_CLASSES = 'space-y-2 rounded-3xl border border-slate-200 bg-white p-8 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
 const DETAIL_SHELL_CLASSES = 'w-full rounded-3xl border border-slate-200 bg-white p-8 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
 const DETAIL_HERO_CLASSES = 'rounded-3xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-6 shadow-inner';
 const TILE_BASE_CLASSES = 'group relative flex cursor-pointer flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 transition duration-150 hover:border-slate-300 hover:bg-slate-50';
@@ -1757,8 +1757,8 @@ export default function Home() {
 
   return (
     <div className={SHELL_CLASSES}>
-      <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-6 py-10">
-        <div className="relative flex flex-col gap-6 xl:flex-row">
+      <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-2 px-6 py-3">
+        <div className="relative flex flex-col gap-2 xl:flex-row">
           <button
             type="button"
             onClick={() => setSidebarVisible((prev) => !prev)}
@@ -1931,8 +1931,8 @@ export default function Home() {
             className={`min-w-0 transition-all duration-300 ${sidebarVisible ? 'xl:basis-[40%]' : 'xl:basis-[50%]'} xl:grow-0 ${FEED_CARD_CLASSES}`}
           >
             {/* Share Discovery Tile */}
-            <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-slate-100/80 p-5 text-slate-600 cursor-not-allowed opacity-60">
-              <div className="flex flex-col gap-3 w-full">
+            <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-100/80 p-3 text-slate-600 cursor-not-allowed opacity-60">
+              <div className="flex flex-col gap-2 w-full">
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">Evidentia</span>
                   <h1 className="text-3xl font-semibold text-slate-900">Share Wisdom</h1>
@@ -1946,7 +1946,7 @@ export default function Home() {
               </div>
             </div>
 
-            <header className="flex flex-col gap-6">
+            <header className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">
