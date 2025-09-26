@@ -206,7 +206,7 @@ function SearchContent() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white/80 backdrop-blur">
+      <header className="bg-white/80 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-4 sm:gap-6">
           <Link
             href="/"
@@ -222,7 +222,7 @@ function SearchContent() {
       </header>
 
       <main className="mx-auto max-w-5xl px-4 py-8">
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 sm:flex-row sm:items-center">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-2xl bg-white p-5 shadow-sm sm:flex-row sm:items-center">
           <input
             type="text"
             value={inputValue}
