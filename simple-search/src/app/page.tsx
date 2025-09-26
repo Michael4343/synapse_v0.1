@@ -1459,8 +1459,8 @@ export default function Home() {
       actionId,
       status: 'loading',
       message: actionId === 'compile-claims'
-        ? 'Compiling similar claims…'
-        : 'Compiling similar methods…',
+        ? 'Researching similar claims…'
+        : 'Researching similar methods…',
       tempListId,
       listName: placeholderName,
       listId: null,
@@ -1829,15 +1829,19 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={handleRefreshPersonalFeed}
-                    className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-slate-300 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-100"
+                    className={`rounded-2xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-sky-100 ${
+                      shouldShowPersonalFeed
+                        ? 'border-sky-400 bg-sky-100 shadow-sm'
+                        : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-slate-100'
+                    }`}
                   >
                     <div className="flex items-center gap-3">
                       <div className="flex-shrink-0">
-                        <Rss className="h-5 w-5 text-slate-600" />
+                        <Rss className={`h-5 w-5 ${shouldShowPersonalFeed ? 'text-sky-700' : 'text-slate-600'}`} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-slate-900">Your Personal Feed</p>
-                        <p className="text-xs text-slate-600 mt-1">Click to view today&rsquo;s personalised content</p>
+                        <p className={`text-sm font-semibold ${shouldShowPersonalFeed ? 'text-sky-900' : 'text-slate-900'}`}>Your Personal Feed</p>
+                        <p className={`text-xs mt-1 ${shouldShowPersonalFeed ? 'text-sky-700' : 'text-slate-600'}`}>Click to view today&rsquo;s personalised content</p>
                       </div>
                     </div>
                   </button>
@@ -1863,21 +1867,23 @@ export default function Home() {
                               aria-busy={isLoadingList}
                               className={`w-full flex items-center justify-between rounded-lg border p-3 text-sm transition ${
                                 isSelected
-                                  ? 'border-sky-300 bg-sky-50 ring-1 ring-sky-200'
-                                  : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
-                              } ${isLoadingList ? 'cursor-wait opacity-80' : ''}`}
+                                  ? 'border-sky-400 bg-sky-100 ring-2 ring-sky-300 shadow-sm'
+                                  : isLoadingList
+                                    ? 'border-sky-400 bg-sky-100 cursor-wait shadow-sm'
+                                    : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+                              }`}
                             >
-                              <span className={`font-medium ${isSelected ? 'text-sky-900' : 'text-slate-900'}`}>
+                              <span className={`font-medium ${isSelected ? 'text-sky-900' : isLoadingList ? 'text-sky-800' : 'text-slate-900'}`}>
                                 {list.name}
                               </span>
-                              <span className={`text-xs ${isSelected ? 'text-sky-600' : 'text-slate-500'}`}>
+                              <span className={`text-xs ${isSelected ? 'text-sky-700' : 'text-slate-500'}`}>
                                 {isLoadingList ? (
-                                  <span className="flex items-center gap-2">
+                                  <span className="flex items-center gap-2 text-sky-700 font-medium">
                                     <span
-                                      className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"
+                                      className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-sky-700 border-t-transparent"
                                       aria-hidden="true"
                                     />
-                                    Compiling…
+                                    Researching…
                                   </span>
                                 ) : (
                                   `${list.items_count} item${list.items_count === 1 ? '' : 's'}`
