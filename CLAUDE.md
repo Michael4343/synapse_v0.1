@@ -140,6 +140,11 @@ Building a Next.js + Supabase academic research aggregation platform that allows
 **✅ Recent Updates:**
 - **Rebrand Complete (v0.1.1)**: Successfully rebranded from "Synapse" to "Evidentia" across all frontend UI, API user agents, configuration files, and documentation. All references have been updated to maintain consistent branding throughout the application.
 - **Personal Feed UX Improvement (v0.1.2)**: Enhanced the personal feed button in the sidebar with an RSS icon and improved text hierarchy. Changed from user-name-focused display to "Your Personal Feed" with clear actionable text, making the feature more discoverable and intuitive for users.
+- **Rate Limiting & API Stability (v0.1.3)**: Resolved 429 rate limit errors by implementing comprehensive rate limiting controls:
+  - **Server-side**: Added request counting, deduplication, exponential backoff, and circuit breaker pattern to prevent API overuse
+  - **Client-side**: Added 2-second delays between personal feed queries, early failure termination, and better error messaging
+  - **Caching**: Improved cache utilization with graceful fallbacks to older results when API is rate-limited
+  - **Reliability**: Personal feed now handles API failures gracefully and provides informative user feedback
 
 ### Current Directory Structure
 ```
@@ -234,3 +239,4 @@ Building a Next.js + Supabase academic research aggregation platform that allows
 - 95% uptime with graceful error handling
 
 ALWAYS UPDATE CLAUDE.md AT THE END OF EACH STEP WITH THE NEW DIRECTORY STRUCTURE AND IF NECASSARY CREATE A DOC TO GO IN DOCS WITH THE MORE DETAILS OF WHAT YOU HAVE DONE. DO NOT START NEW SERVERS THERE WILL BE ONE RUNNING YOU CAN USE FOR TESTS!!!
+I WILL RUN THE TESTS ON MY DEV SERVER SO PLEASE DO NOT DO THIS JUST STOP ONCE YOU HAVE IMPLEMENTED THE FEATURES

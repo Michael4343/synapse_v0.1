@@ -1,0 +1,1 @@
+ALTER TABLE search_results ADD COLUMN publication_date TEXT;

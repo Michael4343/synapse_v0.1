@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { LogOut, Rss, UserCog, X } from 'lucide-react';
+import { LogOut, Rss, User, UserCog, UserPlus, X } from 'lucide-react';
 import { useAuth } from '../lib/auth-context';
 import { useAuthModal, getUserDisplayName } from '../lib/auth-hooks';
 import { createClient } from '../lib/supabase';
@@ -25,6 +25,7 @@ interface ApiSearchResult {
   doi: string | null
   url: string | null
   source: string
+  publicationDate: string | null
 }
 
 interface UserListSummary {
@@ -157,9 +158,9 @@ const INITIAL_COMPILE_STATE: CompileState = {
 }
 
 const SHELL_CLASSES = 'min-h-screen bg-slate-50 text-slate-900';
-const FEED_CARD_CLASSES = 'space-y-2 rounded-3xl border border-slate-200 bg-white p-8 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
-const DETAIL_SHELL_CLASSES = 'w-full rounded-3xl border border-slate-200 bg-white p-8 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
-const DETAIL_HERO_CLASSES = 'rounded-3xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-6 shadow-inner';
+const FEED_CARD_CLASSES = 'space-y-2 rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
+const DETAIL_SHELL_CLASSES = 'w-full rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
+const DETAIL_HERO_CLASSES = 'rounded-3xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-4 shadow-inner';
 const TILE_BASE_CLASSES = 'group relative flex cursor-pointer flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 transition duration-150 hover:border-slate-300 hover:bg-slate-50';
 const TILE_SELECTED_CLASSES = 'border-sky-400 bg-sky-50 ring-1 ring-sky-100';
 const ACTION_LIST_CLASSES = 'grid w-full gap-2 grid-cols-1 sm:grid-cols-4';
@@ -184,14 +185,14 @@ const RESULT_SUMMARY_CLASSES = 'flex flex-wrap items-baseline gap-2 text-sm text
 const DETAIL_METADATA_CLASSES = 'space-y-3 text-sm text-slate-600';
 const DETAIL_LINK_CLASSES = 'text-lg font-semibold text-sky-600 underline decoration-sky-300 underline-offset-4 transition hover:text-sky-700';
 const TILE_LINK_CLASSES = 'inline-flex items-center text-xs font-semibold text-sky-600 underline decoration-sky-300 underline-offset-4 transition hover:text-sky-700';
-const SIDEBAR_CARD_CLASSES = 'flex h-full flex-col gap-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
+const SIDEBAR_CARD_CLASSES = 'flex h-full flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
 const SIDEBAR_PRIMARY_BUTTON_CLASSES = 'flex items-center justify-center rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(56,189,248,0.2)] transition hover:-translate-y-0.5 hover:bg-sky-400';
 const SIDEBAR_SECONDARY_BUTTON_CLASSES = 'flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900';
 const SIDEBAR_TOGGLE_BUTTON_CLASSES = 'inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900';
 const SIDEBAR_FLOAT_BUTTON_CLASSES = 'absolute left-0 top-0 -translate-x-1/2 -translate-y-1/2 z-20 hidden xl:inline-flex';
 const SEARCH_SPINNER_CLASSES = 'inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent';
 const DETAIL_SAVE_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-lg bg-sky-500 px-6 sm:px-8 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-[0_12px_30px_rgba(56,189,248,0.2)] transition hover:-translate-y-0.5 hover:bg-sky-400';
-const PROFILE_CARD_CLASSES = 'rounded-3xl border border-slate-200 bg-white p-8 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
+const PROFILE_CARD_CLASSES = 'rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
 const ACCOUNT_ICON_BUTTON_CLASSES = 'inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-900';
 const PROFILE_LABEL_CLASSES = 'text-sm font-medium text-slate-700';
 const PROFILE_INPUT_CLASSES = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100';
@@ -684,13 +685,28 @@ export default function Home() {
           resultsPerQuery + (index < remainderSlots ? 1 : 0)
         );
 
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        let successfulQueries = 0;
+        let failedQueries = 0;
+
         for (let queryIndex = 0; queryIndex < queries.length; queryIndex++) {
           const query = queries[queryIndex];
           const maxForThisQuery = quotaPerQuery[queryIndex];
           let addedForThisQuery = 0;
 
-
           if (aggregated.length >= maxResults) {
+            break;
+          }
+
+          // Add delay between queries to respect rate limits (except for first query)
+          if (queryIndex > 0) {
+            console.log(`Personal feed: waiting 2s before query ${queryIndex + 1}/${queries.length}`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+
+          // If we've had too many consecutive failures, stop trying to avoid further rate limiting
+          if (failedQueries >= 2 && successfulQueries === 0) {
+            console.log('Personal feed: stopping due to consecutive API failures');
             break;
           }
 
@@ -700,36 +716,59 @@ export default function Home() {
               headers: {
                 'Content-Type': 'application/json',
               },
-              body: JSON.stringify({ query }),
+              body: JSON.stringify({ query, year: new Date().getFullYear() }),
             });
 
             if (!response.ok) {
+              console.warn(`Personal feed query ${queryIndex + 1} failed with status ${response.status}`);
+              failedQueries++;
               continue;
             }
 
             const payload = await response.json();
             const results = Array.isArray(payload.results) ? payload.results : [];
+            successfulQueries++;
 
-            for (const result of results) {
-              if (!seen.has(result.id) && addedForThisQuery < maxForThisQuery) {
+            // Add results, prioritizing recent ones but not strictly requiring 24h
+            const recentResults = results.filter(result => {
+              if (seen.has(result.id)) return false;
+              return result.publicationDate && new Date(result.publicationDate) > twentyFourHoursAgo;
+            });
+
+            const olderResults = results.filter(result => {
+              if (seen.has(result.id)) return false;
+              return !result.publicationDate || new Date(result.publicationDate) <= twentyFourHoursAgo;
+            });
+
+            // First add recent results
+            for (const result of recentResults) {
+              if (addedForThisQuery < maxForThisQuery && aggregated.length < maxResults) {
+                aggregated.push(result);
+                seen.add(result.id);
+                addedForThisQuery++;
+              } else {
+                break;
+              }
+            }
+
+            // If we still have quota and not enough recent results, add older ones
+            if (addedForThisQuery < maxForThisQuery && aggregated.length < maxResults) {
+              for (const result of olderResults.slice(0, maxForThisQuery - addedForThisQuery)) {
                 aggregated.push(result);
                 seen.add(result.id);
                 addedForThisQuery++;
               }
-
-              if (addedForThisQuery >= maxForThisQuery || aggregated.length >= maxResults) {
-                break;
-              }
             }
           } catch (error) {
-            console.error('Personal feed query failed', error);
+            console.error(`Personal feed query ${queryIndex + 1} failed:`, error);
+            failedQueries++;
           }
         }
 
 
         if (!aggregated.length) {
           setPersonalFeedResults([]);
-          setPersonalFeedError('We could not find new papers for your focus areas. Try refreshing in a bit or adjust your profile.');
+          setPersonalFeedError('We could not find papers for your focus areas. This might be due to API rate limits - try refreshing in a few minutes or adjust your profile keywords.');
         } else {
           setPersonalFeedResults(aggregated.slice(0, 12));
           setPersonalFeedError('');
@@ -1283,7 +1322,7 @@ export default function Home() {
         </div>
       );
     } else if (personalFeedResults.length > 0) {
-      mainFeedContent = renderResultList(personalFeedResults, 'Personal recommendation');
+      mainFeedContent = renderResultList(personalFeedResults, 'Personal recommendation (last 24h)');
     } else {
       mainFeedContent = (
         <div className="rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center text-sm text-slate-600">
@@ -1757,7 +1796,7 @@ export default function Home() {
 
   return (
     <div className={SHELL_CLASSES}>
-      <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-2 px-6 py-3">
+      <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-2 px-6 py-1">
         <div className="relative flex flex-col gap-2 xl:flex-row">
           <button
             type="button"
@@ -1778,7 +1817,7 @@ export default function Home() {
                 <>
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1">
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">Evidentia</span>
+                      <span className="text-lg font-bold uppercase tracking-[0.2em] text-slate-600">Evidentia</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
@@ -1901,25 +1940,34 @@ export default function Home() {
                 </>
               ) : (
                 <>
-                  <div className="space-y-1">
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">Evidentia</span>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <span className="text-lg font-bold uppercase tracking-[0.2em] text-slate-600">Evidentia</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={authModal.openLogin}
+                        className={ACCOUNT_ICON_BUTTON_CLASSES}
+                        aria-label="Log in"
+                        title="Log in"
+                      >
+                        <User className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={authModal.openSignup}
+                        className={ACCOUNT_ICON_BUTTON_CLASSES}
+                        aria-label="Register"
+                        title="Register"
+                      >
+                        <UserPlus className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
-                <div className="flex flex-col gap-3">
-                  <button
-                    type="button"
-                    onClick={authModal.openLogin}
-                    className={SIDEBAR_PRIMARY_BUTTON_CLASSES}
-                  >
-                    Log in
-                  </button>
-                  <button
-                    type="button"
-                    onClick={authModal.openSignup}
-                    className={SIDEBAR_PRIMARY_BUTTON_CLASSES}
-                  >
-                    Register
-                  </button>
-                </div>
+                  <div className="space-y-3 text-sm text-slate-600">
+                    <p>Sign in to access your personal research feed and save papers to custom lists.</p>
+                  </div>
                 </>
               )}
             </div>
@@ -1929,7 +1977,7 @@ export default function Home() {
             className={`min-w-0 transition-all duration-300 ${sidebarVisible ? 'xl:basis-[40%]' : 'xl:basis-[50%]'} xl:grow-0 ${FEED_CARD_CLASSES}`}
           >
 
-            <header className="flex flex-col gap-2">
+            <header className="flex flex-col gap-0">
               <div className="flex items-center justify-between">
                 <div className="flex flex-col gap-1">
                 </div>
@@ -1945,17 +1993,17 @@ export default function Home() {
               </div>
 
               <form onSubmit={handleKeywordSearch} className="relative">
-                <div className={SEARCH_CONTAINER_CLASSES}>
+                <div className="relative flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                   <input
                     type="text"
                     value={keywordQuery}
                     onChange={(e) => setKeywordQuery(e.target.value)}
-                    placeholder="Find the Science papers leave out"
-                    className={SEARCH_INPUT_CLASSES}
+                    placeholder="Find the knowledge publications leave out"
+                    className="w-full bg-transparent px-5 py-3.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
                   />
                   <button
                     type="submit"
-                    className={`${SEARCH_BUTTON_CLASSES} ${keywordLoading ? 'cursor-not-allowed opacity-70' : ''}`}
+                    className={`mr-2 inline-flex items-center rounded-xl bg-sky-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-sky-400 ${keywordLoading ? 'cursor-not-allowed opacity-70' : ''}`}
                     disabled={keywordLoading}
                   >
                     {keywordLoading ? (
@@ -2090,21 +2138,26 @@ export default function Home() {
             className={`min-w-0 transition-all duration-300 ${sidebarVisible ? 'xl:basis-[40%]' : 'xl:basis-[50%]'} xl:grow-0 ${DETAIL_SHELL_CLASSES}`}
           >
             {selectedPaper ? (
-              <div className="flex h-full flex-col gap-8">
-                {/* Share Discovery Tile */}
-                <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-100/80 p-3 text-slate-600 cursor-not-allowed opacity-60">
-                  <div className="flex flex-col gap-2 w-full">
-                    <textarea
-                      disabled
-                      rows={3}
-                      placeholder="Share your wisdom to help science move faster"
-                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-400 placeholder:text-slate-400 cursor-not-allowed resize-none"
-                    />
-                  </div>
+              <div className="flex h-full flex-col gap-4">
+                {/* Share Discovery */}
+                <div className="relative flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm opacity-60">
+                  <input
+                    type="text"
+                    disabled
+                    placeholder="Share your wisdom to help science move faster"
+                    className="w-full bg-transparent px-5 py-3.5 text-sm text-slate-400 placeholder:text-slate-400 focus:outline-none cursor-not-allowed"
+                  />
+                  <button
+                    type="button"
+                    disabled
+                    className="mr-2 inline-flex items-center rounded-xl bg-slate-400 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white cursor-not-allowed"
+                  >
+                    Share
+                  </button>
                 </div>
 
                 <div className={`${DETAIL_HERO_CLASSES} flex flex-col gap-4`}>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-sky-600">Paper details</p>
                     <button
                       type="button"
@@ -2220,7 +2273,7 @@ export default function Home() {
                 })}
               </div>
 
-              <section className="space-y-6">
+              <section className="space-y-4">
                 <div>
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Authors</h3>
                   <p className="mt-2 text-sm text-slate-700">

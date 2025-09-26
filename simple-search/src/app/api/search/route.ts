@@ -15,10 +15,28 @@ const SEMANTIC_SCHOLAR_FIELDS = [
   'url',
   'externalIds',
   'openAccessPdf',
+  'publicationDate',
 ].join(',')
 
 const MAX_RESULTS = 12
 const CACHE_TTL_MS = 1000 * 60 * 60 * 6 // 6 hours
+
+// Rate limiting configuration
+const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000 // 5 minutes
+const RATE_LIMIT_WITHOUT_KEY = 950 // Leave buffer from 1000 requests/5min shared limit
+const RATE_LIMIT_WITH_KEY = 90 // Leave buffer from 100 requests/5min personal limit
+const MIN_REQUEST_INTERVAL_MS = 1000 // Minimum 1 second between requests
+
+// Rate limiting state (in-memory for simplicity)
+const requestTimestamps: number[] = []
+const pendingRequests = new Map<string, Promise<SemanticScholarPaper[]>>()
+let lastRequestTime = 0
+
+// Circuit breaker for consecutive failures
+let consecutiveFailures = 0
+let lastFailureTime = 0
+const MAX_CONSECUTIVE_FAILURES = 5
+const CIRCUIT_BREAKER_COOLDOWN_MS = 10 * 60 * 1000 // 10 minutes
 
 interface SemanticScholarPaper {
   paperId: string
@@ -31,6 +49,7 @@ interface SemanticScholarPaper {
   authors?: Array<{ name?: string | null }>
   externalIds?: Record<string, string | string[]>
   openAccessPdf?: { url?: string | null } | null
+  publicationDate: string | null
 }
 
 type StoredSearchResult = {
@@ -47,6 +66,76 @@ type StoredSearchResult = {
   url: string | null
   source_api: string | null
   created_at: string
+  publication_date: string | null
+}
+
+// Rate limiting helpers
+function cleanOldTimestamps() {
+  const cutoff = Date.now() - RATE_LIMIT_WINDOW_MS
+  const validIndex = requestTimestamps.findIndex(timestamp => timestamp > cutoff)
+  if (validIndex > 0) {
+    requestTimestamps.splice(0, validIndex)
+  }
+}
+
+function getRemainingRequests(hasApiKey: boolean): number {
+  cleanOldTimestamps()
+  const limit = hasApiKey ? RATE_LIMIT_WITH_KEY : RATE_LIMIT_WITHOUT_KEY
+  return Math.max(0, limit - requestTimestamps.length)
+}
+
+function shouldWaitForRateLimit(hasApiKey: boolean): { shouldWait: boolean; waitMs: number } {
+  const remaining = getRemainingRequests(hasApiKey)
+  const timeSinceLastRequest = Date.now() - lastRequestTime
+
+  if (remaining <= 0) {
+    // Wait until oldest request in window expires
+    const oldestTimestamp = requestTimestamps[0] || 0
+    const waitMs = Math.max(0, RATE_LIMIT_WINDOW_MS - (Date.now() - oldestTimestamp) + 1000)
+    return { shouldWait: true, waitMs }
+  }
+
+  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL_MS) {
+    // Enforce minimum interval between requests
+    const waitMs = MIN_REQUEST_INTERVAL_MS - timeSinceLastRequest
+    return { shouldWait: true, waitMs }
+  }
+
+  return { shouldWait: false, waitMs: 0 }
+}
+
+function recordRequest() {
+  const now = Date.now()
+  requestTimestamps.push(now)
+  lastRequestTime = now
+}
+
+async function waitFor(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function isCircuitBreakerOpen(): boolean {
+  if (consecutiveFailures < MAX_CONSECUTIVE_FAILURES) {
+    return false
+  }
+
+  const timeSinceLastFailure = Date.now() - lastFailureTime
+  if (timeSinceLastFailure > CIRCUIT_BREAKER_COOLDOWN_MS) {
+    // Reset circuit breaker after cooldown
+    consecutiveFailures = 0
+    return false
+  }
+
+  return true
+}
+
+function recordSuccess() {
+  consecutiveFailures = 0
+}
+
+function recordFailure() {
+  consecutiveFailures++
+  lastFailureTime = Date.now()
 }
 
 function normaliseQuery(query: string) {
@@ -115,17 +204,60 @@ async function getCachedResults(query: string): Promise<{ results: StoredSearchR
     fresh: isFresh,
   }
 }
-async function fetchSemanticScholar(query: string, attempt = 1): Promise<SemanticScholarPaper[]> {
+async function fetchSemanticScholar(query: string, year: number | null): Promise<SemanticScholarPaper[]> {
+  const requestKey = `${query}|${year || 'null'}`
+
+  // Request deduplication: if same request is already in flight, return that promise
+  const existingRequest = pendingRequests.get(requestKey)
+  if (existingRequest) {
+    return existingRequest
+  }
+
+  // Create and cache the request promise
+  const requestPromise = performSemanticScholarRequest(query, year)
+  pendingRequests.set(requestKey, requestPromise)
+
+  try {
+    const result = await requestPromise
+    return result
+  } finally {
+    // Clean up the pending request
+    pendingRequests.delete(requestKey)
+  }
+}
+
+async function performSemanticScholarRequest(query: string, year: number | null, attempt = 1): Promise<SemanticScholarPaper[]> {
   const apiKey = process.env.SEMANTIC_SCHOLAR_API_KEY
+  const hasApiKey = Boolean(apiKey)
   const userAgent =
     process.env.SEMANTIC_SCHOLAR_USER_AGENT ||
     'EvidentiaAcademicAggregator/0.1 (contact: research@evidentia.local)'
+
+  // Check circuit breaker first
+  if (isCircuitBreakerOpen()) {
+    console.log('Circuit breaker is open - API requests temporarily disabled')
+    throw new Error('Service temporarily unavailable due to repeated API failures')
+  }
+
+  // Check rate limits and wait if necessary
+  const { shouldWait, waitMs } = shouldWaitForRateLimit(hasApiKey)
+  if (shouldWait) {
+    console.log(`Rate limit wait: ${waitMs}ms (attempt ${attempt})`)
+    await waitFor(waitMs)
+  }
 
   const params = new URLSearchParams({
     query,
     fields: SEMANTIC_SCHOLAR_FIELDS,
     limit: String(MAX_RESULTS),
-  })
+  });
+
+  if (year) {
+    params.append('year', String(year));
+  }
+
+  // Record this request for rate limiting
+  recordRequest()
 
   const response = await fetch(`${SEMANTIC_SCHOLAR_ENDPOINT}?${params.toString()}`, {
     headers: {
@@ -136,9 +268,18 @@ async function fetchSemanticScholar(query: string, attempt = 1): Promise<Semanti
   })
 
   if (!response.ok) {
-    if ((response.status === 429 || response.status === 403) && attempt < 3) {
-      await new Promise((resolve) => setTimeout(resolve, attempt * 1000))
-      return fetchSemanticScholar(query, attempt + 1)
+    recordFailure() // Record failure for circuit breaker
+
+    if (response.status === 429 && attempt <= 5) {
+      // Exponential backoff with jitter for 429 errors
+      // Start with 30 seconds, double each time, add randomness
+      const baseDelay = 30 * 1000 * Math.pow(2, attempt - 1)
+      const jitter = Math.random() * 10 * 1000 // 0-10 second jitter
+      const delay = Math.min(baseDelay + jitter, 5 * 60 * 1000) // Max 5 minutes
+
+      console.log(`429 rate limit hit, waiting ${delay}ms before retry ${attempt + 1}/5`)
+      await waitFor(delay)
+      return performSemanticScholarRequest(query, year, attempt + 1)
     }
 
     const errorMessage = await response
@@ -149,6 +290,9 @@ async function fetchSemanticScholar(query: string, attempt = 1): Promise<Semanti
     const details = errorMessage ? `: ${JSON.stringify(errorMessage)}` : ''
     throw new Error(`Semantic Scholar API responded with ${response.status}${details}`)
   }
+
+  // Record success for circuit breaker
+  recordSuccess()
 
   const payload = await response.json()
   const papers: SemanticScholarPaper[] = Array.isArray(payload.data) ? payload.data : []
@@ -184,6 +328,7 @@ function transformPaper(paper: SemanticScholarPaper) {
     doi,
     arxivId,
     url: preferredUrl,
+    publicationDate: paper.publicationDate || null,
     source_api: 'semantic_scholar',
     raw: paper,
   }
@@ -207,6 +352,7 @@ async function storeResults(query: string, papers: SemanticScholarPaper[]) {
     arxiv_id: paper.arxivId,
     doi: paper.doi,
     url: paper.url,
+    publication_date: paper.publicationDate,
     source_api: paper.source_api,
     raw_data: paper.raw,
   }))
@@ -292,6 +438,7 @@ function buildResponsePayload(results: StoredSearchResult[]) {
     arxivId: result.arxiv_id,
     doi: result.doi,
     url: result.url,
+    publicationDate: result.publication_date,
     source: result.source_api ?? 'semantic_scholar',
   }))
 }
@@ -300,6 +447,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}))
     const rawQuery = typeof body.query === 'string' ? body.query : ''
+    const year = typeof body.year === 'number' ? body.year : null
     const query = normaliseQuery(rawQuery)
 
     if (!query) {
@@ -314,7 +462,7 @@ export async function POST(request: NextRequest) {
     let papers: SemanticScholarPaper[] = []
 
     try {
-      papers = await fetchSemanticScholar(query)
+      papers = await fetchSemanticScholar(query, year)
     } catch (apiError) {
       console.error('Semantic Scholar fetch failed', apiError)
 

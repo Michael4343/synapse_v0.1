@@ -1,16 +1,7 @@
 TODO
-Refresh button on feed refresh and stronger graphics
-Stronger graphics/animation on compile list
-
-improve UI UX layout 
-Reduce padding from top
-Move search to top right
-Paper details under search
 
 Make sharing feature smaller like X
-feed under sharing
 fix feed list height so its more user friendly (abstract should be in line so feed tiles should scroll)
-
 Add scraper to fill out site
 improve list speed load
 
