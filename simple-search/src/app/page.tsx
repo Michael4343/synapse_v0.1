@@ -74,7 +74,8 @@ const SAMPLE_PAPERS: ApiSearchResult[] = [
     arxivId: '1706.03762',
     doi: '10.48550/arXiv.1706.03762',
     url: 'https://arxiv.org/abs/1706.03762',
-    source: 'sample_data'
+    source: 'sample_data',
+    publicationDate: '2017-06-12'
   },
   {
     id: 'sample-2',
@@ -88,7 +89,8 @@ const SAMPLE_PAPERS: ApiSearchResult[] = [
     arxivId: '2005.14165',
     doi: '10.48550/arXiv.2005.14165',
     url: 'https://arxiv.org/abs/2005.14165',
-    source: 'sample_data'
+    source: 'sample_data',
+    publicationDate: '2020-05-28'
   },
   {
     id: 'sample-3',
@@ -102,7 +104,8 @@ const SAMPLE_PAPERS: ApiSearchResult[] = [
     arxivId: '1512.03385',
     doi: '10.1109/CVPR.2016.90',
     url: 'https://arxiv.org/abs/1512.03385',
-    source: 'sample_data'
+    source: 'sample_data',
+    publicationDate: '2015-12-10'
   },
   {
     id: 'sample-4',
@@ -116,7 +119,8 @@ const SAMPLE_PAPERS: ApiSearchResult[] = [
     arxivId: '1810.04805',
     doi: '10.48550/arXiv.1810.04805',
     url: 'https://arxiv.org/abs/1810.04805',
-    source: 'sample_data'
+    source: 'sample_data',
+    publicationDate: '2018-10-11'
   }
 ]
 type TileActionId = 'compile-methods' | 'compile-claims' | 'rate' | 'share'
