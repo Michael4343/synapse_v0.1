@@ -2269,11 +2269,11 @@ export default function Home() {
             >
               {user ? (
                 <>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1">
+                  <div className="flex items-center justify-between w-full">
+                    <div className="flex-1">
                       <span className="text-lg font-bold uppercase tracking-[0.2em] text-slate-600">Evidentia</span>
                     </div>
-                    <div className="relative" ref={accountDropdownRef}>
+                    <div className="relative flex-shrink-0" ref={accountDropdownRef}>
                       <button
                         type="button"
                         onClick={handleAccountDropdownToggle}

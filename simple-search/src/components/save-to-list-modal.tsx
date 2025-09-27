@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { X } from 'lucide-react'
 import { usePostHogTracking } from '../hooks/usePostHogTracking'
 
 interface UserList {
@@ -201,6 +202,14 @@ export function SaveToListModal({ isOpen, paper, onClose, onSaved, userLists, se
       />
 
       <div className={MODAL_PANEL_CLASSES}>
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute right-4 top-4 rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+          aria-label="Close modal"
+        >
+          <X className="h-5 w-5" />
+        </button>
 
         <div className={MODAL_HEADER_CLASSES}>
           <h2 className={MODAL_TITLE_CLASSES}>Save to List</h2>

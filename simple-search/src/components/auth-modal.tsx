@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { X } from 'lucide-react'
 import { LoginForm } from './login-form'
 import { RegisterForm } from './register-form'
 
@@ -54,6 +55,14 @@ export function AuthModal({ isOpen, mode, onClose, onSwitchMode }: AuthModalProp
 
       {/* Modal panel */}
       <div className={MODAL_PANEL_CLASSES}>
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute right-4 top-4 rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+          aria-label="Close modal"
+        >
+          <X className="h-5 w-5" />
+        </button>
 
         {/* Header */}
         <div className={MODAL_HEADER_CLASSES}>
