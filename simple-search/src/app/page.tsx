@@ -1022,7 +1022,7 @@ export default function Home() {
           setCachedData(cacheKey, {
             results: finalResults,
             lastUpdated: lastUpdated
-          }, PERSONAL_FEED_TTL_MS);
+          });
         }
       } finally {
         setPersonalFeedLoading(false);
