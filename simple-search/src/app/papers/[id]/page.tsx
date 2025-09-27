@@ -61,7 +61,7 @@ function getSectionIcon(type: string): string {
   }
 }
 
-function getContentQualityBadge(quality: string | null, contentType: string | null): JSX.Element | null {
+function getContentQualityBadge(quality: string | null, contentType: string | null): React.JSX.Element | null {
   if (!quality) return null
 
   const badgeClasses = {
