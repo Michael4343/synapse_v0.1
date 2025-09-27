@@ -2395,7 +2395,7 @@ export default function Home() {
                         aria-label="Sign in"
                       >
                         <User className="h-4 w-4" />
-                        Sign In
+                        Login
                       </button>
                     </div>
                   </div>

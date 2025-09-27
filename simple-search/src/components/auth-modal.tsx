@@ -67,7 +67,7 @@ export function AuthModal({ isOpen, mode, onClose, onSwitchMode }: AuthModalProp
         {/* Header */}
         <div className={MODAL_HEADER_CLASSES}>
           <h2 className={MODAL_TITLE_CLASSES}>
-            {mode === 'login' ? 'Sign In' : 'Create account'}
+            {mode === 'login' ? 'Login' : 'Create account'}
           </h2>
           <p className={MODAL_SUBTITLE_CLASSES}>
             {mode === 'login'
