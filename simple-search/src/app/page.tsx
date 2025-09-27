@@ -627,7 +627,7 @@ export default function Home() {
     } finally {
       setListsLoading(false);
     }
-  }, [user?.id]);
+  }, [user]);
 
   const fetchListItems = useCallback(async (listId: number, force = false) => {
     if (!user) return;
@@ -685,7 +685,7 @@ export default function Home() {
       setListItemsLoading(false);
       setListItemsLoadingMessage('');
     }
-  }, [user?.id, cachedListItems]);
+  }, [user, cachedListItems]);
 
   // Set initial selected paper based on authentication status
   useEffect(() => {
@@ -742,7 +742,7 @@ export default function Home() {
         setProfileLoading(false);
       }
     }
-  }, [user?.id]);
+  }, [user]);
 
   const profilePersonalization = profile?.profile_personalization ?? null;
   const profileTopicClusters = profilePersonalization?.topic_clusters ?? [];
@@ -1028,7 +1028,7 @@ export default function Home() {
         setPersonalFeedLoading(false);
       }
     },
-    [personalFeedLoading, profilePersonalization, user?.id]
+    [personalFeedLoading, profilePersonalization, user]
   );
 
   useEffect(() => {
@@ -1055,7 +1055,7 @@ export default function Home() {
         console.log('Profile loaded but no keywords found - prompting user to add keywords');
       }
     }
-  }, [user?.id, profileLoading, profilePersonalization, personalFeedResults.length, loadPersonalFeed]);
+  }, [user, profileLoading, profilePersonalization, personalFeedResults.length, loadPersonalFeed]);
 
   useEffect(() => {
     if (!user) {
@@ -1108,7 +1108,7 @@ export default function Home() {
     } else {
       setUserLists([]);
     }
-  }, [refreshProfile, user?.id]);
+  }, [fetchUserLists, refreshProfile, user]);
 
   // Clear scraped content when selected paper changes
   useEffect(() => {
@@ -1277,7 +1277,7 @@ export default function Home() {
       <div className="space-y-5">
         <div className="space-y-2">
           <label htmlFor={keywordsId} className={PROFILE_LABEL_CLASSES}>
-            Focus keywords <span className="text-xs font-normal text-slate-500">(separate with commas, e.g. "AI, machine learning, neural networks")</span>
+            Focus keywords <span className="text-xs font-normal text-slate-500">(separate with commas, e.g. &quot;AI, machine learning, neural networks&quot;)</span>
           </label>
           <textarea
             id={keywordsId}
@@ -1688,7 +1688,7 @@ export default function Home() {
       console.error('Failed to fetch paper rating:', error);
     }
     return null;
-  }, [user?.id]);
+  }, [user]);
 
   // Track which papers we've already fetched ratings for
   const fetchedRatingsRef = useRef(new Set<string>());
@@ -1771,7 +1771,7 @@ export default function Home() {
     } finally {
       console.log(`🔄 [PERF] fetchPaperRatings completed in ${Date.now() - startTime}ms`);
     }
-  }, [user?.id]);
+  }, [user]);
 
   // Reset ratings cache when user changes
   useEffect(() => {
@@ -1813,7 +1813,7 @@ export default function Home() {
     if (uniquePapers.length > 0) {
       fetchPaperRatings(uniquePapers);
     }
-  }, [keywordResults, personalFeedResults, user?.id, isUpdatingListMetadata]); // Removed fetchPaperRatings to fix infinite loop
+  }, [fetchPaperRatings, keywordResults, personalFeedResults, user, isUpdatingListMetadata]);
 
   const handleRateSelectedPaper = async () => {
     if (!selectedPaper) return;
