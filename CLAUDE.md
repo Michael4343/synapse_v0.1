@@ -178,6 +178,13 @@ Building a Next.js + Supabase academic research aggregation platform that allows
   - **API simplification**: Reverted to basic queries without bulk loading, pagination, or query parameters
   - **Performance improvement**: Target <1 second list loading vs previous 6-25 seconds
   - **Rate limiting fix**: Eliminated 429 errors during list operations by removing external API dependencies
+- **Database Migration Consolidation (v0.1.9)**: Cleaned up and simplified Supabase migrations for better maintainability:
+  - **Migration cleanup**: Consolidated 15 scattered migrations into 5 well-organized files
+  - **Logical grouping**: Core schema, auth functions, permissions, indexes, and performance fixes now separated clearly
+  - **Eliminated redundancy**: Removed duplicate permission grants, scattered schema changes, and redundant indexes
+  - **Fixed incomplete migrations**: Properly completed publication_date addition and other partial changes
+  - **Better organization**: Related functionality now grouped together instead of spread across many small files
+  - **Maintainability**: Much easier to understand and modify the database schema going forward
 
 ### Current Directory Structure
 ```
@@ -197,16 +204,12 @@ Building a Next.js + Supabase academic research aggregation platform that allows
 │   └── acceptance-criteria.md    # Testing requirements
 └── /simple-search/               # Next.js + Supabase application
     ├── package.json              # App dependencies and scripts
-    ├── supabase/migrations/       # Database schema migrations
-    │   ├── 001_initial_schema.sql      # Core tables (profiles, feed_items, etc.)
-    │   ├── 002_profile_trigger.sql     # Auto-create profiles on signup
-    │   ├── 003_add_keywords_profile_type.sql # Keywords support
-    │   ├── 004_add_feed_preferences.sql     # User feed customization
-    │   ├── 005_add_feed_sessions.sql       # Feed history tracking
-    │   ├── 006_add_user_favourites.sql     # User favorites system
-    │   ├── 007_add_user_lists.sql          # Save to list functionality
-    │   ├── 008-013_*.sql                   # Additional features and fixes
-    │   └── 014_list_performance_indexes.sql # Performance optimizations
+    ├── supabase/migrations/       # Database schema migrations (v0.1.9 consolidated)
+    │   ├── 0001_core_schema.sql           # All essential tables (profiles, search cache, lists, ratings)
+    │   ├── 0002_auth_functions.sql        # Auth triggers and helper functions
+    │   ├── 0003_permissions.sql           # RLS policies and role permissions
+    │   ├── 0004_indexes.sql               # Performance indexes organized by table
+    │   └── 0005_rls_performance_fix.sql   # Critical RLS optimization for list performance
     └── src/
         ├── app/
         │   ├── api/

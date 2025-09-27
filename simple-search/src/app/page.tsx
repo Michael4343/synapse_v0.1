@@ -2269,15 +2269,15 @@ export default function Home() {
             >
               {user ? (
                 <>
-                  <div className="flex items-center justify-between w-full">
-                    <div className="flex-1">
+                  <div className="flex items-center justify-between w-full min-w-0">
+                    <div className="flex-1 min-w-0">
                       <span className="text-lg font-bold uppercase tracking-[0.2em] text-slate-600">Evidentia</span>
                     </div>
-                    <div className="relative flex-shrink-0" ref={accountDropdownRef}>
+                    <div className="relative flex-shrink-0 ml-2" ref={accountDropdownRef}>
                       <button
                         type="button"
                         onClick={handleAccountDropdownToggle}
-                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
                         aria-expanded={accountDropdownVisible}
                       >
                         <User className="h-4 w-4" />
