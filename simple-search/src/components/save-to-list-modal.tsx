@@ -39,7 +39,6 @@ const MODAL_BACKDROP_CLASSES = 'absolute inset-0 bg-slate-900/40 backdrop-blur-s
 const MODAL_PANEL_CLASSES = 'relative z-10 w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_30px_80px_rgba(15,23,42,0.25)] my-4'
 const MODAL_HEADER_CLASSES = 'text-center'
 const MODAL_TITLE_CLASSES = 'text-xl font-semibold text-slate-900'
-const CLOSE_BUTTON_CLASSES = 'absolute right-4 top-4 rounded-full border border-slate-200 p-1.5 text-slate-500 transition hover:border-slate-300 hover:text-slate-700'
 const RADIO_CONTAINER_CLASSES = 'space-y-3'
 const RADIO_LABEL_CLASSES = 'flex items-center gap-3 rounded-xl border border-slate-200 p-3 transition hover:border-slate-300 cursor-pointer'
 const RADIO_INPUT_CLASSES = 'h-4 w-4 border-slate-300 text-sky-600 focus:ring-sky-500'
@@ -202,14 +201,6 @@ export function SaveToListModal({ isOpen, paper, onClose, onSaved, userLists, se
       />
 
       <div className={MODAL_PANEL_CLASSES}>
-        <button
-          type="button"
-          onClick={onClose}
-          className={CLOSE_BUTTON_CLASSES}
-          aria-label="Close modal"
-        >
-          ×
-        </button>
 
         <div className={MODAL_HEADER_CLASSES}>
           <h2 className={MODAL_TITLE_CLASSES}>Save to List</h2>

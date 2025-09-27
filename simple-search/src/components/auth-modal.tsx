@@ -17,7 +17,6 @@ const MODAL_PANEL_CLASSES = 'relative z-10 w-full max-w-2xl rounded-3xl border b
 const MODAL_HEADER_CLASSES = 'text-center'
 const MODAL_TITLE_CLASSES = 'text-2xl font-semibold text-slate-900'
 const MODAL_SUBTITLE_CLASSES = 'mt-2 text-sm text-slate-600'
-const CLOSE_BUTTON_CLASSES = 'absolute right-6 top-6 rounded-full border border-slate-200 p-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-700'
 const SWITCH_CONTAINER_CLASSES = 'mt-6 text-center text-sm text-slate-600'
 const SWITCH_BUTTON_CLASSES = 'font-semibold text-sky-600 transition hover:text-sky-700'
 
@@ -55,15 +54,6 @@ export function AuthModal({ isOpen, mode, onClose, onSwitchMode }: AuthModalProp
 
       {/* Modal panel */}
       <div className={MODAL_PANEL_CLASSES}>
-        {/* Close button */}
-        <button
-          type="button"
-          onClick={onClose}
-          className={CLOSE_BUTTON_CLASSES}
-          aria-label="Close modal"
-        >
-          ×
-        </button>
 
         {/* Header */}
         <div className={MODAL_HEADER_CLASSES}>

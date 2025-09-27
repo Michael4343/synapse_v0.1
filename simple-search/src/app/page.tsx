@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { LogOut, Rss, User, UserCog, UserPlus, X } from 'lucide-react';
+import { LogOut, Rss, User, UserCog, X } from 'lucide-react';
 import { useAuth } from '../lib/auth-context';
 import { useAuthModal, getUserDisplayName } from '../lib/auth-hooks';
 import { createClient } from '../lib/supabase';
@@ -283,8 +283,6 @@ const TILE_LINK_CLASSES = 'inline-flex items-center text-xs font-semibold text-s
 const SIDEBAR_CARD_CLASSES = 'flex h-full flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
 const SIDEBAR_PRIMARY_BUTTON_CLASSES = 'flex items-center justify-center rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(56,189,248,0.2)] transition hover:-translate-y-0.5 hover:bg-sky-400';
 const SIDEBAR_SECONDARY_BUTTON_CLASSES = 'flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900';
-const SIDEBAR_TOGGLE_BUTTON_CLASSES = 'inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900';
-const SIDEBAR_FLOAT_BUTTON_CLASSES = 'absolute left-0 top-0 -translate-x-1/2 -translate-y-1/2 z-20 hidden xl:inline-flex';
 const SEARCH_SPINNER_CLASSES = 'inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent';
 const DETAIL_SAVE_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-lg bg-sky-500 px-6 sm:px-8 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-[0_12px_30px_rgba(56,189,248,0.2)] transition hover:-translate-y-0.5 hover:bg-sky-400';
 const PROFILE_CARD_CLASSES = 'rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
@@ -502,7 +500,6 @@ export default function Home() {
   const [keywordError, setKeywordError] = useState('');
   const [lastKeywordQuery, setLastKeywordQuery] = useState('');
   const [selectedPaper, setSelectedPaper] = useState<ApiSearchResult | null>(null);
-  const [sidebarVisible, setSidebarVisible] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState('');
@@ -540,7 +537,7 @@ export default function Home() {
   const [personalFeedError, setPersonalFeedError] = useState('');
   const [personalFeedLastUpdated, setPersonalFeedLastUpdated] = useState<string | null>(null);
   const [profileEditorVisible, setProfileEditorVisible] = useState(false);
-  const [signOutConfirmVisible, setSignOutConfirmVisible] = useState(false);
+  const [accountDropdownVisible, setAccountDropdownVisible] = useState(false);
   const [scrapedContent, setScrapedContent] = useState<string | null>(null);
   const [scrapedContentLoading, setScrapedContentLoading] = useState(false);
   const [scrapedContentError, setScrapedContentError] = useState('');
@@ -548,19 +545,20 @@ export default function Home() {
 
   const profileManualKeywordsRef = useRef('');
   const isMountedRef = useRef(true);
-  const signOutPopoverRef = useRef<HTMLDivElement | null>(null);
+  const accountDropdownRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
-    if (!signOutConfirmVisible) {
+    if (!accountDropdownVisible) {
       return;
     }
 
     const handleClickOutside = (event: MouseEvent) => {
-      if (!signOutPopoverRef.current) {
+      if (!accountDropdownRef.current) {
         return;
       }
 
-      if (!signOutPopoverRef.current.contains(event.target as Node)) {
-        setSignOutConfirmVisible(false);
+      if (!accountDropdownRef.current.contains(event.target as Node)) {
+        setAccountDropdownVisible(false);
       }
     };
 
@@ -568,7 +566,7 @@ export default function Home() {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [signOutConfirmVisible]);
+  }, [accountDropdownVisible]);
 
   useEffect(() => {
     profileManualKeywordsRef.current = profileManualKeywords;
@@ -576,7 +574,8 @@ export default function Home() {
 
   useEffect(() => {
     if (!user) {
-      setSignOutConfirmVisible(false);
+      // Reset account dropdown when user logs out
+      setAccountDropdownVisible(false);
     }
   }, [user]);
 
@@ -1278,19 +1277,16 @@ export default function Home() {
       <div className="space-y-5">
         <div className="space-y-2">
           <label htmlFor={keywordsId} className={PROFILE_LABEL_CLASSES}>
-            Focus keywords
+            Focus keywords <span className="text-xs font-normal text-slate-500">(separate with commas, e.g. "AI, machine learning, neural networks")</span>
           </label>
           <textarea
             id={keywordsId}
             rows={4}
             value={profileManualKeywords}
             onChange={(event) => setProfileManualKeywords(event.target.value)}
-            placeholder="Enter each keyword or topic on a new line:&#10;machine learning&#10;neural networks, deep learning&#10;computer vision"
-            className={`${PROFILE_INPUT_CLASSES} min-h-[120px]`}
+            placeholder="machine learning, neural networks, computer vision, AI, deep learning"
+            className={PROFILE_INPUT_CLASSES}
           />
-          <p className="text-xs text-slate-500">
-            Each line becomes a search cluster. Use commas to group related keywords together (e.g., &quot;AI, artificial intelligence&quot;).
-          </p>
         </div>
 
 
@@ -2216,16 +2212,18 @@ export default function Home() {
     loadPersonalFeed({ force: true, minimumQueries: 3 });
   }, [loadPersonalFeed]);
 
-  const handleSignOutRequest = useCallback(() => {
-    setSignOutConfirmVisible((previous) => !previous);
+
+  const handleAccountDropdownToggle = useCallback(() => {
+    setAccountDropdownVisible((previous) => !previous);
   }, []);
 
-  const handleCancelSignOut = useCallback(() => {
-    setSignOutConfirmVisible(false);
+  const handleProfileEdit = useCallback(() => {
+    setAccountDropdownVisible(false);
+    setProfileEditorVisible(true);
   }, []);
 
-  const handleConfirmSignOut = useCallback(() => {
-    setSignOutConfirmVisible(false);
+  const handleSignOut = useCallback(() => {
+    setAccountDropdownVisible(false);
     // Clear all user-specific cached data on sign out
     if (user) {
       try {
@@ -2263,20 +2261,11 @@ export default function Home() {
     <div className={SHELL_CLASSES}>
       <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-2 px-6 py-1">
         <div className="relative flex flex-col gap-2 xl:flex-row">
-          <button
-            type="button"
-            onClick={() => setSidebarVisible((prev) => !prev)}
-            aria-pressed={sidebarVisible}
-            aria-label={sidebarVisible ? 'Collapse library sidebar' : 'Expand library sidebar'}
-            className={`${SIDEBAR_TOGGLE_BUTTON_CLASSES} ${SIDEBAR_FLOAT_BUTTON_CLASSES}`}
-          >
-            {sidebarVisible ? '<' : '>'}
-          </button>
           <aside
-            className={`relative ${sidebarVisible ? 'flex' : 'hidden'} flex-col transition-all duration-300 ease-in-out xl:flex xl:overflow-visible ${sidebarVisible ? 'xl:basis-[20%] xl:max-w-[20%]' : 'xl:basis-0 xl:max-w-[0%]'}`}
+            className="relative flex flex-col transition-all duration-300 ease-in-out xl:flex xl:overflow-visible xl:basis-[20%] xl:max-w-[20%]"
           >
             <div
-              className={`${SIDEBAR_CARD_CLASSES} ${sidebarVisible ? '' : 'hidden'} xl:flex xl:transition-all xl:duration-300 xl:ease-out ${sidebarVisible ? 'xl:translate-x-0 xl:opacity-100' : 'xl:pointer-events-none xl:-translate-x-full xl:opacity-0'}`}
+              className={`${SIDEBAR_CARD_CLASSES} xl:flex xl:transition-all xl:duration-300 xl:ease-out xl:translate-x-0 xl:opacity-100`}
             >
               {user ? (
                 <>
@@ -2284,49 +2273,38 @@ export default function Home() {
                     <div className="space-y-1">
                       <span className="text-lg font-bold uppercase tracking-[0.2em] text-slate-600">Evidentia</span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="relative" ref={accountDropdownRef}>
                       <button
                         type="button"
-                        onClick={openProfileEditor}
-                        className={ACCOUNT_ICON_BUTTON_CLASSES}
-                        aria-label="Edit profile"
-                        title="Edit profile"
+                        onClick={handleAccountDropdownToggle}
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                        aria-expanded={accountDropdownVisible}
                       >
-                        <UserCog className="h-4 w-4" />
+                        <User className="h-4 w-4" />
+                        Account
                       </button>
-                      <div className="relative" ref={signOutPopoverRef}>
-                        <button
-                          type="button"
-                          onClick={handleSignOutRequest}
-                          className={ACCOUNT_ICON_BUTTON_CLASSES}
-                          aria-label="Sign out"
-                          title="Sign out"
-                          aria-expanded={signOutConfirmVisible}
-                        >
-                          <LogOut className="h-4 w-4" />
-                        </button>
-                        {signOutConfirmVisible && (
-                          <div className="absolute right-0 top-full mt-2 w-44 rounded-lg border border-slate-200 bg-white shadow-sm">
-                            <p className="px-3 py-2 text-xs text-slate-600">Sign out of Evidentia?</p>
-                            <div className="grid grid-cols-2 border-t border-slate-200 text-xs">
-                              <button
-                                type="button"
-                                onClick={handleCancelSignOut}
-                                className="px-3 py-2 text-slate-500 transition hover:text-slate-700"
-                              >
-                                Cancel
-                              </button>
-                              <button
-                                type="button"
-                                onClick={handleConfirmSignOut}
-                                className="px-3 py-2 text-rose-600 transition hover:text-rose-700"
-                              >
-                                Sign out
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
+
+                      {accountDropdownVisible && (
+                        <div className="absolute right-0 top-full mt-2 w-48 rounded-lg border border-slate-200 bg-white shadow-sm">
+                          <button
+                            type="button"
+                            onClick={handleProfileEdit}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                          >
+                            <UserCog className="h-4 w-4" />
+                            Edit Profile
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSignOut}
+                            className="flex w-full items-center gap-2 border-t border-slate-200 px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                          >
+                            <LogOut className="h-4 w-4" />
+                            Sign Out
+                          </button>
+                        </div>
+                      )}
+
                     </div>
                   </div>
                   <button
@@ -2413,20 +2391,11 @@ export default function Home() {
                       <button
                         type="button"
                         onClick={authModal.openLogin}
-                        className={ACCOUNT_ICON_BUTTON_CLASSES}
-                        aria-label="Log in"
-                        title="Log in"
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                        aria-label="Sign in"
                       >
                         <User className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={authModal.openSignup}
-                        className={ACCOUNT_ICON_BUTTON_CLASSES}
-                        aria-label="Register"
-                        title="Register"
-                      >
-                        <UserPlus className="h-4 w-4" />
+                        Sign In
                       </button>
                     </div>
                   </div>
@@ -2439,22 +2408,13 @@ export default function Home() {
           </aside>
 
           <section
-            className={`min-w-0 transition-all duration-300 ${sidebarVisible ? 'xl:basis-[40%]' : 'xl:basis-[50%]'} xl:grow-0 ${FEED_CARD_CLASSES}`}
+            className={`min-w-0 transition-all duration-300 xl:basis-[40%] xl:grow-0 ${FEED_CARD_CLASSES}`}
           >
 
             <header className="flex flex-col gap-0">
               <div className="flex items-center justify-between">
                 <div className="flex flex-col gap-1">
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setSidebarVisible((prev) => !prev)}
-                  aria-pressed={sidebarVisible}
-                  aria-label={sidebarVisible ? 'Hide library sidebar' : 'Show library sidebar'}
-                  className={`${SIDEBAR_TOGGLE_BUTTON_CLASSES} xl:hidden`}
-                >
-                  {sidebarVisible ? '<' : '>'}
-                </button>
               </div>
 
               <form onSubmit={handleKeywordSearch} className="relative">
@@ -2600,7 +2560,7 @@ export default function Home() {
           </section>
 
           <aside
-            className={`min-w-0 transition-all duration-300 ${sidebarVisible ? 'xl:basis-[40%]' : 'xl:basis-[50%]'} xl:grow-0 ${DETAIL_SHELL_CLASSES}`}
+            className={`min-w-0 transition-all duration-300 xl:basis-[40%] xl:grow-0 ${DETAIL_SHELL_CLASSES}`}
           >
             {selectedPaper ? (
               <div className="flex h-full flex-col gap-4">

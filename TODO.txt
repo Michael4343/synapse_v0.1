@@ -2,8 +2,14 @@ TODO
 improve list speed load - GPT codex
 fix rate limits and/or change to daily update - GPT codex
 
-Load paper when user clicks tile tah nremove button and move open pdf in line with full paper 
-add mock email author button and funny engagine add knowledge
+Personalisation
+ORCID
+website
+upload
+
+Load paper when user clicks tile tah nremove button 
+add funny engagement when hitting a paywall (see at bottom)
+Move open pdf in line with full paper and add mock email author button 
 
 Improve compile similar claims
 compile claims actually say what claims are
