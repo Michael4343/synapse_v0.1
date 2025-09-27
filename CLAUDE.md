@@ -163,6 +163,13 @@ Building a Next.js + Supabase academic research aggregation platform that allows
   - **Solution**: Stabilized dependencies by using `user?.id` instead of full `user` object, removed function dependencies from useEffect arrays
   - **Impact**: From continuous `/api/ratings` calls to normal single calls, stable feed loading
   - **Dependencies**: Changed useCallback dependencies from `[user]` to `[user?.id]` for API functions, removed circular dependencies
+- **ArXiv Full Paper Access (v0.1.7)**: Fixed scraper to access full arXiv papers instead of just abstracts:
+  - **Root cause**: Scraper prioritized abstract pages (`/abs/`) which have ~1000 chars, stopping before trying full content sources
+  - **Solution**: Reordered URL priority to try arXiv HTML versions first (`/html/`), then PDF (`/pdf/`), with abstract as fallback
+  - **Quality detection**: Added smart content assessment distinguishing full papers (5,000+ chars) from abstracts (500-2,000 chars)
+  - **Database tracking**: New fields `content_quality` and `content_type` to track scraping success and source type
+  - **UI improvements**: Quality badges show "Full Paper (HTML)" vs "Abstract Only" with source information
+  - **Impact**: ArXiv papers now display complete full text instead of just abstracts when HTML versions are available
 
 ### Current Directory Structure
 ```

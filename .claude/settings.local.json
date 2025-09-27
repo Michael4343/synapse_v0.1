@@ -16,7 +16,9 @@
       "WebFetch(domain:docs.firecrawl.dev)",
       "Bash(curl:*)",
       "Bash(for:*)",
-      "Bash(done)"
+      "Bash(done)",
+      "Read(//mnt/c/Users/mickl/Desktop/synapse/**)",
+      "WebFetch(domain:arxiv.org)"
     ],
     "deny": [],
     "ask": []

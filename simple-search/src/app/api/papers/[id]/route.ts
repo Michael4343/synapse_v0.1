@@ -9,6 +9,49 @@ const FIRECRAWL_API_URL = 'https://api.firecrawl.dev/v2/scrape'
 const SCRAPE_CACHE_HOURS = 24 * 30 // 30 days
 const GOOGLE_API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GEMINI_API_KEY
 
+function assessContentQuality(content: string, url: string): { quality: 'full_paper' | 'abstract_only' | 'insufficient'; contentType: 'html' | 'pdf' | 'abstract' | 'other' } {
+  const length = content.length
+
+  // Determine content type from URL
+  let contentType: 'html' | 'pdf' | 'abstract' | 'other' = 'other'
+  if (url.includes('/html/')) {
+    contentType = 'html'
+  } else if (url.includes('/pdf/') || url.includes('.pdf')) {
+    contentType = 'pdf'
+  } else if (url.includes('/abs/')) {
+    contentType = 'abstract'
+  }
+
+  // Quality assessment based on length and content type
+  if (length < 500) {
+    return { quality: 'insufficient', contentType }
+  }
+
+  // For HTML/PDF sources, expect much longer content for full papers
+  if (contentType === 'html' || contentType === 'pdf') {
+    if (length >= 5000) {
+      return { quality: 'full_paper', contentType }
+    } else if (length >= 1500) {
+      // Medium length could be partial content or short papers
+      return { quality: 'abstract_only', contentType } // Conservative assessment
+    } else {
+      return { quality: 'abstract_only', contentType }
+    }
+  }
+
+  // For abstract pages, anything substantial is expected to be abstract-only
+  if (contentType === 'abstract') {
+    return { quality: 'abstract_only', contentType }
+  }
+
+  // For other sources, use conservative thresholds
+  if (length >= 3000) {
+    return { quality: 'full_paper', contentType }
+  } else {
+    return { quality: 'abstract_only', contentType }
+  }
+}
+
 function buildCandidateUrls(paper: any): string[] {
   const urls: string[] = []
 
@@ -17,9 +60,11 @@ function buildCandidateUrls(paper: any): string[] {
     urls.push(paper.url)
   }
 
-  // Priority 2: ArXiv URL (free, high success rate)
+  // Priority 2: ArXiv full content sources (prioritize HTML over PDF over abstract)
   if (paper.arxiv_id) {
-    urls.push(`https://arxiv.org/abs/${paper.arxiv_id}`)
+    // Try HTML version first (full paper when available)
+    urls.push(`https://arxiv.org/html/${paper.arxiv_id}`)
+    // Fallback to PDF (full paper, requires text extraction)
     urls.push(`https://arxiv.org/pdf/${paper.arxiv_id}.pdf`)
   }
 
@@ -28,10 +73,15 @@ function buildCandidateUrls(paper: any): string[] {
     urls.push(`https://doi.org/${paper.doi}`)
   }
 
+  // Priority 4: ArXiv abstract page (fallback - contains only abstract + metadata)
+  if (paper.arxiv_id) {
+    urls.push(`https://arxiv.org/abs/${paper.arxiv_id}`)
+  }
+
   return urls
 }
 
-async function scrapeWithFirecrawl(url: string): Promise<{ content: string | null; htmlContent: string | null; status: string }> {
+async function scrapeWithFirecrawl(url: string): Promise<{ content: string | null; htmlContent: string | null; status: string; quality?: 'full_paper' | 'abstract_only' | 'insufficient'; contentType?: 'html' | 'pdf' | 'abstract' | 'other' }> {
   if (!FIRECRAWL_API_KEY) {
     console.error('Firecrawl API key is not configured.')
     return { content: null, htmlContent: null, status: 'no_api_key' }
@@ -56,10 +106,30 @@ async function scrapeWithFirecrawl(url: string): Promise<{ content: string | nul
       const firecrawlData = await firecrawlResponse.json()
       const content = firecrawlData.data?.markdown
       const htmlContent = firecrawlData.data?.html
-      if (content && content.length > 200) {
-        return { content, htmlContent, status: 'success' }
+
+      if (content && content.trim()) {
+        const qualityAssessment = assessContentQuality(content, url)
+
+        if (qualityAssessment.quality === 'insufficient') {
+          return {
+            content: null,
+            htmlContent: null,
+            status: 'content_too_short',
+            quality: qualityAssessment.quality,
+            contentType: qualityAssessment.contentType
+          }
+        }
+
+        // Return content with quality information
+        return {
+          content,
+          htmlContent,
+          status: 'success',
+          quality: qualityAssessment.quality,
+          contentType: qualityAssessment.contentType
+        }
       } else {
-        return { content: null, htmlContent: null, status: 'content_too_short' }
+        return { content: null, htmlContent: null, status: 'no_content' }
       }
     } else if (firecrawlResponse.status === 402) {
       return { content: null, htmlContent: null, status: 'paywall' }
@@ -77,7 +147,7 @@ async function scrapeWithFirecrawl(url: string): Promise<{ content: string | nul
   }
 }
 
-async function updateScrapedContent(paperId: string, content: string | null, url: string | null, status: string) {
+async function updateScrapedContent(paperId: string, content: string | null, url: string | null, status: string, quality?: string, contentType?: string) {
   try {
     await supabaseAdmin
       .from(TABLES.SEARCH_RESULTS)
@@ -86,6 +156,8 @@ async function updateScrapedContent(paperId: string, content: string | null, url
         scraped_at: new Date().toISOString(),
         scraped_url: url,
         scrape_status: status,
+        content_quality: quality || null,
+        content_type: contentType || null,
       })
       .eq('id', paperId)
   } catch (e) {
@@ -422,17 +494,28 @@ export async function GET(
     const candidateUrls = buildCandidateUrls(paper)
 
     if (candidateUrls.length > 0) {
-      let bestResult = { content: null, htmlContent: null, status: 'no_urls', url: null }
+      let bestResult: any = { content: null, htmlContent: null, status: 'no_urls', url: null, quality: null, contentType: null }
 
-      // Try each URL until we get content
+      // Try each URL with smart quality-based selection
       for (const url of candidateUrls) {
         console.log(`Attempting to scrape: ${url}`)
         const result = await scrapeWithFirecrawl(url)
 
         if (result.content) {
-          bestResult = { ...result, url }
-          console.log(`Successfully scraped content from: ${url}`)
-          break
+          console.log(`Scraped content from ${url}: ${result.content.length} chars, quality: ${result.quality}, type: ${result.contentType}`)
+
+          // If this is our first successful result, or it's better quality than what we have
+          if (!bestResult.content ||
+              (result.quality === 'full_paper' && bestResult.quality !== 'full_paper') ||
+              (result.quality === 'full_paper' && bestResult.quality === 'full_paper' && result.content.length > bestResult.content.length)) {
+            bestResult = { ...result, url }
+          }
+
+          // If we got full paper quality, we're done
+          if (result.quality === 'full_paper') {
+            console.log(`Found full paper content from: ${url}`)
+            break
+          }
         } else {
           console.log(`Failed to scrape ${url}: ${result.status}`)
         }
@@ -440,7 +523,7 @@ export async function GET(
 
       // Update database with scraped results (only for non-sample papers)
       if (!SAMPLE_PAPERS[paperId]) {
-        await updateScrapedContent(paperId, bestResult.content, bestResult.url, bestResult.status)
+        await updateScrapedContent(paperId, bestResult.content, bestResult.url, bestResult.status, bestResult.quality, bestResult.contentType)
       } else {
         console.log('Skipping database update for sample paper')
       }
@@ -471,5 +554,9 @@ export async function GET(
     ...paper,
     scrapedContent,
     processedContent,
+    // Include content quality information for UI indicators
+    contentQuality: paper.content_quality || null,
+    contentType: paper.content_type || null,
+    scrapedUrl: paper.scraped_url || null,
   })
 }

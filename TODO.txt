@@ -1,15 +1,14 @@
 TODO
 improve list speed load
+fix rate limits 
 
-Add scraper to fill out site
-fix feed list height so its more user friendly (abstract should be in line so feed tiles should scroll)
-add mock request pdf from author
+Load paper when user clicks tile tah nremove button and move open pdf in line with full paper 
+add mock email author button and funny engagine add knowledge
+
 Improve compile similar claims
-
-
-
-
+compile claims actually say what claims are
 compile similar methods to reading list
+explore these in the document
+
 Implement 5 star rating
 Make sharing feature smaller like X
-compile claims actually say what claims are

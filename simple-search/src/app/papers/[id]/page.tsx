@@ -33,6 +33,9 @@ interface PaperDetails {
   url: string | null
   scrapedContent: string | null
   processedContent: string | null
+  contentQuality: 'full_paper' | 'abstract_only' | 'insufficient' | null
+  contentType: 'html' | 'pdf' | 'abstract' | 'other' | null
+  scrapedUrl: string | null
 }
 
 function formatAuthors(authors: string[]) {
@@ -56,6 +59,39 @@ function getSectionIcon(type: string): string {
     case 'future_work': return '🔮'
     default: return '📝'
   }
+}
+
+function getContentQualityBadge(quality: string | null, contentType: string | null): JSX.Element | null {
+  if (!quality) return null
+
+  const badgeClasses = {
+    full_paper: 'bg-green-100 text-green-700',
+    abstract_only: 'bg-amber-100 text-amber-700',
+    insufficient: 'bg-red-100 text-red-700'
+  }
+
+  const contentTypeLabels = {
+    html: 'HTML',
+    pdf: 'PDF',
+    abstract: 'Abstract',
+    other: 'Other'
+  }
+
+  const qualityLabels = {
+    full_paper: 'Full Paper',
+    abstract_only: 'Abstract Only',
+    insufficient: 'Insufficient'
+  }
+
+  const className = badgeClasses[quality as keyof typeof badgeClasses] || 'bg-slate-100 text-slate-600'
+  const qualityLabel = qualityLabels[quality as keyof typeof qualityLabels] || quality
+  const typeLabel = contentType ? contentTypeLabels[contentType as keyof typeof contentTypeLabels] || contentType : ''
+
+  return (
+    <span className={`px-2 py-1 text-xs rounded-full font-medium ${className}`}>
+      {qualityLabel}{typeLabel && ` (${typeLabel})`}
+    </span>
+  )
 }
 
 function PaperSection({ section }: { section: PaperSection }) {
@@ -289,7 +325,12 @@ function PaperDetailPage() {
             <ProcessedPaperContent processedContent={paper.processedContent} />
           ) : paper.scrapedContent ? (
             <div className="mt-8">
-              <h3 className="text-lg font-semibold text-slate-800 mb-4">Full Paper (Raw Content)</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-slate-800">
+                  {paper.contentQuality === 'full_paper' ? 'Full Paper (Raw Content)' : 'Paper Content'}
+                </h3>
+                {getContentQualityBadge(paper.contentQuality, paper.contentType)}
+              </div>
               <div className="prose prose-slate prose-lg max-w-none prose-headings:text-slate-900 prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-p:text-slate-700 prose-p:leading-relaxed prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline prose-code:text-slate-800 prose-code:bg-slate-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-slate-50 prose-pre:border prose-pre:border-slate-200 prose-blockquote:border-l-blue-500 prose-blockquote:bg-blue-50 prose-blockquote:py-2 prose-blockquote:px-4 prose-table:text-sm prose-th:bg-slate-50 prose-td:border-slate-200">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
@@ -319,8 +360,16 @@ function PaperDetailPage() {
             </div>
           ) : (
             <div className="mt-8 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center text-sm text-slate-500">
-              <p>Full paper content is not available.</p>
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <p>Full paper content is not available.</p>
+                {paper.contentQuality && getContentQualityBadge(paper.contentQuality, paper.contentType)}
+              </div>
               {paper.doi && <p className="mt-2">This may be due to a paywall or other access restrictions.</p>}
+              {paper.scrapedUrl && (
+                <p className="mt-2 text-xs text-slate-400">
+                  Attempted to scrape from: {paper.scrapedUrl}
+                </p>
+              )}
             </div>
           )}
         </article>

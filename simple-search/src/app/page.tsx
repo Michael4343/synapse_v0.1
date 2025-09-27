@@ -2724,7 +2724,7 @@ export default function Home() {
                         </>
                       ) : (
                         <>
-                          📄 View Full Paper
+                          Add to Paper
                         </>
                       )}
                     </button>
@@ -2735,7 +2735,7 @@ export default function Home() {
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700"
                       >
-                        📋 Open PDF
+                        Open PDF
                       </a>
                     )}
                   </div>
