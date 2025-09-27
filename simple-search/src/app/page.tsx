@@ -60,6 +60,21 @@ interface PaperRating {
   updated_at: string
 }
 
+interface PaperSection {
+  type: string
+  title: string
+  content: string
+}
+
+interface ProcessedContent {
+  title: string
+  sections: PaperSection[]
+  metadata: {
+    processed_successfully: boolean
+    content_quality: string
+  }
+}
+
 const FEED_SKELETON_ITEMS = Array.from({ length: 6 })
 
 // Sample papers to show in default feed
@@ -125,6 +140,71 @@ const SAMPLE_PAPERS: ApiSearchResult[] = [
     publicationDate: '2018-10-11'
   }
 ]
+
+function getSectionIcon(type: string): string {
+  return ''
+}
+
+function PaperSection({ section }: { section: PaperSection }) {
+  return (
+    <section className="border-b border-slate-200 last:border-b-0 pb-4 last:pb-0">
+      <h4 className="text-lg font-semibold text-slate-800 mb-3">
+        {section.title}
+      </h4>
+      <div className="prose prose-slate prose-sm max-w-none prose-headings:text-slate-800 prose-h4:text-base prose-h5:text-sm prose-h6:text-xs prose-p:text-slate-700 prose-p:leading-relaxed prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline prose-code:text-slate-800 prose-code:bg-slate-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-slate-50 prose-pre:border prose-pre:border-slate-200 prose-blockquote:border-l-blue-500 prose-blockquote:bg-blue-50 prose-blockquote:py-2 prose-blockquote:px-3 prose-strong:text-slate-800 prose-em:text-slate-700">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          {section.content}
+        </ReactMarkdown>
+      </div>
+    </section>
+  )
+}
+
+function ProcessedPaperContent({ processedContent }: { processedContent: string }) {
+  try {
+    const parsed: ProcessedContent = JSON.parse(processedContent)
+
+    if (!parsed.sections || !Array.isArray(parsed.sections)) {
+      throw new Error('Invalid section structure')
+    }
+
+    const validSections = parsed.sections.filter(section => section.content && section.content.trim().length > 0)
+
+    if (validSections.length === 0) {
+      throw new Error('No valid sections with content')
+    }
+
+    return (
+      <div>
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500 mb-4">Full Paper</h3>
+        <div className="bg-white rounded-lg border border-slate-200 divide-y divide-slate-200">
+          {validSections.map((section, index) => (
+            <div key={index} className="p-4">
+              <PaperSection section={section} />
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  } catch (error) {
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+        <p className="text-sm text-amber-700">
+          Unable to parse structured content. Falling back to raw content display.
+        </p>
+        <details className="mt-2">
+          <summary className="text-xs cursor-pointer">Debug Info</summary>
+          <pre className="mt-2 text-xs bg-white p-2 rounded overflow-auto max-h-32">
+            Error: {error instanceof Error ? error.message : String(error)}
+            {'\n'}
+            Content: {processedContent?.slice(0, 300)}...
+          </pre>
+        </details>
+      </div>
+    )
+  }
+}
+
 type TileActionId = 'compile-methods' | 'compile-claims' | 'rate' | 'share'
 type CompileActionId = Extract<TileActionId, 'compile-methods' | 'compile-claims'>
 
@@ -466,6 +546,7 @@ export default function Home() {
   const [scrapedContent, setScrapedContent] = useState<string | null>(null);
   const [scrapedContentLoading, setScrapedContentLoading] = useState(false);
   const [scrapedContentError, setScrapedContentError] = useState('');
+  const [scrapedContentIsStructured, setScrapedContentIsStructured] = useState(false);
 
   const profileManualKeywordsRef = useRef('');
   const isMountedRef = useRef(true);
@@ -1730,9 +1811,28 @@ export default function Home() {
       }
 
       const data = await response.json();
-      setScrapedContent(data.scrapedContent || null);
 
-      if (!data.scrapedContent) {
+      // Check if we have structured processed content
+      if (data.processedContent) {
+        try {
+          // Try to parse as JSON to validate it's structured content
+          JSON.parse(data.processedContent);
+          setScrapedContent(data.processedContent);
+          setScrapedContentIsStructured(true);
+        } catch (error) {
+          // If JSON parsing fails, treat as raw content
+          console.warn('processedContent is not valid JSON, treating as raw content');
+          setScrapedContent(data.processedContent);
+          setScrapedContentIsStructured(false);
+        }
+      } else if (data.scrapedContent) {
+        // Fall back to raw scraped content
+        setScrapedContent(data.scrapedContent);
+        setScrapedContentIsStructured(false);
+      } else {
+        // No content available
+        setScrapedContent(null);
+        setScrapedContentIsStructured(false);
         setScrapedContentError('Full paper content is not available.');
       }
     } catch (error) {
@@ -2609,31 +2709,9 @@ export default function Home() {
                   </p>
                 </div>
 
-                {/* Scraped content section */}
-                {scrapedContent && (
-                  <div>
-                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Full Paper</h3>
-                    <div className="mt-2 prose prose-slate prose-sm max-w-none prose-headings:text-slate-900 prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-p:text-slate-700 prose-p:leading-relaxed prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline prose-code:text-slate-800 prose-code:bg-slate-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-slate-50 prose-pre:border prose-pre:border-slate-200 prose-blockquote:border-l-blue-500 prose-blockquote:bg-blue-50 prose-blockquote:py-2 prose-blockquote:px-3">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                      >
-                        {scrapedContent}
-                      </ReactMarkdown>
-                    </div>
-                  </div>
-                )}
-
-                {scrapedContentError && (
-                  <div>
-                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Full Paper</h3>
-                    <div className="mt-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-600">
-                      {scrapedContentError}
-                    </div>
-                  </div>
-                )}
-
-                <div className={DETAIL_METADATA_CLASSES}>
-                  {selectedPaper.id.startsWith('sample-') ? (
+                {/* Action buttons - moved above scraped content */}
+                {selectedPaper.id.startsWith('sample-') && (
+                  <div className="flex gap-2">
                     <button
                       onClick={handleViewFullPaper}
                       disabled={scrapedContentLoading}
@@ -2650,21 +2728,63 @@ export default function Home() {
                         </>
                       )}
                     </button>
-                  ) : (
-                    selectedPaperPrimaryLink && (
-                      <p>
-                        <a
-                          href={selectedPaperPrimaryLink.href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={DETAIL_LINK_CLASSES}
-                        >
-                          {selectedPaperPrimaryLink.label}
-                        </a>
-                      </p>
-                    )
-                  )}
-                </div>
+                    {selectedPaper.arxivId && (
+                      <a
+                        href={`https://arxiv.org/pdf/${selectedPaper.arxivId}.pdf`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700"
+                      >
+                        📋 Open PDF
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                {/* Scraped content section */}
+                {scrapedContent && (
+                  <div>
+                    {scrapedContentIsStructured ? (
+                      <ProcessedPaperContent processedContent={scrapedContent} />
+                    ) : (
+                      <div>
+                        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Full Paper</h3>
+                        <div className="mt-2 prose prose-slate prose-sm max-w-none prose-headings:text-slate-900 prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-p:text-slate-700 prose-p:leading-relaxed prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline prose-code:text-slate-800 prose-code:bg-slate-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-slate-50 prose-pre:border prose-pre:border-slate-200 prose-blockquote:border-l-blue-500 prose-blockquote:bg-blue-50 prose-blockquote:py-2 prose-blockquote:px-3">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                          >
+                            {scrapedContent}
+                          </ReactMarkdown>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {scrapedContentError && (
+                  <div>
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Full Paper</h3>
+                    <div className="mt-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-600">
+                      {scrapedContentError}
+                    </div>
+                  </div>
+                )}
+
+                {/* DOI/External links for non-sample papers */}
+                {!selectedPaper.id.startsWith('sample-') && selectedPaperPrimaryLink && (
+                  <div className={DETAIL_METADATA_CLASSES}>
+                    <p>
+                      <a
+                        href={selectedPaperPrimaryLink.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={DETAIL_LINK_CLASSES}
+                      >
+                        {selectedPaperPrimaryLink.label}
+                      </a>
+                    </p>
+                  </div>
+                )}
               </section>
             </div>
           ) : (

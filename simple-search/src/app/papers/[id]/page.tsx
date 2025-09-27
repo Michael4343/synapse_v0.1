@@ -6,6 +6,21 @@ import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
+interface PaperSection {
+  type: string
+  title: string
+  content: string
+}
+
+interface ProcessedContent {
+  title: string
+  sections: PaperSection[]
+  metadata: {
+    processed_successfully: boolean
+    content_quality: string
+  }
+}
+
 interface PaperDetails {
   id: string
   title: string
@@ -17,12 +32,114 @@ interface PaperDetails {
   doi: string | null
   url: string | null
   scrapedContent: string | null
+  processedContent: string | null
 }
 
 function formatAuthors(authors: string[]) {
   if (!authors || authors.length === 0) return 'Author information unavailable'
   if (authors.length <= 5) return authors.join(', ')
   return `${authors.slice(0, 5).join(', ')} et al.`
+}
+
+function getSectionIcon(type: string): string {
+  switch (type) {
+    case 'abstract': return '📄'
+    case 'introduction': return '🚀'
+    case 'methods': return '🔬'
+    case 'results': return '📊'
+    case 'discussion': return '💭'
+    case 'conclusion': return '🎯'
+    case 'related_work': return '📚'
+    case 'background': return '🏗️'
+    case 'evaluation': return '⚖️'
+    case 'limitations': return '⚠️'
+    case 'future_work': return '🔮'
+    default: return '📝'
+  }
+}
+
+function PaperSection({ section }: { section: PaperSection }) {
+  const icon = getSectionIcon(section.type)
+
+  return (
+    <section className="border-b border-slate-200 last:border-b-0 pb-6 last:pb-0">
+      <h3 className="flex items-center gap-2 text-xl font-semibold text-slate-800 mb-4">
+        <span className="text-lg">{icon}</span>
+        {section.title}
+      </h3>
+      <div className="prose prose-slate prose-lg max-w-none prose-headings:text-slate-800 prose-h4:text-lg prose-h5:text-base prose-h6:text-sm prose-p:text-slate-700 prose-p:leading-relaxed prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline prose-code:text-slate-800 prose-code:bg-slate-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-slate-50 prose-pre:border prose-pre:border-slate-200 prose-blockquote:border-l-blue-500 prose-blockquote:bg-blue-50 prose-blockquote:py-2 prose-blockquote:px-4 prose-strong:text-slate-800 prose-em:text-slate-700">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          {section.content}
+        </ReactMarkdown>
+      </div>
+    </section>
+  )
+}
+
+function ProcessedPaperContent({ processedContent }: { processedContent: string }) {
+  console.log('ProcessedPaperContent called with:', processedContent?.slice(0, 200) + '...')
+
+  try {
+    const parsed: ProcessedContent = JSON.parse(processedContent)
+    console.log('Parsed JSON successfully:', parsed)
+
+    if (!parsed.sections || !Array.isArray(parsed.sections)) {
+      console.error('Invalid sections structure:', parsed.sections)
+      throw new Error('Invalid section structure')
+    }
+
+    // Filter out empty sections and count valid ones
+    const validSections = parsed.sections.filter(section => section.content && section.content.trim().length > 0)
+    console.log('Valid sections found:', validSections.length, 'out of', parsed.sections.length)
+
+    if (validSections.length === 0) {
+      console.warn('No sections with content found')
+      throw new Error('No valid sections with content')
+    }
+
+    return (
+      <div className="mt-8">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-xl font-semibold text-slate-800">Structured Paper Content</h3>
+          <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+            parsed.metadata?.content_quality === 'high'
+              ? 'bg-green-100 text-green-700'
+              : parsed.metadata?.content_quality === 'medium'
+              ? 'bg-yellow-100 text-yellow-700'
+              : 'bg-slate-100 text-slate-600'
+          }`}>
+            {parsed.metadata?.content_quality || 'processed'} quality
+          </span>
+        </div>
+
+        <div className="bg-white rounded-xl border border-slate-200 divide-y divide-slate-200">
+          {validSections.map((section, index) => (
+            <div key={index} className="p-6">
+              <PaperSection section={section} />
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  } catch (error) {
+    console.error('Failed to parse processed content:', error)
+    console.error('Raw content that failed:', processedContent)
+    return (
+      <div className="mt-8 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+        <p className="text-sm text-amber-700">
+          Unable to parse structured content. Falling back to raw content display.
+        </p>
+        <details className="mt-2">
+          <summary className="text-xs cursor-pointer">Debug Info</summary>
+          <pre className="mt-2 text-xs bg-white p-2 rounded overflow-auto max-h-40">
+            Error: {error instanceof Error ? error.message : String(error)}
+            {'\n'}
+            Content: {processedContent?.slice(0, 500)}...
+          </pre>
+        </details>
+      </div>
+    )
+  }
 }
 
 function PaperDetailPage() {
@@ -44,6 +161,9 @@ function PaperDetailPage() {
             throw new Error(errorData.error || 'Failed to fetch paper details')
           }
           const data = await response.json()
+          console.log('Paper data received:', data)
+          console.log('Has processedContent:', !!data.processedContent)
+          console.log('Has scrapedContent:', !!data.scrapedContent)
           setPaper(data)
         } catch (e) {
           setError((e as Error).message)
@@ -165,9 +285,11 @@ function PaperDetailPage() {
             </button>
           </div>
 
-          {paper.scrapedContent ? (
+          {paper.processedContent ? (
+            <ProcessedPaperContent processedContent={paper.processedContent} />
+          ) : paper.scrapedContent ? (
             <div className="mt-8">
-              <h3 className="text-lg font-semibold text-slate-800 mb-4">Full Paper</h3>
+              <h3 className="text-lg font-semibold text-slate-800 mb-4">Full Paper (Raw Content)</h3>
               <div className="prose prose-slate prose-lg max-w-none prose-headings:text-slate-900 prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-p:text-slate-700 prose-p:leading-relaxed prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline prose-code:text-slate-800 prose-code:bg-slate-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-slate-50 prose-pre:border prose-pre:border-slate-200 prose-blockquote:border-l-blue-500 prose-blockquote:bg-blue-50 prose-blockquote:py-2 prose-blockquote:px-4 prose-table:text-sm prose-th:bg-slate-50 prose-td:border-slate-200">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
