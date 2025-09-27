@@ -16,14 +16,11 @@ import remarkGfm from 'remark-gfm';
 import {
   getCachedData,
   setCachedData,
-  isCacheStale,
   clearCachedData,
   PERSONAL_FEED_CACHE_KEY,
   PERSONAL_FEED_TTL_MS,
   LIST_METADATA_CACHE_KEY,
-  LIST_METADATA_TTL_MS,
-  LIST_ITEMS_CACHE_KEY,
-  LIST_ITEMS_TTL_MS
+  LIST_ITEMS_CACHE_KEY
 } from '../lib/cache-utils';
 
 interface ApiSearchResult {
@@ -526,6 +523,7 @@ export default function Home() {
   const [paperToRate, setPaperToRate] = useState<ApiSearchResult | null>(null);
   const [currentPaperRating, setCurrentPaperRating] = useState<PaperRating | null>(null);
   const [paperRatings, setPaperRatings] = useState<Map<string, PaperRating>>(new Map());
+  const [isUpdatingListMetadata, setIsUpdatingListMetadata] = useState(false);
   const [userLists, setUserLists] = useState<UserListSummary[]>([]);
   const [listsLoading, setListsLoading] = useState(false);
 
@@ -598,7 +596,7 @@ export default function Home() {
 
     // Check for cached data first
     if (!force) {
-      const cachedLists = getCachedData<UserListSummary[]>(listCacheKey, LIST_METADATA_TTL_MS);
+      const cachedLists = getCachedData<UserListSummary[]>(listCacheKey);
       if (cachedLists) {
         setUserLists(cachedLists);
         return; // Use cached data
@@ -607,38 +605,23 @@ export default function Home() {
 
     setListsLoading(true);
     try {
-      // Inline auth headers to avoid dependency issues
-      const supabase = createClient();
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      // Simple fetch - no auth headers needed since we're authenticated
+      const response = await fetch('/api/lists');
 
-      const response = await fetch('/api/lists', {
-        headers,
-      });
       if (response.ok) {
         const data = await response.json();
         const lists = Array.isArray(data.lists) ? data.lists : [];
-        setUserLists((previous) => {
-          const readyLists: UserListSummary[] = lists.map((list: any) => ({
-            id: list.id,
-            name: list.name,
-            items_count: typeof list.items_count === 'number' ? list.items_count : 0,
-            status: 'ready' as const,
-          }));
 
-          // Cache the successful result
-          setCachedData(listCacheKey, readyLists, LIST_METADATA_TTL_MS);
+        const readyLists: UserListSummary[] = lists.map((list: any) => ({
+          id: list.id,
+          name: list.name,
+          items_count: typeof list.items_count === 'number' ? list.items_count : 0,
+          status: 'ready' as const,
+        }));
 
-          if (previous.length === 0) {
-            return readyLists;
-          }
-
-          const readyIds = new Set(readyLists.map((list) => list.id));
-          const placeholders = previous.filter((list) => list.status === 'loading' && !readyIds.has(list.id));
-
-          return [...placeholders, ...readyLists];
-        });
+        // Cache the successful result
+        setCachedData(listCacheKey, readyLists);
+        setUserLists(readyLists);
       }
     } catch (error) {
       console.error('Failed to fetch user lists:', error);
@@ -650,26 +633,27 @@ export default function Home() {
   const fetchListItems = useCallback(async (listId: number, force = false) => {
     if (!user) return;
 
-    // Check if we have cached items for this list first
-    if (!force && cachedListItems.has(listId)) {
-      const cachedItems = cachedListItems.get(listId)!;
-      setListItems(cachedItems);
-      if (cachedItems.length > 0) {
-        setSelectedPaper(cachedItems[0]);
-      }
-      return; // Use cached data instantly
-    }
+    const listItemsCacheKey = `${LIST_ITEMS_CACHE_KEY}-${user.id}-${listId}`;
 
-    // Also check localStorage cache
+    // Check if we have cached items for this list first
     if (!force) {
-      const listItemsCacheKey = `${LIST_ITEMS_CACHE_KEY}-${user.id}-${listId}`;
-      const cachedItems = getCachedData<ApiSearchResult[]>(listItemsCacheKey, LIST_ITEMS_TTL_MS);
+      const cachedItems = cachedListItems.get(listId);
       if (cachedItems) {
         setListItems(cachedItems);
-        // Also update memory cache
-        setCachedListItems(prev => new Map(prev).set(listId, cachedItems));
         if (cachedItems.length > 0) {
           setSelectedPaper(cachedItems[0]);
+        }
+        return; // Use cached data instantly
+      }
+
+      // Also check localStorage cache
+      const localCachedItems = getCachedData<ApiSearchResult[]>(listItemsCacheKey);
+      if (localCachedItems) {
+        setListItems(localCachedItems);
+        // Also update memory cache
+        setCachedListItems(prev => new Map(prev).set(listId, localCachedItems));
+        if (localCachedItems.length > 0) {
+          setSelectedPaper(localCachedItems[0]);
         }
         return;
       }
@@ -678,15 +662,9 @@ export default function Home() {
     setListItemsLoading(true);
     setListItemsLoadingMessage('Loading list items…');
     try {
-      // Inline auth headers to avoid dependency issues
-      const supabase = createClient();
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      // Simple fetch - no auth headers needed since we're authenticated
+      const response = await fetch(`/api/lists/${listId}/items`);
 
-      const response = await fetch(`/api/lists/${listId}/items`, {
-        headers,
-      });
       if (response.ok) {
         const data = await response.json();
         const papers = data.list?.items?.map((item: any) => item.paper_data) || [];
@@ -695,8 +673,7 @@ export default function Home() {
 
         // Cache in both memory and localStorage
         setCachedListItems(prev => new Map(prev).set(listId, papers));
-        const listItemsCacheKey = `${LIST_ITEMS_CACHE_KEY}-${user.id}-${listId}`;
-        setCachedData(listItemsCacheKey, papers, LIST_ITEMS_TTL_MS);
+        setCachedData(listItemsCacheKey, papers);
 
         // Auto-select first paper if available
         if (papers.length > 0) {
@@ -825,9 +802,24 @@ export default function Home() {
         }
       }
 
-      if (personalFeedLoading && !force) {
-        return;
+      // Enhanced guard: prevent multiple simultaneous calls even with force=true
+      // Allow force override only if last call was >10 seconds ago
+      const lastCallKey = `${PERSONAL_FEED_CACHE_KEY}-last-call-${user.id}`;
+      const lastCallTime = localStorage.getItem(lastCallKey);
+      const now = Date.now();
+
+      if (personalFeedLoading) {
+        if (!force) {
+          console.log('Personal feed: skipping call - already loading');
+          return;
+        } else if (lastCallTime && (now - parseInt(lastCallTime)) < 10000) {
+          console.log('Personal feed: skipping forced call - last call was less than 10s ago');
+          return;
+        }
       }
+
+      // Record this call time
+      localStorage.setItem(lastCallKey, now.toString());
 
       const sortedClusters = [...activePersonalization.topic_clusters].sort((a, b) => {
         const priorityA = typeof a.priority === 'number' ? a.priority : Number.MAX_SAFE_INTEGER;
@@ -907,9 +899,10 @@ export default function Home() {
 
           // Add delay between queries to respect rate limits (except for first query)
           if (queryIndex > 0) {
-            // Increase base delay and add jitter to spread out requests
-            const baseDelay = 3000; // Increased from 2s to 3s
-            const jitter = Math.random() * 1000; // 0-1s random jitter
+            // Much more conservative delays since API is rate limiting at ~2-4 requests
+            // Without API key, be extremely conservative
+            const baseDelay = 15000; // 15 seconds between queries for anonymous users
+            const jitter = Math.random() * 3000; // 0-3s random jitter
             const delay = baseDelay + jitter;
 
             console.log(`Personal feed: waiting ${Math.round(delay)}ms before query ${queryIndex + 1}/${queries.length}`);
@@ -1047,11 +1040,23 @@ export default function Home() {
       return;
     }
 
-    // Only auto-load personal feed once per user, don't reload on profile changes
-    if (personalFeedResults.length === 0) {
-      loadPersonalFeed({ minimumQueries: 3 });
+    // Wait for profile to load before attempting personal feed
+    if (profileLoading) {
+      return;
     }
-  }, [user?.id]); // Removed profile dependencies to prevent constant reloading
+
+    // Only auto-load personal feed once per user, after profile is loaded
+    if (personalFeedResults.length === 0) {
+      if (profilePersonalization && profilePersonalization.topic_clusters?.length > 0) {
+        console.log('Auto-loading personal feed after profile loaded');
+        loadPersonalFeed({ minimumQueries: 3 });
+      } else {
+        // Show helpful message for users without keywords
+        setPersonalFeedError('Set up your research keywords in the profile section to get personalized paper recommendations.');
+        console.log('Profile loaded but no keywords found - prompting user to add keywords');
+      }
+    }
+  }, [user?.id, profileLoading, profilePersonalization, personalFeedResults.length, loadPersonalFeed]);
 
   useEffect(() => {
     if (!user) {
@@ -1638,10 +1643,14 @@ export default function Home() {
   };
 
   const handlePaperSaved = (listId?: number) => {
-    console.log('Paper saved successfully!');
+    const startTime = Date.now();
+    console.log('📝 [PERF] handlePaperSaved started');
 
     // Invalidate list metadata cache to reflect updated item counts
     if (user) {
+      // Set flag to prevent unnecessary rating fetches during list metadata update
+      setIsUpdatingListMetadata(true);
+
       const listCacheKey = `${LIST_METADATA_CACHE_KEY}-${user.id}`;
       clearCachedData(listCacheKey);
 
@@ -1659,8 +1668,15 @@ export default function Home() {
       }
 
       // Refresh list metadata to show updated counts
-      fetchUserLists(true);
+      console.log('📝 [PERF] Refreshing user lists after save');
+      fetchUserLists(true).finally(() => {
+        // Clear the flag after list update is complete
+        console.log('📝 [PERF] List metadata update completed, re-enabling rating fetch');
+        setIsUpdatingListMetadata(false);
+      });
     }
+
+    console.log(`📝 [PERF] handlePaperSaved completed in ${Date.now() - startTime}ms`);
   };
 
   const fetchPaperRating = useCallback(async (paperId: string) => {
@@ -1682,14 +1698,25 @@ export default function Home() {
   const fetchedRatingsRef = useRef(new Set<string>());
 
   const fetchPaperRatings = useCallback(async (papers: ApiSearchResult[]) => {
-    if (!user || papers.length === 0) return;
+    const startTime = Date.now();
+    console.log(`🔄 [PERF] fetchPaperRatings called with ${papers.length} papers`);
+
+    if (!user || papers.length === 0) {
+      console.log(`🔄 [PERF] fetchPaperRatings skipped - no user or papers`);
+      return;
+    }
 
     // Filter to only papers we haven't fetched ratings for yet
     const unfetchedPapers = papers.filter(paper =>
       paper.semanticScholarId && !fetchedRatingsRef.current.has(paper.semanticScholarId)
     );
 
-    if (unfetchedPapers.length === 0) return; // All ratings already cached
+    if (unfetchedPapers.length === 0) {
+      console.log(`🔄 [PERF] fetchPaperRatings skipped - all ratings already cached (${Date.now() - startTime}ms)`);
+      return; // All ratings already cached
+    }
+
+    console.log(`🔄 [PERF] fetchPaperRatings fetching ratings for ${unfetchedPapers.length} unfetched papers`);
 
     try {
       // Batch fetch ratings for all unfetched papers
@@ -1745,6 +1772,8 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Failed to fetch paper ratings:', error);
+    } finally {
+      console.log(`🔄 [PERF] fetchPaperRatings completed in ${Date.now() - startTime}ms`);
     }
   }, [user?.id]);
 
@@ -1755,25 +1784,40 @@ export default function Home() {
     }
   }, [user]);
 
-  // Consolidated ratings fetching - fetch ratings for all visible papers
+  // Only fetch ratings for search results and personal feed - NOT for list items
+  // List items should load instantly without external API calls
   useEffect(() => {
-    if (!user) return;
+    const startTime = Date.now();
+    console.log('🔄 [PERF] Rating fetch useEffect triggered');
 
-    const allVisiblePapers = [
+    if (!user) {
+      console.log('🔄 [PERF] Rating fetch skipped - no user');
+      return;
+    }
+
+    // Skip rating fetch if we're just updating list metadata to prevent unnecessary API calls
+    if (isUpdatingListMetadata) {
+      console.log('🔄 [PERF] Rating fetch skipped - updating list metadata');
+      return;
+    }
+
+    const searchAndFeedPapers = [
       ...keywordResults,
-      ...personalFeedResults,
-      ...listItems
+      ...personalFeedResults
+      // Removed listItems to prevent external API calls during list loading
     ];
 
     // Remove duplicates by semanticScholarId
-    const uniquePapers = allVisiblePapers.filter((paper, index, arr) =>
+    const uniquePapers = searchAndFeedPapers.filter((paper, index, arr) =>
       paper.semanticScholarId && arr.findIndex(p => p.semanticScholarId === paper.semanticScholarId) === index
     );
+
+    console.log(`🔄 [PERF] Rating fetch effect: ${uniquePapers.length} unique papers (${Date.now() - startTime}ms)`);
 
     if (uniquePapers.length > 0) {
       fetchPaperRatings(uniquePapers);
     }
-  }, [keywordResults, personalFeedResults, listItems, user?.id]);
+  }, [keywordResults, personalFeedResults, user?.id, isUpdatingListMetadata]); // Removed fetchPaperRatings to fix infinite loop
 
   const handleRateSelectedPaper = async () => {
     if (!selectedPaper) return;

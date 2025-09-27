@@ -85,11 +85,16 @@ export async function GET(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  const startTime = Date.now()
+  console.log('📊 [PERF] List Items API started')
+
   try {
     const supabase = await createClient()
 
     // Get current user
+    const authStart = Date.now()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
+    console.log(`📊 [PERF] Auth check: ${Date.now() - authStart}ms`)
 
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -101,33 +106,40 @@ export async function GET(
       return NextResponse.json({ error: 'Invalid list ID' }, { status: 400 })
     }
 
-    // Verify the list belongs to the current user and get items
-    const { data: listWithItems, error } = await supabase
+    // Fast approach: verify ownership first, then get items separately
+    // This avoids the RLS subquery performance issue
+
+    // 1. Verify list exists and belongs to user
+    const listCheckStart = Date.now()
+    const { data: listInfo, error: listError } = await supabase
       .from('user_lists')
-      .select(`
-        id,
-        name,
-        created_at,
-        list_items(
-          id,
-          paper_data,
-          created_at
-        )
-      `)
+      .select('id, name, created_at')
       .eq('id', listId)
       .eq('user_id', user.id)
       .single()
+    console.log(`📊 [PERF] List ownership check: ${Date.now() - listCheckStart}ms`)
 
-    if (error || !listWithItems) {
+    if (listError || !listInfo) {
       return NextResponse.json({ error: 'List not found' }, { status: 404 })
     }
 
+    // 2. Get list items separately (much faster with fixed RLS policies)
+    const itemsStart = Date.now()
+    const { data: items, error: itemsError } = await supabase
+      .from('list_items')
+      .select('id, paper_data, created_at')
+      .eq('list_id', listId)
+      .order('created_at', { ascending: false })
+    console.log(`📊 [PERF] Items query: ${Date.now() - itemsStart}ms`)
+
+    // Return list info with items (empty array if items query failed)
+    console.log(`📊 [PERF] Total API time: ${Date.now() - startTime}ms`)
     return NextResponse.json({
       list: {
-        id: listWithItems.id,
-        name: listWithItems.name,
-        created_at: listWithItems.created_at,
-        items: listWithItems.list_items || []
+        id: listInfo.id,
+        name: listInfo.name,
+        created_at: listInfo.created_at,
+        items: items || []
       }
     })
 

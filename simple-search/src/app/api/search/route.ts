@@ -158,7 +158,24 @@ function recordSuccess() {
 function recordFailure() {
   consecutiveFailures++
   lastFailureTime = Date.now()
-  console.log(`Rate limiting: failure ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}`)
+
+  // Debug: Show current rate limiting state when failure occurs
+  cleanOldTimestamps()
+  const hasApiKey = Boolean(process.env.SEMANTIC_SCHOLAR_API_KEY)
+  const limit = hasApiKey ? RATE_LIMIT_WITH_KEY : RATE_LIMIT_WITHOUT_KEY
+  const remaining = getRemainingRequests(hasApiKey)
+  const windowStart = Date.now() - RATE_LIMIT_WINDOW_MS
+  const recentRequests = requestTimestamps.filter(t => t > windowStart)
+
+  console.log(`🚨 Rate limiting: failure ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}`)
+  console.log(`📊 Rate limit state: ${recentRequests.length}/${limit} requests in last 5min (${remaining} remaining)`)
+  console.log(`⏰ Recent requests: ${recentRequests.map(t => new Date(t).toISOString().slice(11, 19)).join(', ')}`)
+  console.log(`🔑 API Key configured: ${hasApiKey ? 'YES' : 'NO'} (limit: ${limit})`)
+
+  // Additional debugging for unexpected rate limits
+  if (recentRequests.length < 10) {
+    console.log(`⚠️  Unexpected 429 with only ${recentRequests.length} requests - Semantic Scholar may have stricter limits`)
+  }
 
   if (consecutiveFailures === MAX_CONSECUTIVE_FAILURES) {
     console.log(`Circuit breaker: opening due to ${MAX_CONSECUTIVE_FAILURES} consecutive failures`)
@@ -299,10 +316,10 @@ async function performSemanticScholarRequest(query: string, year: number | null,
 
     if (response.status === 429 && attempt <= 5) {
       // Exponential backoff with jitter for 429 errors
-      // Start with 30 seconds, double each time, add randomness
-      const baseDelay = 30 * 1000 * Math.pow(2, attempt - 1)
-      const jitter = Math.random() * 10 * 1000 // 0-10 second jitter
-      const delay = Math.min(baseDelay + jitter, 5 * 60 * 1000) // Max 5 minutes
+      // Start with 2 seconds, double each time, add randomness - much more reasonable for user-facing requests
+      const baseDelay = 2 * 1000 * Math.pow(2, attempt - 1)
+      const jitter = Math.random() * 2 * 1000 // 0-2 second jitter
+      const delay = Math.min(baseDelay + jitter, 30 * 1000) // Max 30 seconds
 
       console.log(`429 rate limit hit, waiting ${delay}ms before retry ${attempt + 1}/5`)
       await waitFor(delay)
@@ -472,6 +489,19 @@ function buildResponsePayload(results: StoredSearchResult[]) {
 
 export async function POST(request: NextRequest) {
   try {
+    // Development: Clear stale rate limit state on first request after restart
+    if (process.env.NODE_ENV === 'development' && requestTimestamps.length > 0) {
+      const oldestTimestamp = requestTimestamps[0] || 0
+      const timeSinceOldest = Date.now() - oldestTimestamp
+
+      // If oldest request is >10 minutes old, likely from previous session - clear state
+      if (timeSinceOldest > 10 * 60 * 1000) {
+        console.log(`🧹 Dev: Clearing stale rate limit state (${requestTimestamps.length} old requests)`)
+        requestTimestamps.length = 0
+        consecutiveFailures = 0
+      }
+    }
+
     const body = await request.json().catch(() => ({}))
     const rawQuery = typeof body.query === 'string' ? body.query : ''
     const year = typeof body.year === 'number' ? body.year : null

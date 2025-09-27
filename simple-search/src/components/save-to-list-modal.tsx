@@ -129,7 +129,7 @@ export function SaveToListModal({ isOpen, paper, onClose, onSaved, userLists, se
         // Track list creation
         tracking.trackListCreated(list.id.toString(), list.name)
 
-        // Add the new list to the userLists state (we'll increment count after saving paper)
+        // Add the new list to the userLists state
         setUserLists(prevLists => [...prevLists, {
           id: list.id,
           name: list.name,
@@ -169,7 +169,7 @@ export function SaveToListModal({ isOpen, paper, onClose, onSaved, userLists, se
         targetList?.name || 'Unknown List'
       )
 
-      // Optimistically update the list count
+      // Update the list count
       setUserLists(prevLists => prevLists.map(list =>
         list.id === targetListId
           ? { ...list, items_count: list.items_count + 1 }
@@ -180,7 +180,7 @@ export function SaveToListModal({ isOpen, paper, onClose, onSaved, userLists, se
       setTimeout(() => {
         onSaved(targetListId)
         onClose()
-      }, 2000)
+      }, 1500)
 
     } catch (error) {
       console.error('Save failed:', error)

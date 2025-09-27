@@ -1,6 +1,6 @@
 TODO
-improve list speed load
-fix rate limits 
+improve list speed load - GPT codex
+fix rate limits and/or change to daily update - GPT codex
 
 Load paper when user clicks tile tah nremove button and move open pdf in line with full paper 
 add mock email author button and funny engagine add knowledge

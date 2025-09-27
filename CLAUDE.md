@@ -170,6 +170,14 @@ Building a Next.js + Supabase academic research aggregation platform that allows
   - **Database tracking**: New fields `content_quality` and `content_type` to track scraping success and source type
   - **UI improvements**: Quality badges show "Full Paper (HTML)" vs "Abstract Only" with source information
   - **Impact**: ArXiv papers now display complete full text instead of just abstracts when HTML versions are available
+- **List Loading Performance Fix (v0.1.8)**: Fixed critical performance issues causing 6-25 second load times:
+  - **Root cause identified**: List loading triggered automatic rating API calls for every paper, causing rate limiting (429 errors)
+  - **External API elimination**: Removed automatic ratings fetching from list operations - now only database queries
+  - **Simplified caching**: Replaced complex background refresh with basic 30-minute localStorage cache
+  - **Database optimization**: Removed complex materialized views, kept only essential indexes for user_lists and list_items
+  - **API simplification**: Reverted to basic queries without bulk loading, pagination, or query parameters
+  - **Performance improvement**: Target <1 second list loading vs previous 6-25 seconds
+  - **Rate limiting fix**: Eliminated 429 errors during list operations by removing external API dependencies
 
 ### Current Directory Structure
 ```
@@ -196,7 +204,9 @@ Building a Next.js + Supabase academic research aggregation platform that allows
     │   ├── 004_add_feed_preferences.sql     # User feed customization
     │   ├── 005_add_feed_sessions.sql       # Feed history tracking
     │   ├── 006_add_user_favourites.sql     # User favorites system
-    │   └── 007_add_user_lists.sql          # Save to list functionality
+    │   ├── 007_add_user_lists.sql          # Save to list functionality
+    │   ├── 008-013_*.sql                   # Additional features and fixes
+    │   └── 014_list_performance_indexes.sql # Performance optimizations
     └── src/
         ├── app/
         │   ├── api/
@@ -209,13 +219,15 @@ Building a Next.js + Supabase academic research aggregation platform that allows
         │   └── layout.tsx                   # Root layout with auth provider
         ├── components/
         │   ├── auth-modal.tsx               # Login/signup modal
-        │   ├── save-to-list-modal.tsx       # Save papers to lists modal
+        │   ├── save-to-list-modal.tsx       # Save papers to lists modal (optimized)
+        │   ├── virtual-list.tsx             # Virtual scrolling component for large lists
         │   ├── login-form.tsx               # Login form component
         │   ├── register-form.tsx            # Registration form component
         │   └── ui/message.tsx               # UI message component
         └── lib/
             ├── auth-context.tsx             # Auth state management
             ├── auth-hooks.ts                # Auth utility hooks
+            ├── cache-utils.ts               # Enhanced caching with TTL and background refresh
             ├── supabase.ts                  # Browser client
             └── supabase-server.ts           # Service-role client for server routes
 ```
