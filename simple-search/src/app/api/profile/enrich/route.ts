@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase-server'
+import { createClient, supabaseAdmin } from '@/lib/supabase-server'
 
 import { fetchOrcidWorks, generateProfilePersonalization } from '@/lib/profile-enrichment'
 import { DEFAULT_PROFILE_PERSONALIZATION, ProfilePersonalization } from '@/lib/profile-types'
@@ -82,7 +82,9 @@ export async function POST(request: NextRequest) {
     source,
   }
 
-  const { data: job, error: jobInsertError } = await supabase
+
+
+  const { data: job, error: jobInsertError } = await supabaseAdmin
     .from('profile_enrichment_jobs')
     .insert({
       user_id: user.id,
@@ -100,7 +102,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const orcidWorks = !skipOrcidFetch && profile?.orcid_id ? await fetchOrcidWorks(profile.orcid_id) : []
+    const orcidResult = !skipOrcidFetch && profile?.orcid_id ? await fetchOrcidWorks(profile.orcid_id) : { works: [] }
+    const orcidWorks = orcidResult.works
 
     const enrichment = await generateProfilePersonalization({
       manualKeywords,
@@ -122,7 +125,7 @@ export async function POST(request: NextRequest) {
 
     if (updateError) {
       console.error('Failed to persist profile personalization', updateError)
-      await supabase
+      await supabaseAdmin
         .from('profile_enrichment_jobs')
         .update({
           status: 'failed',
@@ -134,7 +137,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unable to save enriched profile' }, { status: 500 })
     }
 
-    await supabase
+    await supabaseAdmin
       .from('profile_enrichment_jobs')
       .update({
         status: 'succeeded',
@@ -159,7 +162,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Profile enrichment failed', error)
 
-    await supabase
+    await supabaseAdmin
       .from('profile_enrichment_jobs')
       .update({
         status: 'failed',

@@ -185,6 +185,75 @@ Building a Next.js + Supabase academic research aggregation platform that allows
   - **Fixed incomplete migrations**: Properly completed publication_date addition and other partial changes
   - **Better organization**: Related functionality now grouped together instead of spread across many small files
   - **Maintainability**: Much easier to understand and modify the database schema going forward
+- **Homepage Layout Polish (v0.1.10)**: Improved homepage formatting to match the polished login page design:
+  - **Consistent spacing**: Increased main container gaps from `gap-2` to `gap-6` and inner container gaps to match
+  - **Better padding**: Enhanced vertical padding from `py-1` to `py-6` for improved breathing room and visual hierarchy
+  - **Polished shadows**: Updated all card shadows from basic `shadow-[0_25px_60px_rgba(15,23,42,0.08)]` to elegant `shadow-[0_30px_80px_rgba(15,23,42,0.25)]` to match login modal
+  - **Consistent padding**: Increased card padding from `p-4` to `p-6` across all main elements (sidebar, feed cards, detail panels, tiles)
+  - **Unified border radius**: Updated tiles from `rounded-xl` to `rounded-3xl` to match main cards for visual consistency
+  - **Design coherence**: Homepage now matches the login page's sophisticated, polished aesthetic throughout
+- **ORCID Personalization Feature (v0.1.11)**: Activated the existing ORCID integration to enable AI-powered keyword extraction:
+  - **ORCID input enabled**: Removed "Coming soon" labels and disabled states from ORCID input field and buttons
+  - **Validation restored**: Re-enabled ORCID format validation with proper regex pattern (0000-0000-0000-0000)
+  - **API integration active**: Profile enrichment now calls `/api/profile/enrich` endpoint with ORCID data instead of simple keyword clustering
+  - **Full workflow enabled**: Users can input ORCID ID → system fetches publications → Gemini LLM extracts keywords → personalization updated
+  - **UI updates**: Profile editor shows "Add your ORCID iD and keywords to personalise your feed with AI-powered recommendations"
+  - **Clean implementation**: Activated existing infrastructure (95% was already implemented) without adding complexity or extra features
+- **ORCID UX Enhancement (v0.1.12)**: Dramatically improved ORCID input experience with smart formatting and flexible validation:
+  - **Auto-formatting**: ORCID input now automatically adds dashes as user types (e.g., typing "0000000218250097" becomes "0000-0002-1825-0097")
+  - **Flexible input**: Accepts ORCID with or without dashes - users can paste any format and it will be normalized and validated correctly
+  - **Smart validation**: New validation functions (`validateOrcidId`, `normalizeOrcidId`, `formatOrcidId`) handle 16-digit validation with detailed error messages
+  - **Better guidance**: Updated placeholder text to "Enter ORCID iD (e.g., 0000-0002-1825-0097)" and added helpful description below input
+  - **Mobile optimized**: Uses `inputMode="numeric"` for numeric keypad on mobile devices
+  - **Consistent formatting**: Existing ORCID values are automatically formatted when loaded from profile or during editing
+  - **User-friendly UX**: Clean, simple interface that makes ORCID entry effortless for researchers
+- **Separated ORCID & Profile Workflows (v0.1.17)**: Completely redesigned ORCID and profile saving for clean separation of concerns:
+  - **ORCID Save Button**: New "Save" button next to ORCID input that only fetches keywords and populates manual keywords field
+  - **Profile Save Button**: Simplified to only save form data (ORCID, website, keywords) without heavy API calls
+  - **New API Endpoint**: `/api/profile/keywords-from-orcid` provides lightweight keyword extraction from ORCID data
+  - **Graceful Error Handling**: ORCID API failures no longer break the workflow - returns empty results and continues
+  - **Optional ORCID**: Both ORCID save and profile save now treat ORCID as completely optional
+  - **Simple Personalization**: Profile save creates lightweight personalization directly from manual keywords
+  - **Restored Personal Feed**: Fixed `manual_keywords` field in personalization to properly enable personal feed display
+  - **Clean UX Flow**: Enter ORCID → Save ORCID → Review keywords → Save Profile → Personal Feed works
+- **ORCID Error Messaging Fix (v0.1.18)**: Improved error handling to show specific ORCID errors in the profile modal:
+  - **Specific Error Messages**: ORCID API now returns clear messages like "ORCID ID not found" instead of generic errors
+  - **Modal Error Display**: ORCID errors now appear in the profile settings modal where users are working, not in the feed
+  - **Error Categorization**: Different messages for 404 (not found), timeouts, and connection failures
+  - **Clean State Management**: Errors are cleared when opening/closing the profile modal to prevent stale messages
+  - **Better UX**: Users get immediate, actionable feedback right where they're entering their ORCID ID
+- **Personal Feed Loading UX Enhancement (v0.1.19)**: Moved progress indicators to top of feed for immediate visibility:
+  - **Top-positioned Progress**: Loading indicator now appears at the top of the personal feed instead of at the bottom
+  - **Immediate Visibility**: Users can see progress information like "Loading 2/4 queries…" as soon as partial results load
+  - **Consistent Styling**: Uses existing `FEED_LOADING_PILL_CLASSES` for visual consistency with other loading states
+  - **Better Information Architecture**: Progress information is now where users naturally look first
+  - **Improved Progressive Loading**: Progress indicator at top + partial results below creates clear visual hierarchy
+- **Console Error Cleanup (v0.1.20)**: Cleaned up console logging to only show technical errors, not user-facing messages:
+  - **Smart Error Filtering**: User-facing errors like "ORCID ID not found" no longer clutter the console
+  - **Technical Errors Only**: Console still logs genuine technical issues for debugging
+  - **Cleaner Development**: Removes noise from console while preserving important error information
+  - **Professional Polish**: Error messages appear in UI where users need them, console stays clean
+- **Consistent Branding (v0.1.13)**: Fixed branding positioning inconsistency between homepage and login modal:
+  - **Login modal branding**: Added "Evidentia" branding to login modal header with consistent styling
+  - **Unified positioning**: Both homepage sidebar and login modal now display "Evidentia" in appropriate header positions
+  - **Visual consistency**: Uses identical styling (`text-base font-bold uppercase tracking-[0.2em] text-slate-600`) across both contexts
+  - **Better UX**: Users now see consistent branding throughout the authentication flow
+- **Profile Modal Polish (v0.1.14)**: Enhanced profile settings modal for better spacing and terminology:
+  - **Removed top margin**: Eliminated `mt-6` whitespace above ORCID field for tighter, cleaner layout
+  - **Consistent terminology**: Changed all instances from "ORCID iD" to "ORCID ID" for proper branding
+  - **Updated validation messages**: All error messages now use "ORCID ID" terminology
+  - **Improved spacing**: Profile form now starts immediately without unnecessary top padding
+- **ORCID Label Refinement (v0.1.15)**: Streamlined ORCID input presentation for cleaner UI:
+  - **Removed verbose description**: Eliminated long explanatory text below ORCID input box
+  - **Inline keyword hint**: Added concise "(keywords auto-generated)" text next to ORCID ID label
+  - **Cleaner layout**: Reduced visual clutter while maintaining essential information about functionality
+  - **Better UX**: Users still understand ORCID purpose without overwhelming description text
+- **Database Permissions Fix (v0.1.16)**: Resolved profile enrichment API permission errors:
+  - **Root cause identified**: RLS policies for `profile_enrichment_jobs` only allowed `auth.uid() = user_id` access, but service role has no `auth.uid()`
+  - **Service role usage**: Fixed profile enrichment API to use `supabaseAdmin` client for `profile_enrichment_jobs` operations
+  - **RLS policy added**: Created "Service role access for enrichment jobs" policy allowing `auth.role() = 'service_role'` full access
+  - **Manual SQL fix**: Added policy via Supabase SQL Editor: `CREATE POLICY "Service role access for enrichment jobs" ON public.profile_enrichment_jobs FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');`
+  - **API stability**: Profile enrichment workflow now functions correctly with proper database access
 
 ### Current Directory Structure
 ```

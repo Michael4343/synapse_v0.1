@@ -66,6 +66,9 @@ export function AuthModal({ isOpen, mode, onClose, onSwitchMode }: AuthModalProp
 
         {/* Header */}
         <div className={MODAL_HEADER_CLASSES}>
+          <div className="mb-4">
+            <span className="text-base font-bold uppercase tracking-[0.2em] text-slate-600">Evidentia</span>
+          </div>
           <h2 className={MODAL_TITLE_CLASSES}>
             {mode === 'login' ? 'Login' : 'Create account'}
           </h2>

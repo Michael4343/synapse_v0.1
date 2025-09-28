@@ -1,9 +1,12 @@
 TODO
+move feeding loading to top of feed
+remove all code related to ratings - GPT codex
+refactor code - GPT codex
 improve list speed load - GPT codex
-fix rate limits and/or change to daily update - GPT codex
+fix rate limits  the serch works so there is a bug somewhere
+Change to daily update - GPT codex
 
 Personalisation
-ORCID
 website
 upload
 

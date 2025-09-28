@@ -37,6 +37,11 @@ CREATE POLICY "Users can create enrichment jobs" ON public.profile_enrichment_jo
 CREATE POLICY "Users can update their enrichment jobs" ON public.profile_enrichment_jobs
   FOR UPDATE USING (auth.uid() = user_id);
 
+CREATE POLICY "Service role access for enrichment jobs" ON public.profile_enrichment_jobs
+  FOR ALL
+  USING (auth.role() = 'service_role')
+  WITH CHECK (auth.role() = 'service_role');
+
 -- =============================================================================
 -- SEARCH CACHE RLS POLICIES
 -- =============================================================================

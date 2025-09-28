@@ -552,7 +552,7 @@ async function callGeminiForProfile({
   }
 }
 
-export async function fetchOrcidWorks(orcidId: string): Promise<OrcidWork[]> {
+export async function fetchOrcidWorks(orcidId: string): Promise<{ works: OrcidWork[]; error?: string }> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 5000)
   const url = `https://pub.orcid.org/v3.0/${encodeURIComponent(orcidId)}/works`
@@ -566,7 +566,11 @@ export async function fetchOrcidWorks(orcidId: string): Promise<OrcidWork[]> {
     })
 
     if (!response.ok) {
-      throw new Error(`ORCID API responded with ${response.status}`)
+      if (response.status === 404) {
+        return { works: [], error: 'ORCID ID not found. Please check that your ORCID ID is correct and publicly visible.' }
+      } else {
+        return { works: [], error: `ORCID API error (${response.status}). Please try again later.` }
+      }
     }
 
     const payload = await response.json()
@@ -595,10 +599,13 @@ export async function fetchOrcidWorks(orcidId: string): Promise<OrcidWork[]> {
       }
     }
 
-    return works
+    return { works }
   } catch (error) {
     console.error('Failed to fetch ORCID works', error)
-    return []
+    if (error instanceof Error && error.name === 'AbortError') {
+      return { works: [], error: 'ORCID request timed out. Please try again.' }
+    }
+    return { works: [], error: 'Failed to connect to ORCID. Please check your internet connection and try again.' }
   } finally {
     clearTimeout(timeout)
   }

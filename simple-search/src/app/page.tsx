@@ -253,10 +253,10 @@ const INITIAL_COMPILE_STATE: CompileState = {
 }
 
 const SHELL_CLASSES = 'min-h-screen bg-slate-50 text-slate-900';
-const FEED_CARD_CLASSES = 'space-y-2 rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
-const DETAIL_SHELL_CLASSES = 'w-full rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
+const FEED_CARD_CLASSES = 'space-y-2 rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_30px_80px_rgba(15,23,42,0.25)]';
+const DETAIL_SHELL_CLASSES = 'w-full rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_30px_80px_rgba(15,23,42,0.25)]';
 const DETAIL_HERO_CLASSES = 'rounded-3xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-4 shadow-inner';
-const TILE_BASE_CLASSES = 'group relative flex cursor-pointer flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 transition duration-150 hover:border-slate-300 hover:bg-slate-50';
+const TILE_BASE_CLASSES = 'group relative flex cursor-pointer flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 transition duration-150 hover:border-slate-300 hover:bg-slate-50';
 const TILE_SELECTED_CLASSES = 'border-sky-400 bg-sky-50 ring-1 ring-sky-100';
 const ACTION_LIST_CLASSES = 'grid w-full gap-2 grid-cols-1 sm:grid-cols-4';
 const ACTION_ITEM_BASE_CLASSES = 'flex h-full flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition';
@@ -280,7 +280,7 @@ const RESULT_SUMMARY_CLASSES = 'flex flex-wrap items-baseline gap-2 text-sm text
 const DETAIL_METADATA_CLASSES = 'space-y-3 text-sm text-slate-600';
 const DETAIL_LINK_CLASSES = 'text-lg font-semibold text-sky-600 underline decoration-sky-300 underline-offset-4 transition hover:text-sky-700';
 const TILE_LINK_CLASSES = 'inline-flex items-center text-xs font-semibold text-sky-600 underline decoration-sky-300 underline-offset-4 transition hover:text-sky-700';
-const SIDEBAR_CARD_CLASSES = 'flex h-full flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
+const SIDEBAR_CARD_CLASSES = 'flex h-full flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_30px_80px_rgba(15,23,42,0.25)]';
 const SIDEBAR_PRIMARY_BUTTON_CLASSES = 'flex items-center justify-center rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(56,189,248,0.2)] transition hover:-translate-y-0.5 hover:bg-sky-400';
 const SIDEBAR_SECONDARY_BUTTON_CLASSES = 'flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900';
 const SEARCH_SPINNER_CLASSES = 'inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent';
@@ -455,6 +455,47 @@ function parseManualKeywords(input: string) {
     .map((value) => value.trim())
     .filter((value) => value.length > 0)
     .slice(0, 20)
+}
+
+function formatOrcidId(input: string): string {
+  // Remove all non-digit and non-X characters
+  const clean = input.replace(/[^0-9X]/gi, '').toUpperCase()
+
+  // Only format if we have digits to work with
+  if (clean.length === 0) return ''
+
+  // Add dashes every 4 characters, max 16 characters
+  const limited = clean.slice(0, 16)
+  return limited.replace(/(.{4})/g, '$1-').replace(/-$/, '')
+}
+
+function normalizeOrcidId(input: string): string {
+  // Remove all dashes and spaces, keep only digits and X
+  return input.replace(/[^0-9X]/gi, '').toUpperCase()
+}
+
+function validateOrcidId(input: string): { isValid: boolean; message?: string } {
+  const normalized = normalizeOrcidId(input)
+
+  if (normalized.length === 0) {
+    return { isValid: false, message: 'ORCID ID is required' }
+  }
+
+  if (normalized.length < 16) {
+    return { isValid: false, message: 'ORCID ID must be 16 characters long' }
+  }
+
+  if (normalized.length > 16) {
+    return { isValid: false, message: 'ORCID ID is too long' }
+  }
+
+  // Check format: 15 digits followed by digit or X
+  const pattern = /^[0-9]{15}[0-9X]$/
+  if (!pattern.test(normalized)) {
+    return { isValid: false, message: 'ORCID ID must contain 16 digits, with optional X as last character' }
+  }
+
+  return { isValid: true }
 }
 
 function createKeywordClusters(input: string) {
@@ -1137,18 +1178,11 @@ export default function Home() {
         return;
       }
 
-      // Skip ORCID requirement since it's coming soon - use keywords only
-      // const effectiveOrcid = orcidOverride ?? profile?.orcid_id ?? null;
-      // if (!effectiveOrcid) {
-      //   setProfileEnrichmentError('Add your ORCID iD before generating personalization.');
-      //   return;
-      // }
+      const effectiveOrcid = orcidOverride ?? profile?.orcid_id ?? null;
 
-      // Create simple keyword clusters directly from user input
-      const keywordClusters = createKeywordClusters(profileManualKeywords);
-
-      if (keywordClusters.length === 0) {
-        setProfileEnrichmentError('Add at least one keyword line to generate your personalized feed.');
+      const parsedManualKeywords = parseManualKeywords(profileManualKeywords);
+      if (parsedManualKeywords.length === 0) {
+        setProfileEnrichmentError('Add at least one keyword to generate your personalized feed.');
         return;
       }
 
@@ -1156,62 +1190,52 @@ export default function Home() {
       setProfileEnrichmentError('');
 
       try {
-        // Create the personalization object with our simple keyword clusters
-        const newPersonalization: ProfilePersonalization = {
-          topic_clusters: keywordClusters,
-          manual_keywords: profileManualKeywords.split('\n').filter(line => line.trim()),
-          author_focus: [],
-          venue_focus: [],
-          filters: {
-            recency_days: 1,
-            publication_types: ['journal', 'conference', 'preprint'],
-            include_preprints: true,
-          }
-        };
+        const response = await fetch('/api/profile/enrich', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            manualKeywords: parsedManualKeywords,
+            source,
+            force,
+            skipOrcidFetch,
+          }),
+        });
 
-        // Save to profile
-        const supabase = createClient();
-        const { error } = await supabase
-          .from('profiles')
-          .update({
-            profile_personalization: newPersonalization,
-            last_profile_enriched_at: new Date().toISOString(),
-            profile_enrichment_version: 'keyword-based'
-          })
-          .eq('id', user.id);
-
-        if (error) {
-          console.error('Failed to save profile personalization', error);
-          setProfileEnrichmentError('Failed to save your keywords. Please try again.');
-          return;
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Profile enrichment failed');
         }
 
-        // Update local state
+        const result = await response.json();
+
+        // Update local state with the enriched profile
         setProfile((prev) => {
           if (!prev) {
             return {
-              orcid_id: null,
-              academic_website: null,
-              profile_personalization: newPersonalization,
-              last_profile_enriched_at: new Date().toISOString(),
-              profile_enrichment_version: 'keyword-based',
+              orcid_id: effectiveOrcid,
+              academic_website: prev?.academic_website ?? null,
+              profile_personalization: result.personalization,
+              last_profile_enriched_at: result.last_profile_enriched_at,
+              profile_enrichment_version: result.profile_enrichment_version,
             };
           }
 
           return {
             ...prev,
-            profile_personalization: newPersonalization,
-            last_profile_enriched_at: new Date().toISOString(),
-            profile_enrichment_version: 'keyword-based',
+            profile_personalization: result.personalization,
+            last_profile_enriched_at: result.last_profile_enriched_at,
+            profile_enrichment_version: result.profile_enrichment_version,
           };
         });
 
         // Load the personal feed with new personalization
-        await loadPersonalFeed({ personalizationOverride: newPersonalization, force: true });
+        await loadPersonalFeed({ personalizationOverride: result.personalization, force: true });
 
       } catch (error) {
         console.error('Profile enrichment request failed', error);
-        setProfileEnrichmentError('We could not refresh your personalization. Please try again.');
+        setProfileEnrichmentError(error instanceof Error ? error.message : 'We could not refresh your personalization. Please try again.');
       } finally {
         setProfileEnrichmentLoading(false);
       }
@@ -1225,7 +1249,7 @@ export default function Home() {
 
   useEffect(() => {
     if (profile) {
-      setProfileFormOrcid(profile.orcid_id ?? '');
+      setProfileFormOrcid(formatOrcidId(profile.orcid_id ?? ''));
       setProfileFormWebsite(profile.academic_website ?? '');
       setOrcidEditingMode(false);
       setWebsiteEditingMode(false);
@@ -1371,13 +1395,12 @@ export default function Home() {
     const formId = includePersonalizationInputs ? 'profile-editor-form' : 'profile-form';
 
     return (
-      <form id={formId} onSubmit={handleProfileSave} className="mt-6 space-y-5">
+      <form id={formId} onSubmit={handleProfileSave} className="space-y-5">
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
             <label htmlFor="profile-orcid" className={PROFILE_LABEL_CLASSES}>
-              ORCID iD
+              ORCID ID <span className="text-xs font-normal text-slate-500">(keywords auto-generated)</span>
             </label>
-            <span className={PROFILE_COMING_SOON_HINT_CLASSES}>Coming soon</span>
           </div>
           <div className="flex gap-2">
             <input
@@ -1385,35 +1408,19 @@ export default function Home() {
               type="text"
               inputMode="numeric"
               autoComplete="off"
-              placeholder="0000-0000-0000-0000"
+              placeholder="Enter ORCID ID (e.g., 0000-0002-1825-0097)"
               value={profileFormOrcid}
-              onChange={(event) => setProfileFormOrcid(event.target.value)}
-              disabled={profile?.orcid_id && !orcidEditingMode}
-              className={`flex-1 ${PROFILE_INPUT_CLASSES} bg-slate-100 text-slate-500 cursor-not-allowed`}
+              onChange={(event) => setProfileFormOrcid(formatOrcidId(event.target.value))}
+              className={`flex-1 ${PROFILE_INPUT_CLASSES}`}
             />
-            {profile?.orcid_id && !orcidEditingMode && (
-              <button
-                type="button"
-                onClick={() => setOrcidEditingMode(true)}
-                className="px-4 py-2 text-sm font-medium text-slate-400 bg-slate-50 border border-slate-200 rounded-lg cursor-not-allowed"
-                disabled
-              >
-                Update
-              </button>
-            )}
-            {orcidEditingMode && (
-              <button
-                type="button"
-                onClick={() => {
-                  setOrcidEditingMode(false);
-                  setProfileFormOrcid(profile?.orcid_id ?? '');
-                }}
-                className="px-4 py-2 text-sm font-medium text-slate-400 bg-slate-50 border border-slate-200 rounded-lg cursor-not-allowed"
-                disabled
-              >
-                Cancel
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handleOrcidSave}
+              disabled={profileEnrichmentLoading}
+              className="px-4 py-2 text-sm font-medium text-white bg-sky-600 border border-sky-600 rounded-lg hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {profileEnrichmentLoading ? 'Saving…' : 'Save'}
+            </button>
           </div>
         </div>
 
@@ -1590,13 +1597,13 @@ export default function Home() {
 
       mainFeedContent = (
         <div className="space-y-4">
-          {renderResultList(personalFeedProgressResults, `Personal recommendation (recent) • ${progressText}`)}
           <div className="flex justify-center py-2">
-            <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-              <span className="h-2 w-2 animate-spin rounded-full border border-slate-400 border-t-transparent" />
-              {progressText}
+            <span className={FEED_LOADING_PILL_CLASSES}>
+              <span className={FEED_SPINNER_CLASSES} aria-hidden="true" />
+              <span>{progressText}</span>
             </span>
           </div>
+          {renderResultList(personalFeedProgressResults, 'Personal recommendation (recent)')}
         </div>
       );
     } else if (personalFeedResults.length > 0) {
@@ -2026,6 +2033,73 @@ export default function Home() {
     }
   };
 
+  const handleOrcidSave = async () => {
+    if (!user) {
+      authModal.openSignup();
+      return;
+    }
+
+    const trimmedOrcid = profileFormOrcid.trim();
+
+    if (!trimmedOrcid) {
+      setProfileEnrichmentError('Please enter your ORCID ID to generate keywords.');
+      return;
+    }
+
+    const orcidValidation = validateOrcidId(trimmedOrcid);
+    if (!orcidValidation.isValid) {
+      setProfileEnrichmentError(orcidValidation.message || 'Please enter a valid ORCID ID.');
+      return;
+    }
+
+    const normalizedOrcid = normalizeOrcidId(trimmedOrcid);
+
+    try {
+      setProfileEnrichmentError('');
+      setProfileEnrichmentLoading(true);
+
+      // Create a simple API call to generate keywords from ORCID
+      const response = await fetch('/api/profile/keywords-from-orcid', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orcidId: normalizedOrcid,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate keywords from ORCID.');
+      }
+
+      const result = await response.json();
+
+      // Set the generated keywords in the manual keywords field
+      if (result.keywords && result.keywords.length > 0) {
+        setProfileManualKeywords(result.keywords.join(', '));
+        setProfileEnrichmentError('');
+      } else {
+        setProfileEnrichmentError('No keywords could be generated from your ORCID profile.');
+      }
+
+    } catch (error) {
+      if (error instanceof Error) {
+        // Only log technical errors to console, not user-facing ones
+        if (!error.message.includes('ORCID ID not found') &&
+            !error.message.includes('No publications found') &&
+            !error.message.includes('ORCID API error')) {
+          console.error('ORCID keyword generation error', error);
+        }
+        setProfileEnrichmentError(error.message);
+      } else {
+        console.error('ORCID keyword generation error', error);
+        setProfileEnrichmentError('Failed to generate keywords from ORCID. Please try again.');
+      }
+    } finally {
+      setProfileEnrichmentLoading(false);
+    }
+  };
+
   const handleProfileSave = async (event: React.FormEvent) => {
     event.preventDefault();
 
@@ -2036,21 +2110,19 @@ export default function Home() {
 
     const trimmedOrcid = profileFormOrcid.trim();
     const trimmedWebsite = profileFormWebsite.trim();
-    const normalisedOrcid = trimmedOrcid.toUpperCase();
 
     setProfileSaveError('');
 
-    // Skip ORCID validation since it's coming soon
-    // if (!normalisedOrcid) {
-    //   setProfileSaveError('Add your ORCID iD to personalise your feed.');
-    //   return;
-    // }
-
-    // const orcidPattern = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/i;
-    // if (!orcidPattern.test(normalisedOrcid)) {
-    //   setProfileSaveError('Enter a valid ORCID iD in the format 0000-0000-0000-0000.');
-    //   return;
-    // }
+    // ORCID is now optional
+    let normalizedOrcid = null;
+    if (trimmedOrcid) {
+      const orcidValidation = validateOrcidId(trimmedOrcid);
+      if (!orcidValidation.isValid) {
+        setProfileSaveError(orcidValidation.message || 'Please enter a valid ORCID ID.');
+        return;
+      }
+      normalizedOrcid = normalizeOrcidId(trimmedOrcid);
+    }
 
     const parsedManualKeywords = parseManualKeywords(profileManualKeywords);
     if (parsedManualKeywords.length === 0) {
@@ -2083,11 +2155,34 @@ export default function Home() {
 
     try {
       const supabase = createClient();
+
+      // Create simple personalization from manual keywords
+      const simplePersonalization = {
+        topic_clusters: parsedManualKeywords.slice(0, 5).map((keyword, index) => ({
+          id: `manual-${index + 1}`,
+          label: keyword.charAt(0).toUpperCase() + keyword.slice(1),
+          keywords: [keyword],
+          priority: index + 1,
+          source: 'manual' as const,
+        })),
+        author_focus: [],
+        venue_focus: [],
+        manual_keywords: parsedManualKeywords,
+        filters: {
+          recency_days: 7,
+          publication_types: ['journal', 'conference', 'preprint'] as const,
+          include_preprints: true,
+        },
+      };
+
       const { error } = await supabase
         .from('profiles')
         .update({
-          orcid_id: normalisedOrcid || null,
+          orcid_id: normalizedOrcid,
           academic_website: normalizedWebsite || null,
+          profile_personalization: simplePersonalization,
+          last_profile_enriched_at: new Date().toISOString(),
+          profile_enrichment_version: 'manual-v1',
         })
         .eq('id', user.id);
 
@@ -2097,25 +2192,17 @@ export default function Home() {
         return;
       }
 
-      const isOrcidUpdate = profile?.orcid_id && profile.orcid_id !== normalisedOrcid;
-
       setProfile((previous) => ({
-        orcid_id: normalisedOrcid,
+        orcid_id: normalizedOrcid,
         academic_website: normalizedWebsite || null,
-        profile_personalization: previous?.profile_personalization ?? null,
-        last_profile_enriched_at: previous?.last_profile_enriched_at ?? null,
-        profile_enrichment_version: previous?.profile_enrichment_version ?? null,
+        profile_personalization: simplePersonalization,
+        last_profile_enriched_at: new Date().toISOString(),
+        profile_enrichment_version: 'manual-v1',
       }));
 
       // Reset editing modes
       setOrcidEditingMode(false);
       setWebsiteEditingMode(false);
-
-      await runProfileEnrichment({
-        source: isOrcidUpdate ? 'orcid_update' : 'profile_setup',
-        force: true,
-        orcidOverride: normalisedOrcid,
-      });
 
       // Close the profile editor modal on successful save
       closeProfileEditor();
@@ -2219,6 +2306,7 @@ export default function Home() {
 
   const handleProfileEdit = useCallback(() => {
     setAccountDropdownVisible(false);
+    setProfileEnrichmentError('');
     setProfileEditorVisible(true);
   }, []);
 
@@ -2250,17 +2338,19 @@ export default function Home() {
   }, [signOut, user]);
 
   const openProfileEditor = useCallback(() => {
+    setProfileEnrichmentError('');
     setProfileEditorVisible(true);
   }, []);
 
   const closeProfileEditor = useCallback(() => {
+    setProfileEnrichmentError('');
     setProfileEditorVisible(false);
   }, []);
 
   return (
     <div className={SHELL_CLASSES}>
-      <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-2 px-6 py-1">
-        <div className="relative flex flex-col gap-2 xl:flex-row">
+      <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-6 py-6">
+        <div className="relative flex flex-col gap-6 xl:flex-row">
           <aside
             className="relative flex flex-col transition-all duration-300 ease-in-out xl:flex xl:overflow-visible xl:basis-[20%] xl:max-w-[20%]"
           >
@@ -2527,7 +2617,7 @@ export default function Home() {
                     <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-sky-600">Research profile</span>
                     <h2 className="text-2xl font-semibold text-slate-900">Personalise your feed</h2>
                     <p className="text-sm text-slate-600">
-                      Add keywords to personalise your feed. ORCID and academic site features coming soon.
+                      Add your ORCID ID and keywords to personalise your feed with AI-powered recommendations.
                     </p>
                   </div>
 
@@ -2864,6 +2954,11 @@ export default function Home() {
               {profileSaveError && (
                 <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600">
                   {profileSaveError}
+                </div>
+              )}
+              {profileEnrichmentError && (
+                <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600">
+                  {profileEnrichmentError}
                 </div>
               )}
               {renderProfileForm(true)}
