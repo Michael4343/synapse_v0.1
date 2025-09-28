@@ -9,8 +9,6 @@ import { createClient } from '../lib/supabase';
 import { AuthModal } from '../components/auth-modal';
 import type { ProfilePersonalization } from '../lib/profile-types';
 import { SaveToListModal } from '../components/save-to-list-modal';
-import { RateModal } from '../components/rate-modal';
-import { StarRating } from '../components/star-rating';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -46,16 +44,6 @@ interface UserListSummary {
   status?: 'loading' | 'ready'
 }
 
-interface PaperRating {
-  id: number
-  user_id: string
-  paper_semantic_scholar_id: string
-  paper_title: string
-  rating: number
-  comment: string | null
-  created_at: string
-  updated_at: string
-}
 
 interface PaperSection {
   type: string
@@ -557,11 +545,6 @@ export default function Home() {
   const [profileEnrichmentError, setProfileEnrichmentError] = useState('');
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [paperToSave, setPaperToSave] = useState<ApiSearchResult | null>(null);
-  const [rateModalOpen, setRateModalOpen] = useState(false);
-  const [paperToRate, setPaperToRate] = useState<ApiSearchResult | null>(null);
-  const [currentPaperRating, setCurrentPaperRating] = useState<PaperRating | null>(null);
-  const [paperRatings, setPaperRatings] = useState<Map<string, PaperRating>>(new Map());
-  const [isUpdatingListMetadata, setIsUpdatingListMetadata] = useState(false);
   const [userLists, setUserLists] = useState<UserListSummary[]>([]);
   const [listsLoading, setListsLoading] = useState(false);
 
@@ -573,8 +556,6 @@ export default function Home() {
   const [compileState, setCompileState] = useState<CompileState>(INITIAL_COMPILE_STATE);
   const [personalFeedResults, setPersonalFeedResults] = useState<ApiSearchResult[]>([]);
   const [personalFeedLoading, setPersonalFeedLoading] = useState(false);
-  const [personalFeedProgress, setPersonalFeedProgress] = useState({ completed: 0, total: 0 });
-  const [personalFeedProgressResults, setPersonalFeedProgressResults] = useState<ApiSearchResult[]>([]);
   const [personalFeedError, setPersonalFeedError] = useState('');
   const [personalFeedLastUpdated, setPersonalFeedLastUpdated] = useState<string | null>(null);
   const [profileEditorVisible, setProfileEditorVisible] = useState(false);
@@ -788,288 +769,112 @@ export default function Home() {
   const profilePersonalization = profile?.profile_personalization ?? null;
   const profileTopicClusters = profilePersonalization?.topic_clusters ?? [];
 
-  const buildClusterQuery = (cluster: ProfilePersonalization['topic_clusters'][number]) => {
-    const keywords = Array.isArray(cluster.keywords) ? cluster.keywords : [];
-    const synonyms = Array.isArray(cluster.synonyms) ? cluster.synonyms : [];
-    const methods = Array.isArray(cluster.methods) ? cluster.methods : [];
-    const applications = Array.isArray(cluster.applications) ? cluster.applications : [];
-    const terms = [...keywords, ...synonyms, ...methods, ...applications]
-      .map((term) => term?.trim())
-      .filter((term): term is string => Boolean(term));
-
-    if (!terms.length) {
-      return '';
-    }
-
-    // Use all terms, not just first 6
-    const quotedTerms = terms.map((term) => (term.includes(' ') ? `"${term}"` : term));
-    return quotedTerms.join(' ');
-  };
 
   const loadPersonalFeed = useCallback(
-    async ({ personalizationOverride, minimumQueries = 1, force = false }: { personalizationOverride?: ProfilePersonalization | null; minimumQueries?: number; force?: boolean } = {}) => {
+    async (force = false) => {
       if (!user) {
         return;
       }
 
-      const activePersonalization = personalizationOverride ?? profilePersonalization;
-
-      if (!activePersonalization || !Array.isArray(activePersonalization.topic_clusters) || activePersonalization.topic_clusters.length === 0) {
+      // Get manual keywords from profile
+      const manualKeywordsArray = profile?.profile_personalization?.manual_keywords || [];
+      if (manualKeywordsArray.length === 0) {
         setPersonalFeedResults([]);
-        setPersonalFeedError('Add focus keywords to generate your personalised feed.');
+        setPersonalFeedError('Add keywords to your profile to generate your personal feed.');
         return;
       }
 
-      // Create cache key based on user and personalization
-      const cacheKey = `${PERSONAL_FEED_CACHE_KEY}-${user.id}-${JSON.stringify(activePersonalization.topic_clusters)}`;
-
-      // Check if we have fresh cached data and should use it
-      if (!force && !personalFeedLoading) {
-        const cachedResults = getCachedData<{
-          results: ApiSearchResult[];
-          lastUpdated: string;
-        }>(cacheKey, PERSONAL_FEED_TTL_MS);
-
-        if (cachedResults) {
-          // Load cached data immediately
-          setPersonalFeedResults(cachedResults.results);
+      // Simple caching
+      const cacheKey = `${PERSONAL_FEED_CACHE_KEY}-${user.id}-${JSON.stringify(manualKeywordsArray)}`;
+      if (!force) {
+        const cached = getCachedData<{ results: ApiSearchResult[]; lastUpdated: string }>(cacheKey, PERSONAL_FEED_TTL_MS);
+        if (cached) {
+          setPersonalFeedResults(cached.results);
           setPersonalFeedError('');
-          setPersonalFeedLastUpdated(cachedResults.lastUpdated);
-
-          // Use cache for full 24 hours - no background refresh
-          console.log('Personal feed: using cached data, valid for 24 hours');
-          return; // Use cache until it expires completely
+          setPersonalFeedLastUpdated(cached.lastUpdated);
+          return;
         }
       }
-
-      // Enhanced guard: prevent multiple simultaneous calls even with force=true
-      // Allow force override only if last call was >10 seconds ago
-      const lastCallKey = `${PERSONAL_FEED_CACHE_KEY}-last-call-${user.id}`;
-      const lastCallTime = localStorage.getItem(lastCallKey);
-      const now = Date.now();
 
       if (personalFeedLoading) {
-        if (!force) {
-          console.log('Personal feed: skipping call - already loading');
-          return;
-        } else if (lastCallTime && (now - parseInt(lastCallTime)) < 10000) {
-          console.log('Personal feed: skipping forced call - last call was less than 10s ago');
-          return;
-        }
-      }
-
-      // Record this call time
-      localStorage.setItem(lastCallKey, now.toString());
-
-      const sortedClusters = [...activePersonalization.topic_clusters].sort((a, b) => {
-        const priorityA = typeof a.priority === 'number' ? a.priority : Number.MAX_SAFE_INTEGER;
-        const priorityB = typeof b.priority === 'number' ? b.priority : Number.MAX_SAFE_INTEGER;
-        return priorityA - priorityB;
-      });
-
-      const allQueries = sortedClusters
-        .map((cluster) => buildClusterQuery(cluster))
-        .filter((query) => Boolean(query));
-
-      // Limit to maximum 4 queries to reduce API calls and loading time
-      // Take the most important ones (already sorted by priority)
-      const queries = allQueries.slice(0, 4);
-
-      if (queries.length < allQueries.length) {
-        console.log(`Personal feed: reduced from ${allQueries.length} to ${queries.length} queries for performance`);
-      }
-
-
-      if (!queries.length) {
-        setPersonalFeedResults([]);
-        setPersonalFeedError('We need more detail about your focus areas to generate results.');
         return;
       }
+
+      // Use keywords array and limit to 4 for performance
+      const keywords = manualKeywordsArray.slice(0, 4);
 
       setPersonalFeedLoading(true);
       setPersonalFeedError('');
-      setPersonalFeedProgress({ completed: 0, total: queries.length });
-      setPersonalFeedProgressResults([]); // Clear previous progress results
 
       try {
-        const aggregated: ApiSearchResult[] = [];
-        const seen = new Set<string>();
-        const startTime = Date.now();
-        const maxTotalTime = 60000; // 1 minute maximum total time
+        const allResults: ApiSearchResult[] = [];
+        const seenIds = new Set<string>();
 
-        // Fair distribution algorithm: ensure each keyword gets proportional representation
-        const maxResults = 12;
-        const resultsPerQuery = Math.floor(maxResults / queries.length);
-        const remainderSlots = maxResults % queries.length;
-
-        // Create array of how many results each query should contribute
-        const quotaPerQuery = queries.map((_, index) =>
-          resultsPerQuery + (index < remainderSlots ? 1 : 0)
-        );
-
-        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-        let successfulQueries = 0;
-        let failedQueries = 0;
-
-        // Helper function to update progress results (doesn't trigger ratings fetch)
-        const updateProgressiveResults = () => {
-          if (aggregated.length > 0) {
-            // Sort current results by publication date (most recent first)
-            const sortedResults = [...aggregated].sort((a, b) => {
-              if (!a.publicationDate && !b.publicationDate) return 0;
-              if (!a.publicationDate) return 1;
-              if (!b.publicationDate) return -1;
-              return new Date(b.publicationDate).getTime() - new Date(a.publicationDate).getTime();
-            });
-
-            // Update progress results (separate from final results to avoid triggering ratings)
-            setPersonalFeedProgressResults(sortedResults.slice(0, maxResults));
-            setPersonalFeedError('');
-          }
-        };
-
-        for (let queryIndex = 0; queryIndex < queries.length; queryIndex++) {
-          const query = queries[queryIndex];
-          const maxForThisQuery = quotaPerQuery[queryIndex];
-          let addedForThisQuery = 0;
-
-          if (aggregated.length >= maxResults) {
-            break;
-          }
-
-          // Add delay between queries to respect rate limits (except for first query)
-          if (queryIndex > 0) {
-            // Much more conservative delays since API is rate limiting at ~2-4 requests
-            // Without API key, be extremely conservative
-            const baseDelay = 15000; // 15 seconds between queries for anonymous users
-            const jitter = Math.random() * 3000; // 0-3s random jitter
-            const delay = baseDelay + jitter;
-
-            console.log(`Personal feed: waiting ${Math.round(delay)}ms before query ${queryIndex + 1}/${queries.length}`);
-            await new Promise(resolve => setTimeout(resolve, delay));
-          }
-
-          // If we've had too many consecutive failures, stop trying to avoid further rate limiting
-          if (failedQueries >= 2 && successfulQueries === 0) {
-            console.log('Personal feed: stopping due to consecutive API failures');
-            break;
-          }
-
-          // Check if we've exceeded maximum time
-          if (Date.now() - startTime > maxTotalTime) {
-            console.log('Personal feed: stopping due to timeout');
-            break;
-          }
+        // Sequential queries for each keyword
+        for (let i = 0; i < keywords.length; i++) {
+          const keyword = keywords[i];
 
           try {
             const response = await fetch('/api/search', {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ query, year: new Date().getFullYear() }),
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ query: keyword })
             });
 
-            if (!response.ok) {
-              console.warn(`Personal feed query ${queryIndex + 1} failed with status ${response.status}`);
-              failedQueries++;
-              continue;
-            }
+            if (response.ok) {
+              const data = await response.json();
+              const results = Array.isArray(data.results) ? data.results : [];
 
-            const payload = await response.json();
-            const results = Array.isArray(payload.results) ? payload.results : [];
-            successfulQueries++;
-
-            // Add results, prioritizing recent ones (within 7 days)
-            const recentResults = results.filter(result => {
-              if (seen.has(result.id)) return false;
-              return result.publicationDate && new Date(result.publicationDate) > sevenDaysAgo;
-            });
-
-            const olderResults = results.filter(result => {
-              if (seen.has(result.id)) return false;
-              return !result.publicationDate || new Date(result.publicationDate) <= sevenDaysAgo;
-            });
-
-            // First add recent results (within 7 days)
-            for (const result of recentResults) {
-              if (addedForThisQuery < maxForThisQuery && aggregated.length < maxResults) {
-                aggregated.push(result);
-                seen.add(result.id);
-                addedForThisQuery++;
-              } else {
-                break;
-              }
-            }
-
-            // Only add older results if we have very few recent ones (less than half quota)
-            // This prevents showing months-old papers as "recent"
-            if (addedForThisQuery < Math.ceil(maxForThisQuery / 2) && aggregated.length < maxResults) {
-              // Sort older results by recency and only take the most recent ones
-              const sortedOlderResults = olderResults
-                .filter(result => result.publicationDate) // Only papers with dates
-                .sort((a, b) => new Date(b.publicationDate!).getTime() - new Date(a.publicationDate!).getTime())
-                .slice(0, maxForThisQuery - addedForThisQuery);
-
-              for (const result of sortedOlderResults) {
-                if (addedForThisQuery < maxForThisQuery && aggregated.length < maxResults) {
-                  aggregated.push(result);
-                  seen.add(result.id);
-                  addedForThisQuery++;
-                } else {
-                  break;
+              // Add unique results
+              for (const result of results) {
+                if (!seenIds.has(result.id) && allResults.length < 12) {
+                  allResults.push(result);
+                  seenIds.add(result.id);
                 }
               }
+
+              // Update UI with progressive results
+              if (allResults.length > 0) {
+                const sorted = [...allResults].sort((a, b) => {
+                  if (!a.publicationDate && !b.publicationDate) return 0;
+                  if (!a.publicationDate) return 1;
+                  if (!b.publicationDate) return -1;
+                  return new Date(b.publicationDate).getTime() - new Date(a.publicationDate).getTime();
+                });
+                setPersonalFeedResults(sorted);
+                setPersonalFeedError('');
+              }
             }
-
-            // Update progress and show results immediately after each successful query
-            setPersonalFeedProgress({ completed: queryIndex + 1, total: queries.length });
-            updateProgressiveResults();
-
           } catch (error) {
-            console.error(`Personal feed query ${queryIndex + 1} failed:`, error);
-            failedQueries++;
-
-            // Still update progress even for failed queries
-            setPersonalFeedProgress({ completed: queryIndex + 1, total: queries.length });
+            console.warn(`Query ${i + 1} failed:`, error);
           }
         }
 
-
-        // Final processing after all queries complete
-        if (!aggregated.length) {
-          setPersonalFeedResults([]);
-          setPersonalFeedProgressResults([]);
-          setPersonalFeedError('We could not find recent papers for your focus areas. This might be due to API rate limits - try refreshing in a few minutes or adjust your profile keywords.');
+        if (allResults.length === 0) {
+          setPersonalFeedError('No papers found for your keywords. Try different or broader terms.');
         } else {
-          // Sort final results by publication date (most recent first)
-          const sortedResults = aggregated.sort((a, b) => {
+          // Final sort and cache
+          const sorted = allResults.sort((a, b) => {
             if (!a.publicationDate && !b.publicationDate) return 0;
             if (!a.publicationDate) return 1;
             if (!b.publicationDate) return -1;
             return new Date(b.publicationDate).getTime() - new Date(a.publicationDate).getTime();
           });
 
-          const finalResults = sortedResults.slice(0, 12);
           const lastUpdated = new Date().toISOString();
-
-          // Set final results (this will trigger ratings fetch)
-          setPersonalFeedResults(finalResults);
-          setPersonalFeedProgressResults([]); // Clear progress results
-          setPersonalFeedError('');
+          setPersonalFeedResults(sorted);
           setPersonalFeedLastUpdated(lastUpdated);
 
-          // Cache the successful results
-          setCachedData(cacheKey, {
-            results: finalResults,
-            lastUpdated: lastUpdated
-          });
+          setCachedData(cacheKey, { results: sorted, lastUpdated });
         }
+      } catch (error) {
+        console.error('Personal feed error:', error);
+        setPersonalFeedError('Failed to load personal feed. Please try again.');
       } finally {
         setPersonalFeedLoading(false);
       }
     },
-    [personalFeedLoading, profilePersonalization, user]
+    [user, profile?.profile_personalization?.manual_keywords, personalFeedLoading]
   );
 
   useEffect(() => {
@@ -1087,16 +892,16 @@ export default function Home() {
 
     // Only auto-load personal feed once per user, after profile is loaded
     if (personalFeedResults.length === 0) {
-      if (profilePersonalization && profilePersonalization.topic_clusters?.length > 0) {
+      if (profile?.profile_personalization?.manual_keywords?.length > 0) {
         console.log('Auto-loading personal feed after profile loaded');
-        loadPersonalFeed({ minimumQueries: 3 });
+        loadPersonalFeed();
       } else {
         // Show helpful message for users without keywords
-        setPersonalFeedError('Set up your research keywords in the profile section to get personalized paper recommendations.');
+        setPersonalFeedError('Add keywords to your profile to generate your personal feed.');
         console.log('Profile loaded but no keywords found - prompting user to add keywords');
       }
     }
-  }, [user, profileLoading, profilePersonalization, personalFeedResults.length, loadPersonalFeed]);
+  }, [user, profileLoading, profile?.profile_personalization?.manual_keywords, personalFeedResults.length, loadPersonalFeed]);
 
   useEffect(() => {
     if (!user) {
@@ -1230,8 +1035,8 @@ export default function Home() {
           };
         });
 
-        // Load the personal feed with new personalization
-        await loadPersonalFeed({ personalizationOverride: result.personalization, force: true });
+        // Reload the personal feed
+        await loadPersonalFeed(true);
 
       } catch (error) {
         console.error('Profile enrichment request failed', error);
@@ -1334,7 +1139,6 @@ export default function Home() {
         {uniqueResults.map((result) => {
           const isSelected = selectedPaper?.id === result.id;
           const primaryLink = getPrimaryLink(result);
-          const userRating = paperRatings.get(result.semanticScholarId);
 
           return (
             <article
@@ -1359,18 +1163,6 @@ export default function Home() {
                 <p className="text-sm text-slate-600">{formatAuthors(result.authors)}</p>
                 {formatMeta(result) && (
                   <p className="text-xs text-slate-500">{formatMeta(result)}</p>
-                )}
-                {userRating && (
-                  <div className="flex items-center gap-2">
-                    <StarRating
-                      rating={userRating.rating}
-                      interactive={false}
-                      size="sm"
-                    />
-                    <span className="text-xs text-slate-600">
-                      Rated {userRating.rating}/5
-                    </span>
-                  </div>
                 )}
                 {primaryLink && (
                   <a
@@ -1567,15 +1359,11 @@ export default function Home() {
   } else if (shouldShowPersonalFeed) {
     if (personalFeedLoading && personalFeedResults.length === 0) {
       // Show loading state only if we have no results yet
-      const progressText = personalFeedProgress.total > 0
-        ? `Loading ${personalFeedProgress.completed}/${personalFeedProgress.total} queries…`
-        : 'Refreshing your personalised feed…';
-
       mainFeedContent = (
         <div className={FEED_LOADING_WRAPPER_CLASSES}>
           <span className={FEED_LOADING_PILL_CLASSES}>
             <span className={FEED_SPINNER_CLASSES} aria-hidden="true" />
-            <span>{progressText}</span>
+            <span>Loading your personal feed…</span>
           </span>
           {FEED_SKELETON_ITEMS.slice(0, 3).map((_, index) => (
             <div key={index} className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white">
@@ -1587,23 +1375,6 @@ export default function Home() {
               </div>
             </div>
           ))}
-        </div>
-      );
-    } else if (personalFeedLoading && personalFeedProgressResults.length > 0) {
-      // Show partial results with progress indicator (using progress results, not final results)
-      const progressText = personalFeedProgress.total > 0
-        ? `Loading ${personalFeedProgress.completed}/${personalFeedProgress.total} queries…`
-        : 'Loading more…';
-
-      mainFeedContent = (
-        <div className="space-y-4">
-          <div className="flex justify-center py-2">
-            <span className={FEED_LOADING_PILL_CLASSES}>
-              <span className={FEED_SPINNER_CLASSES} aria-hidden="true" />
-              <span>{progressText}</span>
-            </span>
-          </div>
-          {renderResultList(personalFeedProgressResults, 'Personal recommendation (recent)')}
         </div>
       );
     } else if (personalFeedResults.length > 0) {
@@ -1651,8 +1422,6 @@ export default function Home() {
 
     // Invalidate list metadata cache to reflect updated item counts
     if (user) {
-      // Set flag to prevent unnecessary rating fetches during list metadata update
-      setIsUpdatingListMetadata(true);
 
       const listCacheKey = `${LIST_METADATA_CACHE_KEY}-${user.id}`;
       clearCachedData(listCacheKey);
@@ -1672,176 +1441,15 @@ export default function Home() {
 
       // Refresh list metadata to show updated counts
       console.log('📝 [PERF] Refreshing user lists after save');
-      fetchUserLists(true).finally(() => {
-        // Clear the flag after list update is complete
-        console.log('📝 [PERF] List metadata update completed, re-enabling rating fetch');
-        setIsUpdatingListMetadata(false);
-      });
+      fetchUserLists(true);
     }
 
     console.log(`📝 [PERF] handlePaperSaved completed in ${Date.now() - startTime}ms`);
   };
 
-  const fetchPaperRating = useCallback(async (paperId: string) => {
-    if (!user) return null;
 
-    try {
-      const response = await fetch(`/api/ratings/${paperId}`);
-      if (response.ok) {
-        const data = await response.json();
-        return data.rating;
-      }
-    } catch (error) {
-      console.error('Failed to fetch paper rating:', error);
-    }
-    return null;
-  }, [user]);
 
-  // Track which papers we've already fetched ratings for
-  const fetchedRatingsRef = useRef(new Set<string>());
 
-  const fetchPaperRatings = useCallback(async (papers: ApiSearchResult[]) => {
-    const startTime = Date.now();
-    console.log(`🔄 [PERF] fetchPaperRatings called with ${papers.length} papers`);
-
-    if (!user || papers.length === 0) {
-      console.log(`🔄 [PERF] fetchPaperRatings skipped - no user or papers`);
-      return;
-    }
-
-    // Filter to only papers we haven't fetched ratings for yet
-    const unfetchedPapers = papers.filter(paper =>
-      paper.semanticScholarId && !fetchedRatingsRef.current.has(paper.semanticScholarId)
-    );
-
-    if (unfetchedPapers.length === 0) {
-      console.log(`🔄 [PERF] fetchPaperRatings skipped - all ratings already cached (${Date.now() - startTime}ms)`);
-      return; // All ratings already cached
-    }
-
-    console.log(`🔄 [PERF] fetchPaperRatings fetching ratings for ${unfetchedPapers.length} unfetched papers`);
-
-    try {
-      // Batch fetch ratings for all unfetched papers
-      const paperIds = unfetchedPapers.map(p => p.semanticScholarId).filter(Boolean);
-
-      // If we have many papers, fetch all ratings at once for efficiency
-      // If just a few, fetch individually to be more targeted
-      if (paperIds.length > 5) {
-        // Fetch all user ratings at once for efficiency with large batches
-        const response = await fetch('/api/ratings');
-        if (response.ok) {
-          const data = await response.json();
-          const ratings = data.ratings as PaperRating[];
-
-          // Update our cache with ALL ratings
-          setPaperRatings(current => {
-            const newMap = new Map(current);
-            ratings.forEach(rating => {
-              newMap.set(rating.paper_semantic_scholar_id, rating);
-              fetchedRatingsRef.current.add(rating.paper_semantic_scholar_id);
-            });
-            return newMap;
-          });
-        }
-      } else {
-        // Fetch ratings for specific papers only
-        const ratingPromises = paperIds.map(async (paperId) => {
-          try {
-            const response = await fetch(`/api/ratings?paperId=${encodeURIComponent(paperId)}`);
-            if (response.ok) {
-              const data = await response.json();
-              return { paperId, ratings: data.ratings as PaperRating[] };
-            }
-          } catch (error) {
-            console.error(`Failed to fetch rating for paper ${paperId}:`, error);
-          }
-          return { paperId, ratings: [] };
-        });
-
-        const results = await Promise.all(ratingPromises);
-
-        // Update cache with specific results
-        setPaperRatings(current => {
-          const newMap = new Map(current);
-          results.forEach(({ paperId, ratings }) => {
-            fetchedRatingsRef.current.add(paperId);
-            if (ratings.length > 0) {
-              newMap.set(paperId, ratings[0]); // Should be only one rating per paper per user
-            }
-          });
-          return newMap;
-        });
-      }
-    } catch (error) {
-      console.error('Failed to fetch paper ratings:', error);
-    } finally {
-      console.log(`🔄 [PERF] fetchPaperRatings completed in ${Date.now() - startTime}ms`);
-    }
-  }, [user]);
-
-  // Reset ratings cache when user changes
-  useEffect(() => {
-    if (user) {
-      fetchedRatingsRef.current.clear();
-    }
-  }, [user]);
-
-  // Only fetch ratings for search results and personal feed - NOT for list items
-  // List items should load instantly without external API calls
-  useEffect(() => {
-    const startTime = Date.now();
-    console.log('🔄 [PERF] Rating fetch useEffect triggered');
-
-    if (!user) {
-      console.log('🔄 [PERF] Rating fetch skipped - no user');
-      return;
-    }
-
-    // Skip rating fetch if we're just updating list metadata to prevent unnecessary API calls
-    if (isUpdatingListMetadata) {
-      console.log('🔄 [PERF] Rating fetch skipped - updating list metadata');
-      return;
-    }
-
-    const searchAndFeedPapers = [
-      ...keywordResults,
-      ...personalFeedResults
-      // Removed listItems to prevent external API calls during list loading
-    ];
-
-    // Remove duplicates by semanticScholarId
-    const uniquePapers = searchAndFeedPapers.filter((paper, index, arr) =>
-      paper.semanticScholarId && arr.findIndex(p => p.semanticScholarId === paper.semanticScholarId) === index
-    );
-
-    console.log(`🔄 [PERF] Rating fetch effect: ${uniquePapers.length} unique papers (${Date.now() - startTime}ms)`);
-
-    if (uniquePapers.length > 0) {
-      fetchPaperRatings(uniquePapers);
-    }
-  }, [fetchPaperRatings, keywordResults, personalFeedResults, user, isUpdatingListMetadata]);
-
-  const handleRateSelectedPaper = async () => {
-    if (!selectedPaper) return;
-
-    if (!user) {
-      authModal.openSignup();
-      return;
-    }
-
-    // Fetch existing rating if any
-    const existingRating = await fetchPaperRating(selectedPaper.semanticScholarId);
-    setCurrentPaperRating(existingRating);
-    setPaperToRate(selectedPaper);
-    setRateModalOpen(true);
-  };
-
-  const handleRateModalClose = () => {
-    setRateModalOpen(false);
-    setPaperToRate(null);
-    setCurrentPaperRating(null);
-  };
 
   const handleViewFullPaper = async () => {
     if (!selectedPaper || !selectedPaper.id.startsWith('sample-')) {
@@ -1890,16 +1498,6 @@ export default function Home() {
     }
   };
 
-  const handlePaperRated = () => {
-    console.log('Paper rated successfully!');
-    // Clear the cache for the rated paper so it gets refetched
-    if (selectedPaper?.semanticScholarId) {
-      fetchedRatingsRef.current.delete(selectedPaper.semanticScholarId);
-
-      // Trigger refetch for just this paper
-      fetchPaperRatings([selectedPaper]);
-    }
-  };
 
   const handleListClick = (listId: number) => {
     setCompileState((previous) => {
@@ -2296,7 +1894,7 @@ export default function Home() {
     setLastKeywordQuery('');
     setSelectedListId(null);
     setListItems([]);
-    loadPersonalFeed({ force: true, minimumQueries: 3 });
+    loadPersonalFeed(true);
   }, [loadPersonalFeed]);
 
 
@@ -2686,18 +2284,6 @@ export default function Home() {
                   {metaSummary && (
                     <p className="text-xs text-slate-600">{metaSummary}</p>
                   )}
-                  {selectedPaper && paperRatings.get(selectedPaper.semanticScholarId) && (
-                    <div className="flex items-center gap-2 rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2">
-                      <StarRating
-                        rating={paperRatings.get(selectedPaper.semanticScholarId)!.rating}
-                        interactive={false}
-                        size="sm"
-                      />
-                      <span className="text-sm font-medium text-yellow-800">
-                        Your rating: {paperRatings.get(selectedPaper.semanticScholarId)!.rating}/5
-                      </span>
-                    </div>
-                  )}
                 </div>
 
 
@@ -2719,14 +2305,8 @@ export default function Home() {
                   const showSpinner = isActiveCompileAction && compileState.status === 'loading'
                   const layoutClasses = ''
 
-                  // Handle rating-specific display logic
-                  const selectedPaperRating = selectedPaper ? paperRatings.get(selectedPaper.semanticScholarId) : null
-                  const displayLabel = action.id === 'rate' && selectedPaperRating
-                    ? 'Update Rating'
-                    : action.label
-                  const displayDescription = action.id === 'rate' && selectedPaperRating
-                    ? `Currently rated ${selectedPaperRating.rating}/5 star${selectedPaperRating.rating === 1 ? '' : 's'}`
-                    : action.description
+                  const displayLabel = action.label
+                  const displayDescription = action.description
                   const content = (
                     <div className="flex h-full flex-col gap-2">
                       <span className={ACTION_LABEL_CLASSES}>
@@ -2773,10 +2353,6 @@ export default function Home() {
                       onClick={() => {
                         if (action.id === 'compile-methods' || action.id === 'compile-claims') {
                           void handleCompileAction(action.id, action.label)
-                          return
-                        }
-                        if (action.id === 'rate') {
-                          void handleRateSelectedPaper()
                           return
                         }
                         console.log(`${action.label} clicked for`, selectedPaper.id)
@@ -2907,14 +2483,6 @@ export default function Home() {
         onSaved={handlePaperSaved}
         userLists={userLists}
         setUserLists={setUserLists}
-      />
-      {/* Rate Modal */}
-      <RateModal
-        isOpen={rateModalOpen}
-        paper={paperToRate}
-        onClose={handleRateModalClose}
-        onRated={handlePaperRated}
-        existingRating={currentPaperRating}
       />
       {profileEditorVisible && (
         <div
