@@ -186,11 +186,13 @@ function normaliseQuery(query: string) {
   return query.trim()
 }
 
-async function getCachedResults(query: string): Promise<{ results: StoredSearchResult[]; fresh: boolean } | null> {
+async function getCachedResults(query: string, year: number | null): Promise<{ results: StoredSearchResult[]; fresh: boolean } | null> {
+  // Create cache key that includes year to avoid wrong cache hits
+  const cacheKey = year ? `${query}|year:${year}` : query
   const { data: queryRow, error: queryError } = await supabaseAdmin
     .from(TABLES.SEARCH_QUERIES)
     .select('id, created_at, results_count')
-    .eq('query', query)
+    .eq('query', cacheKey)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -290,6 +292,12 @@ async function performSemanticScholarRequest(query: string, year: number | null,
     await waitFor(waitMs)
   }
 
+  // Add conservative delay for year-filtered queries to avoid hitting stricter limits
+  if (year && attempt === 1) {
+    console.log(`Year-filtered query detected, adding 3s conservative delay`)
+    await waitFor(3000)
+  }
+
   const params = new URLSearchParams({
     query,
     fields: SEMANTIC_SCHOLAR_FIELDS,
@@ -378,7 +386,9 @@ function transformPaper(paper: SemanticScholarPaper) {
   }
 }
 
-async function storeResults(query: string, papers: SemanticScholarPaper[]) {
+async function storeResults(query: string, year: number | null, papers: SemanticScholarPaper[]) {
+  // Create cache key that includes year to match getCachedResults logic
+  const cacheKey = year ? `${query}|year:${year}` : query
   const transformed = papers.map(transformPaper)
 
   if (!transformed.length) {
@@ -416,7 +426,7 @@ async function storeResults(query: string, papers: SemanticScholarPaper[]) {
     .from(TABLES.SEARCH_QUERIES)
     .upsert(
       {
-        query,
+        query: cacheKey,
         results_count: transformed.length,
       },
       { onConflict: 'query' }
@@ -511,7 +521,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Query is required.' }, { status: 400 })
     }
 
-    const cacheHit = await getCachedResults(query)
+    const cacheHit = await getCachedResults(query, year)
     if (cacheHit?.fresh && cacheHit.results.length) {
       return NextResponse.json({ results: buildResponsePayload(cacheHit.results), cached: true })
     }
@@ -537,7 +547,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ results: [] })
     }
 
-    const storedResults = await storeResults(query, papers)
+    const storedResults = await storeResults(query, year, papers)
 
     return NextResponse.json({ results: buildResponsePayload(storedResults), cached: false })
   } catch (error) {

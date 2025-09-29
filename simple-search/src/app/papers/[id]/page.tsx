@@ -217,7 +217,7 @@ function PaperDetailPage() {
         <header className="border-b border-slate-200 bg-white/80 backdrop-blur">
           <div className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-4 sm:gap-6">
             <Link
-              href="/search"
+              href="/"
               className="rounded-full border border-slate-200 p-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
             >
               ←
@@ -246,7 +246,7 @@ function PaperDetailPage() {
         <header className="border-b border-slate-200 bg-white/80 backdrop-blur">
           <div className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-4 sm:gap-6">
             <Link
-              href="/search"
+              href="/"
               className="rounded-full border border-slate-200 p-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
             >
               ←

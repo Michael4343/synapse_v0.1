@@ -528,6 +528,7 @@ export default function Home() {
   const authModal = useAuthModal();
 
   const [keywordQuery, setKeywordQuery] = useState('');
+  const [yearQuery, setYearQuery] = useState('');
   const [researchChecked, setResearchChecked] = useState(true);
   const [grantsChecked, setGrantsChecked] = useState(false);
   const [patentsChecked, setPatentsChecked] = useState(false);
@@ -537,6 +538,7 @@ export default function Home() {
   const [keywordLoading, setKeywordLoading] = useState(false);
   const [keywordError, setKeywordError] = useState('');
   const [lastKeywordQuery, setLastKeywordQuery] = useState('');
+  const [lastYearQuery, setLastYearQuery] = useState<number | null>(null);
   const [selectedPaper, setSelectedPaper] = useState<ApiSearchResult | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -1403,6 +1405,11 @@ export default function Home() {
           <span className="text-base font-semibold text-slate-900">{keywordResults.length}</span>
           <span>result{keywordResults.length === 1 ? '' : 's'} for</span>
           <span className="text-base font-semibold text-slate-900">&ldquo;{lastKeywordQuery}&rdquo;</span>
+          {lastYearQuery && (
+            <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-700">
+              {lastYearQuery}
+            </span>
+          )}
         </div>
         {renderResultList(keywordResults, 'Search result')}
       </>
@@ -1583,6 +1590,7 @@ export default function Home() {
     setSelectedListId(listId);
     setKeywordResults([]);
     setLastKeywordQuery('');
+    setLastYearQuery(null);
     setKeywordError('');
     fetchListItems(listId);
     // Clear selected paper or set to first item once loaded
@@ -1907,6 +1915,9 @@ export default function Home() {
   const handleKeywordSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = keywordQuery.trim();
+    const trimmedYear = yearQuery.trim();
+    const parsedYear = trimmedYear ? parseInt(trimmedYear, 10) : null;
+    const validYear = parsedYear && parsedYear >= 1900 && parsedYear <= new Date().getFullYear() + 2 ? parsedYear : null;
     const atLeastOneFilter = researchChecked || grantsChecked || patentsChecked;
 
     // Clear list selection when searching
@@ -1918,6 +1929,7 @@ export default function Home() {
       setKeywordResults([]);
       setSelectedPaper(!user ? SAMPLE_PAPERS[0] : null); // Return to default for non-auth users
       setLastKeywordQuery('');
+    setLastYearQuery(null);
       return;
     }
 
@@ -1926,6 +1938,7 @@ export default function Home() {
       setKeywordResults([]);
       setSelectedPaper(!user ? SAMPLE_PAPERS[0] : null); // Return to default for non-auth users
       setLastKeywordQuery('');
+    setLastYearQuery(null);
       return;
     }
 
@@ -1941,6 +1954,7 @@ export default function Home() {
     setKeywordLoading(true);
     setKeywordError('');
     setLastKeywordQuery(trimmed);
+    setLastYearQuery(validYear);
 
     try {
       const response = await fetch('/api/search', {
@@ -1948,7 +1962,7 @@ export default function Home() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ query: queryWithFilters }),
+        body: JSON.stringify({ query: queryWithFilters, ...(validYear && { year: validYear }) }),
       });
 
       if (!response.ok) {
@@ -1981,9 +1995,11 @@ export default function Home() {
 
   const handleRefreshPersonalFeed = useCallback(() => {
     setKeywordQuery('');
+    setYearQuery('');
     setKeywordResults([]);
     setKeywordError('');
     setLastKeywordQuery('');
+    setLastYearQuery(null);
     setSelectedListId(null);
     setListItems([]);
     loadPersonalFeed(true);
@@ -2202,9 +2218,32 @@ export default function Home() {
                   <input
                     type="text"
                     value={keywordQuery}
-                    onChange={(e) => setKeywordQuery(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setKeywordQuery(value);
+                      // Clear year when search input is completely cleared
+                      if (!value.trim()) {
+                        setYearQuery('');
+                      }
+                    }}
                     placeholder="Find the knowledge the papers leave out"
-                    className="w-full bg-transparent px-5 py-3.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                    className="flex-1 bg-transparent px-5 py-3.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                  />
+                  <div className="h-6 w-px bg-slate-200"></div>
+                  <input
+                    type="number"
+                    value={yearQuery}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // Only allow 4-digit years or empty
+                      if (value === '' || (value.length <= 4 && /^\d+$/.test(value))) {
+                        setYearQuery(value);
+                      }
+                    }}
+                    placeholder="Year"
+                    min="1900"
+                    max={new Date().getFullYear() + 2}
+                    className="w-20 bg-transparent px-3 py-3.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none text-center"
                   />
                   <button
                     type="submit"
