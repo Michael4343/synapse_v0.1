@@ -395,6 +395,15 @@ function getPrimaryLink(result: ApiSearchResult): { href: string; label: string 
   return null
 }
 
+function filterByRecency(papers: ApiSearchResult[], days: number): ApiSearchResult[] {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+
+  return papers.filter(paper =>
+    paper.publicationDate && new Date(paper.publicationDate) >= cutoff
+  );
+}
+
 interface UserProfile {
   orcid_id: string | null
   academic_website: string | null
@@ -821,40 +830,77 @@ export default function Home() {
         const allResults: ApiSearchResult[] = [];
         const seenIds = new Set<string>();
 
-        // Sequential queries for each keyword
+        // Sequential queries for each keyword with recent year filtering
         for (let i = 0; i < keywords.length; i++) {
           const keyword = keywords[i];
 
           try {
+            // Use current year for personal feed to get recent papers
+            const currentYear = new Date().getFullYear();
             const response = await fetch('/api/search', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ query: keyword })
+              body: JSON.stringify({ query: keyword, year: currentYear })
             });
 
+            let results: ApiSearchResult[] = [];
             if (response.ok) {
               const data = await response.json();
-              const results = Array.isArray(data.results) ? data.results : [];
+              results = Array.isArray(data.results) ? data.results : [];
+            }
 
-              // Add unique results
-              for (const result of results) {
-                if (!seenIds.has(result.id) && allResults.length < 12) {
-                  allResults.push(result);
-                  seenIds.add(result.id);
-                }
-              }
-
-              // Update UI with progressive results
-              if (allResults.length > 0) {
-                const sorted = [...allResults].sort((a, b) => {
-                  if (!a.publicationDate && !b.publicationDate) return 0;
-                  if (!a.publicationDate) return 1;
-                  if (!b.publicationDate) return -1;
-                  return new Date(b.publicationDate).getTime() - new Date(a.publicationDate).getTime();
+            // If we get fewer than 3 results from current year, also try previous year
+            if (results.length < 3) {
+              try {
+                const previousYear = currentYear - 1;
+                const fallbackResponse = await fetch('/api/search', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ query: keyword, year: previousYear })
                 });
-                setPersonalFeedResults(sorted);
-                setPersonalFeedError('');
+
+                if (fallbackResponse.ok) {
+                  const fallbackData = await fallbackResponse.json();
+                  const fallbackResults = Array.isArray(fallbackData.results) ? fallbackData.results : [];
+
+                  // Add previous year results to current year results
+                  results = [...results, ...fallbackResults];
+                }
+              } catch (fallbackError) {
+                console.log(`Previous year fallback failed for keyword "${keyword}":`, fallbackError);
               }
+            }
+
+            // Filter by recency with progressive expansion for personal feed
+            let filteredResults = filterByRecency(results, 7); // Try 7 days first
+            if (filteredResults.length < 3) {
+              filteredResults = filterByRecency(results, 14); // Expand to 14 days
+            }
+            if (filteredResults.length < 3) {
+              filteredResults = filterByRecency(results, 30); // Expand to 30 days
+            }
+            if (filteredResults.length < 3) {
+              filteredResults = results; // Use all results if still insufficient
+            }
+
+            // Add unique results
+            for (const result of filteredResults) {
+              if (!seenIds.has(result.id) && allResults.length < 12) {
+                allResults.push(result);
+                seenIds.add(result.id);
+              }
+            }
+
+            // Update UI with progressive results
+            if (allResults.length > 0) {
+              const sorted = [...allResults].sort((a, b) => {
+                if (!a.publicationDate && !b.publicationDate) return 0;
+                if (!a.publicationDate) return 1;
+                if (!b.publicationDate) return -1;
+                return new Date(b.publicationDate).getTime() - new Date(a.publicationDate).getTime();
+              });
+              setPersonalFeedResults(sorted);
+              setPersonalFeedError('');
             }
           } catch (error) {
             console.warn(`Query ${i + 1} failed:`, error);

@@ -524,11 +524,11 @@ async function callGeminiForProfile({
       messages: [
         {
           role: 'system',
-          content: 'You are an assistant that converts research activity data into structured personalization settings for a scientific literature feed. Prefer recent topics and ensure outputs help craft Semantic Scholar queries.',
+          content: 'You are an expert at analyzing academic research patterns and extracting precise keywords for scientific literature discovery. Focus on identifying the most distinctive research concepts, methodologies, and application domains that would effectively find relevant papers in academic databases. Prioritize specific technical terms over generic academic language.',
         },
         {
           role: 'user',
-          content: `Create a personalization profile from the following JSON context. The profile should focus on daily discovery of 12 fresh papers. Respond with JSON only.\n\n${JSON.stringify(userContext).slice(0, 12000)}`,
+          content: `Analyze the researcher's publications below and create a personalization profile. Focus on their most distinctive research areas and methodologies. Extract specific technical keywords that would find similar cutting-edge papers, not generic terms like "analysis" or "research". Group related concepts into topic clusters. Respond with JSON only.\n\nResearcher Data:\n${JSON.stringify(userContext).slice(0, 12000)}`,
         },
       ],
     }),
