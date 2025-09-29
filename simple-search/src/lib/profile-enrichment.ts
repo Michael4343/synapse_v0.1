@@ -552,10 +552,17 @@ async function callGeminiForProfile({
   }
 }
 
+function formatOrcidForApi(orcidId: string): string {
+  // Clean and add dashes: 0000000191015432 → 0000-0001-9101-5432
+  const clean = orcidId.replace(/[^0-9X]/gi, '').slice(0, 16);
+  return clean.replace(/(.{4})(.{4})(.{4})(.{4})/, '$1-$2-$3-$4');
+}
+
 export async function fetchOrcidWorks(orcidId: string): Promise<{ works: OrcidWork[]; error?: string }> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 5000)
-  const url = `https://pub.orcid.org/v3.0/${encodeURIComponent(orcidId)}/works`
+  const formattedOrcidId = formatOrcidForApi(orcidId)
+  const url = `https://pub.orcid.org/v3.0/${encodeURIComponent(formattedOrcidId)}/works`
 
   try {
     const response = await fetch(url, {
@@ -582,8 +589,8 @@ export async function fetchOrcidWorks(orcidId: string): Promise<{ works: OrcidWo
       const summaries = Array.isArray(group['work-summary']) ? group['work-summary'] : []
       for (const summary of summaries) {
         const title = summary?.title?.title?.value
-        const journal = summary?.journalTitle?.value
-        const year = parseInt(summary?.publicationDate?.year?.value, 10)
+        const journal = summary?.['journal-title']?.value
+        const year = parseInt(summary?.['publication-date']?.year?.value, 10)
         const contributors = Array.isArray(summary?.contributors?.contributor)
           ? summary.contributors.contributor
               .map((contributor: any) => contributor?.creditName?.value)

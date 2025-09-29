@@ -18,7 +18,9 @@
       "Bash(for:*)",
       "Bash(done)",
       "Read(//mnt/c/Users/mickl/Desktop/synapse/**)",
-      "WebFetch(domain:arxiv.org)"
+      "WebFetch(domain:arxiv.org)",
+      "WebFetch(domain:api.semanticscholar.org)",
+      "WebFetch(domain:www.semanticscholar.org)"
     ],
     "deny": [],
     "ask": []
