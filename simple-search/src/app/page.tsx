@@ -1774,8 +1774,16 @@ export default function Home() {
       }
     }
 
+    // Check if anything actually changed before setting loading states
+    const keywordsChanged = JSON.stringify(profile?.profile_personalization?.manual_keywords || []) !== JSON.stringify(parsedManualKeywords);
+    const orcidChanged = (profile?.orcid_id || null) !== normalizedOrcid;
+    const websiteChanged = (profile?.academic_website || null) !== (normalizedWebsite || null);
+    const hasChanges = keywordsChanged || orcidChanged || websiteChanged;
+
     setProfileSaving(true);
-    setProfileSaveLoading(true);
+    if (hasChanges) {
+      setProfileSaveLoading(true);
+    }
 
     try {
       const supabase = createClient();
@@ -1831,18 +1839,22 @@ export default function Home() {
       // Close the profile editor modal on successful save
       closeProfileEditor();
 
-      // Reload the personal feed with new keywords
-      try {
-        await loadPersonalFeed(true, parsedManualKeywords);
-      } catch (error) {
-        console.error('Failed to reload personal feed after profile save', error);
+      // Only reload the personal feed if there were actual changes
+      if (hasChanges) {
+        try {
+          await loadPersonalFeed(true, parsedManualKeywords);
+        } catch (error) {
+          console.error('Failed to reload personal feed after profile save', error);
+        }
       }
     } catch (error) {
       console.error('Unexpected profile update error', error);
       setProfileSaveError('Something went wrong while saving. Please try again.');
     } finally {
       setProfileSaving(false);
-      setProfileSaveLoading(false);
+      if (hasChanges) {
+        setProfileSaveLoading(false);
+      }
     }
   };
 
