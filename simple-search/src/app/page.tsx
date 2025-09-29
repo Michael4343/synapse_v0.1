@@ -2005,7 +2005,7 @@ export default function Home() {
                 <>
                   <div className="flex items-center justify-between w-full min-w-0">
                     <div className="flex-1 min-w-0">
-                      <span className="text-base font-bold uppercase tracking-[0.2em] text-slate-600">Evidentia</span>
+                      <span className="text-sm font-bold uppercase tracking-[0.2em] text-slate-600">Evidentia</span>
                     </div>
                     <div className="relative flex-shrink-0 ml-2" ref={accountDropdownRef}>
                       <button
@@ -2117,9 +2117,9 @@ export default function Home() {
                 </>
               ) : (
                 <>
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center justify-between gap-3">
                     <div className="space-y-1">
-                      <span className="text-base font-bold uppercase tracking-[0.2em] text-slate-600">Evidentia</span>
+                      <span className="text-sm font-bold uppercase tracking-[0.2em] text-slate-600">Evidentia</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
