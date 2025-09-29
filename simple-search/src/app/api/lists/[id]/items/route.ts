@@ -85,8 +85,8 @@ export async function GET(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const startTime = Date.now()
-  console.log('📊 [PERF] List Items API started')
+  const requestStartTime = Date.now()
+  console.log(`🕐 [TIMING] Request started at: ${requestStartTime}`)
 
   try {
     const supabase = await createClient()
@@ -94,7 +94,9 @@ export async function GET(
     // Get current user
     const authStart = Date.now()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
-    console.log(`📊 [PERF] Auth check: ${Date.now() - authStart}ms`)
+    const authComplete = Date.now()
+    console.log(`🕐 [TIMING] Auth completed at: ${authComplete} (took ${authComplete - requestStartTime}ms from start)`)
+    console.log(`📊 [PERF] Auth check: ${authComplete - authStart}ms`)
 
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -133,8 +135,11 @@ export async function GET(
     console.log(`📊 [PERF] Items query: ${Date.now() - itemsStart}ms`)
 
     // Return list info with items (empty array if items query failed)
-    console.log(`📊 [PERF] Total API time: ${Date.now() - startTime}ms`)
-    return NextResponse.json({
+    const dbComplete = Date.now()
+    console.log(`🕐 [TIMING] Database queries completed at: ${dbComplete} (took ${dbComplete - requestStartTime}ms from start)`)
+    console.log(`📊 [PERF] Total API time: ${dbComplete - requestStartTime}ms`)
+
+    const response = NextResponse.json({
       list: {
         id: listInfo.id,
         name: listInfo.name,
@@ -142,6 +147,10 @@ export async function GET(
         items: items || []
       }
     })
+
+    const responseReady = Date.now()
+    console.log(`🕐 [TIMING] Response ready to send at: ${responseReady} (took ${responseReady - requestStartTime}ms from start)`)
+    return response
 
   } catch (error) {
     console.error('API error:', error)

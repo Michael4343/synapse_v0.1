@@ -684,11 +684,18 @@ export default function Home() {
     setListItemsLoadingMessage('Loading list items…');
     try {
       // Simple fetch - no auth headers needed since we're authenticated
+      const fetchStart = Date.now();
+      console.log(`🕐 [TIMING] Frontend fetch started at: ${fetchStart}`);
+
       const response = await fetch(`/api/lists/${listId}/items`);
+
+      const fetchComplete = Date.now();
+      console.log(`🕐 [TIMING] Frontend fetch completed at: ${fetchComplete} (took ${fetchComplete - fetchStart}ms)`);
 
       if (response.ok) {
         const data = await response.json();
         const papers = data.list?.items?.map((item: any) => item.paper_data) || [];
+        console.log(`🕐 [TIMING] Response size: ${JSON.stringify(data).length} characters, ${papers.length} papers`);
 
         setListItems(papers);
 
@@ -700,6 +707,9 @@ export default function Home() {
         if (papers.length > 0) {
           setSelectedPaper(papers[0]);
         }
+
+        const stateComplete = Date.now();
+        console.log(`🕐 [TIMING] Frontend state updated at: ${stateComplete} (took ${stateComplete - fetchStart}ms total)`);
       }
     } catch (error) {
       console.error('Failed to fetch list items:', error);
@@ -1768,7 +1778,7 @@ export default function Home() {
         manual_keywords: parsedManualKeywords,
         filters: {
           recency_days: 7,
-          publication_types: ['journal', 'conference', 'preprint'] as const,
+          publication_types: ['journal', 'conference', 'preprint'] as ('journal' | 'conference' | 'preprint' | 'dataset' | 'patent')[],
           include_preprints: true,
         },
       };
