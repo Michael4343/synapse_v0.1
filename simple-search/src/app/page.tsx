@@ -559,6 +559,7 @@ export default function Home() {
   const [personalFeedError, setPersonalFeedError] = useState('');
   const [personalFeedLastUpdated, setPersonalFeedLastUpdated] = useState<string | null>(null);
   const [profileEditorVisible, setProfileEditorVisible] = useState(false);
+  const [profileSaveLoading, setProfileSaveLoading] = useState(false);
   const [accountDropdownVisible, setAccountDropdownVisible] = useState(false);
   const [scrapedContent, setScrapedContent] = useState<string | null>(null);
   const [scrapedContentLoading, setScrapedContentLoading] = useState(false);
@@ -781,13 +782,13 @@ export default function Home() {
 
 
   const loadPersonalFeed = useCallback(
-    async (force = false) => {
+    async (force = false, keywordsOverride?: string[]) => {
       if (!user) {
         return;
       }
 
-      // Get manual keywords from profile
-      const manualKeywordsArray = profile?.profile_personalization?.manual_keywords || [];
+      // Get manual keywords from profile or use override
+      const manualKeywordsArray = keywordsOverride || profile?.profile_personalization?.manual_keywords || [];
       if (manualKeywordsArray.length === 0) {
         setPersonalFeedResults([]);
         setPersonalFeedError('Add keywords to your profile to generate your personal feed.');
@@ -1367,7 +1368,7 @@ export default function Home() {
       </div>
     );
   } else if (shouldShowPersonalFeed) {
-    if (personalFeedLoading && personalFeedResults.length === 0) {
+    if ((personalFeedLoading || profileSaveLoading) && personalFeedResults.length === 0) {
       // Show loading state only if we have no results yet
       mainFeedContent = (
         <div className={FEED_LOADING_WRAPPER_CLASSES}>
@@ -1388,7 +1389,21 @@ export default function Home() {
         </div>
       );
     } else if (personalFeedResults.length > 0) {
-      mainFeedContent = renderResultList(personalFeedResults, 'Personal recommendation (recent)');
+      // Show loading indicator at top if reloading with existing results
+      const feedContent = renderResultList(personalFeedResults, 'Personal recommendation (recent)');
+      if (personalFeedLoading || profileSaveLoading) {
+        mainFeedContent = (
+          <div className={FEED_LOADING_WRAPPER_CLASSES}>
+            <span className={FEED_LOADING_PILL_CLASSES}>
+              <span className={FEED_SPINNER_CLASSES} aria-hidden="true" />
+              <span>Updating your personal feed…</span>
+            </span>
+            {feedContent}
+          </div>
+        );
+      } else {
+        mainFeedContent = feedContent;
+      }
     } else {
       mainFeedContent = (
         <div className="rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center text-sm text-slate-600">
@@ -1760,6 +1775,7 @@ export default function Home() {
     }
 
     setProfileSaving(true);
+    setProfileSaveLoading(true);
 
     try {
       const supabase = createClient();
@@ -1814,11 +1830,19 @@ export default function Home() {
 
       // Close the profile editor modal on successful save
       closeProfileEditor();
+
+      // Reload the personal feed with new keywords
+      try {
+        await loadPersonalFeed(true, parsedManualKeywords);
+      } catch (error) {
+        console.error('Failed to reload personal feed after profile save', error);
+      }
     } catch (error) {
       console.error('Unexpected profile update error', error);
       setProfileSaveError('Something went wrong while saving. Please try again.');
     } finally {
       setProfileSaving(false);
+      setProfileSaveLoading(false);
     }
   };
 
