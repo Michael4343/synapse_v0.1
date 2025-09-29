@@ -190,7 +190,7 @@ function ProcessedPaperContent({ processedContent }: { processedContent: string 
   }
 }
 
-type TileActionId = 'compile-methods' | 'compile-claims' | 'rate' | 'share'
+type TileActionId = 'compile-methods' | 'compile-claims' | 'share'
 type CompileActionId = Extract<TileActionId, 'compile-methods' | 'compile-claims'>
 
 interface CompileState {
@@ -216,11 +216,6 @@ const TILE_ACTIONS: Array<{
   {
     id: 'compile-methods',
     label: 'Compile Similar Methods',
-    disabled: true,
-  },
-  {
-    id: 'rate',
-    label: 'Comment',
     disabled: true,
   },
   {

@@ -40,7 +40,7 @@ export interface PaperInteractionProperties {
   paper_title?: string
   paper_source?: string
   paper_year?: number
-  action_type?: 'view' | 'click' | 'save' | 'rate'
+  action_type?: 'view' | 'click' | 'save'
 }
 
 export function usePostHogTracking() {
@@ -136,15 +136,6 @@ export function usePostHogTracking() {
     })
   }, [track])
 
-  const trackPaperRated = useCallback((paperId: string, paperTitle: string, rating: number) => {
-    track('paper_rated', {
-      paper_id: paperId,
-      paper_title: paperTitle,
-      rating,
-      action_type: 'rate'
-    })
-  }, [track])
-
   // Research Events
   const trackResearchCompiled = useCallback((query: string, paperCount: number) => {
     track('research_compiled', {
@@ -211,7 +202,6 @@ export function usePostHogTracking() {
 
     // Paper interactions
     trackPaperClicked,
-    trackPaperRated,
 
     // Research
     trackResearchCompiled,
@@ -219,5 +209,5 @@ export function usePostHogTracking() {
 
     // Error tracking
     trackError
-  }), [track, trackPageView, setUserProperties, trackSignupAttempted, trackSignupCompleted, trackLoginAttempted, trackLoginCompleted, trackLogoutCompleted, trackSearchQuery, trackSearchResults, trackListCreated, trackPaperSavedToList, trackPaperClicked, trackPaperRated, trackResearchCompiled, trackProfileEnriched, trackError])
+  }), [track, trackPageView, setUserProperties, trackSignupAttempted, trackSignupCompleted, trackLoginAttempted, trackLoginCompleted, trackLogoutCompleted, trackSearchQuery, trackSearchResults, trackListCreated, trackPaperSavedToList, trackPaperClicked, trackResearchCompiled, trackProfileEnriched, trackError])
 }

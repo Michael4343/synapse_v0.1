@@ -254,6 +254,18 @@ Building a Next.js + Supabase academic research aggregation platform that allows
   - **RLS policy added**: Created "Service role access for enrichment jobs" policy allowing `auth.role() = 'service_role'` full access
   - **Manual SQL fix**: Added policy via Supabase SQL Editor: `CREATE POLICY "Service role access for enrichment jobs" ON public.profile_enrichment_jobs FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');`
   - **API stability**: Profile enrichment workflow now functions correctly with proper database access
+- **Paper Ratings Feature Removal (v0.2.0)**: Removed unused paper ratings feature to simplify codebase:
+  - **Component cleanup**: Deleted `rate-modal.tsx` and `star-rating.tsx` (unused UI components)
+  - **API cleanup**: Removed `/api/ratings/` endpoints (GET/POST/PUT/DELETE)
+  - **Frontend cleanup**: Removed 'rate' action from tile actions menu in page.tsx
+  - **Tracking cleanup**: Removed `trackPaperRated` function from PostHog tracking hook
+  - **Database cleanup**: Removed `paper_ratings` table from all migration files (0001, 0003, 0004)
+  - **Migration created**: Added `0006_remove_paper_ratings.sql` to safely drop existing tables in deployed databases
+  - **Schema consolidation**: Rebuilt `database/schema.sql` as a complete, clean reference showing all 7 tables with proper organization
+  - **Documentation**: Schema now includes helpful comments, table summaries, and clear sections for all database objects
+  - **Code reduction**: Removed ~500 lines of unused code across 10+ files
+  - **Performance impact**: Eliminated unused database queries and table overhead
+  - **Zero user impact**: Feature was disabled and never used in production
 
 ### Current Directory Structure
 ```
@@ -273,12 +285,15 @@ Building a Next.js + Supabase academic research aggregation platform that allows
 │   └── acceptance-criteria.md    # Testing requirements
 └── /simple-search/               # Next.js + Supabase application
     ├── package.json              # App dependencies and scripts
-    ├── supabase/migrations/       # Database schema migrations (v0.1.9 consolidated)
-    │   ├── 0001_core_schema.sql           # All essential tables (profiles, search cache, lists, ratings)
+    ├── database/
+    │   └── schema.sql                     # Complete consolidated schema reference (v0.2.0 - for reference only)
+    ├── supabase/migrations/       # Database schema migrations (apply in order)
+    │   ├── 0001_core_schema.sql           # All essential tables (profiles, search cache, lists)
     │   ├── 0002_auth_functions.sql        # Auth triggers and helper functions
     │   ├── 0003_permissions.sql           # RLS policies and role permissions
     │   ├── 0004_indexes.sql               # Performance indexes organized by table
-    │   └── 0005_rls_performance_fix.sql   # Critical RLS optimization for list performance
+    │   ├── 0005_rls_performance_fix.sql   # Critical RLS optimization for list performance
+    │   └── 0006_remove_paper_ratings.sql  # Cleanup migration (removes unused ratings table)
     └── src/
         ├── app/
         │   ├── api/

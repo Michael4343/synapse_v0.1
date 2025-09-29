@@ -3,7 +3,6 @@ remove all code related to ratings - GPT codex
 refactor code - GPT codex
 improve list speed load - GPT codex
 fix rate limits  the serch works so there is a bug somewhere
-make search more recent
 Change to daily update - GPT codex
 
 Personalisation

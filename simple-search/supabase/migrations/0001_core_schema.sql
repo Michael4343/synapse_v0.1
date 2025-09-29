@@ -155,33 +155,11 @@ CREATE TABLE public.list_items (
 );
 
 -- =============================================================================
--- PAPER RATINGS TABLE
--- =============================================================================
--- User ratings and annotations for papers
-CREATE TABLE public.paper_ratings (
-  id BIGSERIAL PRIMARY KEY,
-  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  paper_semantic_scholar_id TEXT NOT NULL,
-  paper_title TEXT NOT NULL,
-  rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
-  comment TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT paper_ratings_unique_user_paper UNIQUE (user_id, paper_semantic_scholar_id)
-);
-
--- =============================================================================
 -- TRIGGERS
 -- =============================================================================
 -- Auto-update timestamps on search_results updates
 CREATE TRIGGER trig_search_results_updated_at
   BEFORE UPDATE ON public.search_results
-  FOR EACH ROW
-  EXECUTE FUNCTION public.touch_updated_at();
-
--- Auto-update timestamps on paper_ratings updates
-CREATE TRIGGER trig_paper_ratings_updated_at
-  BEFORE UPDATE ON public.paper_ratings
   FOR EACH ROW
   EXECUTE FUNCTION public.touch_updated_at();
 

@@ -63,10 +63,3 @@ CREATE INDEX idx_list_items_list_id_created_at ON public.list_items(list_id, cre
 
 -- Paper deduplication index (btree for JSON text extraction)
 CREATE INDEX idx_list_items_paper_id ON public.list_items ((paper_data->>'id'));
-
--- =============================================================================
--- PAPER RATINGS INDEXES
--- =============================================================================
-CREATE INDEX idx_paper_ratings_user_id ON public.paper_ratings(user_id);
-CREATE INDEX idx_paper_ratings_paper_id ON public.paper_ratings(paper_semantic_scholar_id);
-CREATE INDEX idx_paper_ratings_created_at ON public.paper_ratings(created_at DESC);
