@@ -405,6 +405,8 @@ interface UserProfile {
   profile_personalization: ProfilePersonalization | null
   last_profile_enriched_at: string | null
   profile_enrichment_version: string | null
+  email_digest_enabled: boolean
+  last_digest_sent_at: string | null
 }
 
 function formatRelativeTime(timestamp: string | null | undefined) {
@@ -549,6 +551,7 @@ export default function Home() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileEnrichmentLoading, setProfileEnrichmentLoading] = useState(false);
   const [profileEnrichmentError, setProfileEnrichmentError] = useState('');
+  const [emailDigestEnabled, setEmailDigestEnabled] = useState(false);
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [paperToSave, setPaperToSave] = useState<ApiSearchResult | null>(null);
   const [userLists, setUserLists] = useState<UserListSummary[]>([]);
@@ -749,7 +752,7 @@ export default function Home() {
       const supabase = createClient();
       const { data, error } = await supabase
         .from('profiles')
-        .select('orcid_id, academic_website, profile_personalization, last_profile_enriched_at, profile_enrichment_version')
+        .select('orcid_id, academic_website, profile_personalization, last_profile_enriched_at, profile_enrichment_version, email_digest_enabled, last_digest_sent_at')
         .eq('id', user.id)
         .single();
 
@@ -768,7 +771,10 @@ export default function Home() {
           profile_personalization: data?.profile_personalization ?? null,
           last_profile_enriched_at: data?.last_profile_enriched_at ?? null,
           profile_enrichment_version: data?.profile_enrichment_version ?? null,
+          email_digest_enabled: data?.email_digest_enabled ?? false,
+          last_digest_sent_at: data?.last_digest_sent_at ?? null,
         });
+        setEmailDigestEnabled(data?.email_digest_enabled ?? false);
       }
     } catch (error) {
       if (isMountedRef.current) {
@@ -1110,6 +1116,7 @@ export default function Home() {
     if (profile) {
       setProfileFormOrcid(formatOrcidId(profile.orcid_id ?? ''));
       setProfileFormWebsite(profile.academic_website ?? '');
+      setEmailDigestEnabled(profile.email_digest_enabled ?? false);
       setOrcidEditingMode(false);
       setWebsiteEditingMode(false);
 
@@ -1130,6 +1137,7 @@ export default function Home() {
       setProfileFormOrcid('');
       setProfileFormWebsite('');
       setProfileManualKeywords('');
+      setEmailDigestEnabled(false);
       setManualKeywordsSeededVersion(null);
     }
   }, [profile, manualKeywordsSeededVersion]);
@@ -1172,7 +1180,24 @@ export default function Home() {
           />
         </div>
 
-
+        <div className="space-y-2">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={emailDigestEnabled}
+              onChange={(e) => setEmailDigestEnabled(e.target.checked)}
+              className="w-4 h-4 text-sky-600 border-slate-300 rounded focus:ring-sky-500 focus:ring-2 cursor-pointer"
+            />
+            <span className="text-sm font-medium text-slate-700">
+              Send me daily research updates
+            </span>
+          </label>
+          {profile?.last_digest_sent_at && (
+            <p className="text-xs text-slate-500 ml-7">
+              Last sent: {formatRelativeTime(profile.last_digest_sent_at)}
+            </p>
+          )}
+        </div>
       </div>
     );
   };
@@ -1827,7 +1852,8 @@ export default function Home() {
     const keywordsChanged = JSON.stringify(profile?.profile_personalization?.manual_keywords || []) !== JSON.stringify(parsedManualKeywords);
     const orcidChanged = (profile?.orcid_id || null) !== normalizedOrcid;
     const websiteChanged = (profile?.academic_website || null) !== (normalizedWebsite || null);
-    const hasChanges = keywordsChanged || orcidChanged || websiteChanged;
+    const digestChanged = (profile?.email_digest_enabled || false) !== emailDigestEnabled;
+    const hasChanges = keywordsChanged || orcidChanged || websiteChanged || digestChanged;
 
     setProfileSaving(true);
     if (hasChanges) {
@@ -1864,6 +1890,7 @@ export default function Home() {
           profile_personalization: simplePersonalization,
           last_profile_enriched_at: new Date().toISOString(),
           profile_enrichment_version: 'manual-v1',
+          email_digest_enabled: emailDigestEnabled,
         })
         .eq('id', user.id);
 
@@ -1879,6 +1906,8 @@ export default function Home() {
         profile_personalization: simplePersonalization,
         last_profile_enriched_at: new Date().toISOString(),
         profile_enrichment_version: 'manual-v1',
+        email_digest_enabled: emailDigestEnabled,
+        last_digest_sent_at: previous?.last_digest_sent_at ?? null,
       }));
 
       // Reset editing modes

@@ -266,6 +266,16 @@ Building a Next.js + Supabase academic research aggregation platform that allows
   - **Code reduction**: Removed ~500 lines of unused code across 10+ files
   - **Performance impact**: Eliminated unused database queries and table overhead
   - **Zero user impact**: Feature was disabled and never used in production
+- **Daily Email Digest (v0.2.1)**: Implemented daily research digest emails sent via Resend:
+  - **Database migration**: Added `email_digest_enabled` (boolean) and `last_digest_sent_at` (timestamp) fields to profiles table
+  - **Email template**: Created professional HTML email template matching Evidentia branding, showing 5-10 recent papers with titles, authors, abstracts, and citations
+  - **Cron endpoint**: Built `/api/cron/daily-digest` protected by `CRON_SECRET` that processes all opted-in users, generates personal feeds, and sends digest emails
+  - **Test endpoint**: Added `/api/test-digest` for development testing - sends digest to current authenticated user on demand
+  - **Profile UI**: Added "Send me daily research updates" checkbox in profile modal with last sent timestamp display
+  - **Vercel cron**: Configured daily execution at 9 AM UTC via `vercel.json` cron configuration
+  - **Smart filtering**: Digests only include papers from last 24-48 hours, sorted by publication date
+  - **Performance**: Reuses existing personal feed logic, limits to 4 keywords and 10 papers per email
+  - **Email service**: Uses Resend with test domain (onboarding@resend.dev) - production requires domain verification
 
 ### Current Directory Structure
 ```
@@ -285,6 +295,7 @@ Building a Next.js + Supabase academic research aggregation platform that allows
 │   └── acceptance-criteria.md    # Testing requirements
 └── /simple-search/               # Next.js + Supabase application
     ├── package.json              # App dependencies and scripts
+    ├── vercel.json               # Vercel configuration (includes cron jobs)
     ├── database/
     │   └── schema.sql                     # Complete consolidated schema reference (v0.2.0 - for reference only)
     ├── supabase/migrations/       # Database schema migrations (apply in order)
@@ -293,14 +304,18 @@ Building a Next.js + Supabase academic research aggregation platform that allows
     │   ├── 0003_permissions.sql           # RLS policies and role permissions
     │   ├── 0004_indexes.sql               # Performance indexes organized by table
     │   ├── 0005_rls_performance_fix.sql   # Critical RLS optimization for list performance
-    │   └── 0006_remove_paper_ratings.sql  # Cleanup migration (removes unused ratings table)
+    │   ├── 0006_remove_paper_ratings.sql  # Cleanup migration (removes unused ratings table)
+    │   └── 0007_email_digest.sql          # Email digest fields (email_digest_enabled, last_digest_sent_at)
     └── src/
         ├── app/
         │   ├── api/
         │   │   ├── search/route.ts          # Supabase-backed Semantic Scholar proxy
-        │   │   └── lists/                   # List management API
-        │   │       ├── route.ts             # Create/fetch user lists
-        │   │       └── [id]/items/route.ts  # Add/remove papers from lists
+        │   │   ├── lists/                   # List management API
+        │   │   │   ├── route.ts             # Create/fetch user lists
+        │   │   │   └── [id]/items/route.ts  # Add/remove papers from lists
+        │   │   ├── cron/
+        │   │   │   └── daily-digest/route.ts # Daily digest cron job (protected by CRON_SECRET)
+        │   │   └── test-digest/route.ts     # Test digest endpoint for development
         │   ├── search/page.tsx              # Keyword search UI with live tiles
         │   ├── page.tsx                     # Main dashboard with auth & lists
         │   └── layout.tsx                   # Root layout with auth provider
@@ -315,6 +330,8 @@ Building a Next.js + Supabase academic research aggregation platform that allows
             ├── auth-context.tsx             # Auth state management
             ├── auth-hooks.ts                # Auth utility hooks
             ├── cache-utils.ts               # Enhanced caching with TTL and background refresh
+            ├── email-templates/
+            │   └── daily-digest.ts          # Daily digest email HTML template generator
             ├── supabase.ts                  # Browser client
             └── supabase-server.ts           # Service-role client for server routes
 ```

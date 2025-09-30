@@ -1,5 +1,6 @@
 TODO
-Change to daily update with email- GPT codex
+Make daily update with deep research
+Email daily update (opt out to weekly or no update) - GPT codex
 
 Personalisation
 imprive ORCID keywords
