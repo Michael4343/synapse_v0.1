@@ -1,14 +1,13 @@
 TODO
-remove all code related to ratings - GPT codex
-refactor code - GPT codex
-improve list speed load - GPT codex
-fix rate limits  the serch works so there is a bug somewhere
-Change to daily update - GPT codex
+Change to daily update with email- GPT codex
 
 Personalisation
 imprive ORCID keywords
 website
 upload
+
+improve list speed load - WAITING FOR API KEY
+refactor code - GPT codex
 
 Load paper when user clicks tile tah nremove button 
 add funny engagement when hitting a paywall (see at bottom)
