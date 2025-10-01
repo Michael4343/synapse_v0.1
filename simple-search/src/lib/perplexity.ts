@@ -161,14 +161,14 @@ export async function fetchPerplexityRecentPapers(keywords: string[]): Promise<P
   }
 
   return structured.papers
-    .map((paper) => ({
+    .map((paper): PerplexityPaperCandidate => ({
       title: paper.title?.trim() ?? '',
       url: normaliseUrl(paper.primaryUrl),
       doi: paper.doi?.trim(),
       summary: paper.summary?.trim(),
       publicationDate: paper.publicationDate?.trim(),
     }))
-    .filter((paper): paper is PerplexityPaperCandidate => Boolean(paper.title && (paper.url || paper.doi)))
+    .filter((paper) => Boolean(paper.title && (paper.url || paper.doi)))
 }
 
 export type { PerplexityPaperCandidate }
