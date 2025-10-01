@@ -1,20 +1,5 @@
 TODO
 Email daily update (opt out to weekly or no update) - check this works at 9am email
 
-Personalisation
-upload
-
 improve personal speed load - WAITING FOR API KEY
 refactor code - GPT codex
-
-
-
-
-
-Improve compile similar claims
-compile claims actually say what claims are
-compile similar methods to reading list
-explore these in the document
-
-Implement 5 star rating
-Make sharing feature smaller like X
