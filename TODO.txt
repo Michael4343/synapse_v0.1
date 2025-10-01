@@ -1,18 +1,15 @@
 TODO
-Make daily update with deep research
-Email daily update (opt out to weekly or no update) - GPT codex
+Email daily update (opt out to weekly or no update) - check this works at 9am email
 
 Personalisation
-imprive ORCID keywords
-website
 upload
 
-improve list speed load - WAITING FOR API KEY
+improve personal speed load - WAITING FOR API KEY
 refactor code - GPT codex
 
-Load paper when user clicks tile tah nremove button 
-add funny engagement when hitting a paywall (see at bottom)
-Move open pdf in line with full paper and add mock email author button 
+
+
+
 
 Improve compile similar claims
 compile claims actually say what claims are

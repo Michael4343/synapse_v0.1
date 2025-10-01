@@ -236,64 +236,12 @@ function ProcessedPaperContent({ processedContent }: { processedContent: string 
   }
 }
 
-type TileActionId = 'compile-methods' | 'compile-claims' | 'share'
-type CompileActionId = Extract<TileActionId, 'compile-methods' | 'compile-claims'>
-
-interface CompileState {
-  actionId: CompileActionId | null
-  status: 'idle' | 'loading' | 'success' | 'error'
-  message: string
-  tempListId: number | null
-  listName: string | null
-  listId: number | null
-  summary: string | null
-}
-
-const TILE_ACTIONS: Array<{
-  id: TileActionId
-  label: string
-  disabled?: boolean
-  description?: string
-}> = [
-  {
-    id: 'compile-claims',
-    label: 'Compile Similar Claims',
-  },
-  {
-    id: 'compile-methods',
-    label: 'Compile Similar Methods',
-    disabled: true,
-  },
-  {
-    id: 'share',
-    label: 'Share',
-    disabled: true,
-  },
-]
-
-const INITIAL_COMPILE_STATE: CompileState = {
-  actionId: null,
-  status: 'idle',
-  message: '',
-  tempListId: null,
-  listName: null,
-  listId: null,
-  summary: null,
-}
-
 const SHELL_CLASSES = 'min-h-screen bg-slate-50 text-slate-900';
 const FEED_CARD_CLASSES = 'space-y-2 rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_30px_80px_rgba(15,23,42,0.25)]';
 const DETAIL_SHELL_CLASSES = 'w-full rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_30px_80px_rgba(15,23,42,0.25)]';
 const DETAIL_HERO_CLASSES = 'rounded-3xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-4 shadow-inner';
 const TILE_BASE_CLASSES = 'group relative flex cursor-pointer flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 transition duration-150 hover:border-slate-300 hover:bg-slate-50';
 const TILE_SELECTED_CLASSES = 'border-sky-400 bg-sky-50 ring-1 ring-sky-100';
-const ACTION_LIST_CLASSES = 'grid w-full gap-2 grid-cols-1 sm:grid-cols-4';
-const ACTION_ITEM_BASE_CLASSES = 'flex h-full flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition';
-const ACTION_ITEM_INTERACTIVE_CLASSES = 'cursor-pointer hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-[0_12px_30px_rgba(56,189,248,0.12)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-none disabled:hover:border-slate-200';
-const ACTION_ITEM_DISABLED_CLASSES = 'cursor-not-allowed opacity-70';
-const ACTION_LABEL_CLASSES = 'text-sm font-semibold text-slate-900';
-const ACTION_DESCRIPTION_CLASSES = 'text-xs leading-relaxed text-slate-500';
-const ACTION_SPINNER_CLASSES = 'inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent';
 const FEED_LOADING_WRAPPER_CLASSES = 'relative flex flex-col gap-3';
 const FEED_SPINNER_CLASSES = 'inline-block h-5 w-5 animate-spin rounded-full border-2 border-sky-500 border-t-transparent';
 const FEED_LOADING_PILL_CLASSES = 'inline-flex items-center gap-2 self-start rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-600 shadow-sm';
@@ -313,7 +261,8 @@ const SIDEBAR_CARD_CLASSES = 'flex h-full flex-col gap-3 rounded-3xl border bord
 const SIDEBAR_PRIMARY_BUTTON_CLASSES = 'flex items-center justify-center rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(56,189,248,0.2)] transition hover:-translate-y-0.5 hover:bg-sky-400';
 const SIDEBAR_SECONDARY_BUTTON_CLASSES = 'flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900';
 const SEARCH_SPINNER_CLASSES = 'inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent';
-const DETAIL_SAVE_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-lg bg-sky-500 px-6 sm:px-8 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-[0_12px_30px_rgba(56,189,248,0.2)] transition hover:-translate-y-0.5 hover:bg-sky-400';
+const DETAIL_SAVE_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 sm:px-8 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50';
+const DETAIL_REPRO_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-lg border border-sky-200 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50';
 const PROFILE_CARD_CLASSES = 'rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
 const ACCOUNT_ICON_BUTTON_CLASSES = 'inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-900';
 const PROFILE_LABEL_CLASSES = 'text-sm font-medium text-slate-700';
@@ -322,18 +271,36 @@ const PROFILE_PRIMARY_BUTTON_CLASSES = 'inline-flex items-center justify-center 
 const PROFILE_COMING_SOON_HINT_CLASSES = 'text-xs font-medium text-slate-400';
 const PROFILE_DISABLED_UPLOAD_BUTTON_CLASSES = 'flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-400 cursor-not-allowed';
 
-const PROMPT_ARTIFACT_PATTERNS = [
-  'target paper:',
-  'research focus:',
-  'output requirements:',
-  'you are an assistant',
-  'task: identify up to',
+const REPRO_CHECKLIST_SECTIONS: Array<{ title: string; prompts: string[] }> = [
+  {
+    title: 'Data & Inputs',
+    prompts: [
+      'What datasets or inputs are required, and how can they be accessed?',
+      'Do any licences, approvals, or preprocessing steps block immediate reuse?'
+    ]
+  },
+  {
+    title: 'Implementation Details',
+    prompts: [
+      'Is the experimental procedure described step-by-step so it can be followed verbatim?',
+      'Which hyperparameters or configuration choices are critical to replicate the results?'
+    ]
+  },
+  {
+    title: 'Code & Artifacts',
+    prompts: [
+      'Is source code or a public repository provided? Where should it be cloned from?',
+      'Are there pretrained models, checkpoints, or auxiliary files that must be downloaded?'
+    ]
+  },
+  {
+    title: 'Environment & Validation',
+    prompts: [
+      'What hardware/software environment (framework versions, GPUs, OS) does the paper assume?',
+      'How will you validate that reproduced results align with the paper’s reported metrics?'
+    ]
+  }
 ]
-
-function containsResearchPromptArtifacts(text: string) {
-  const lower = text.toLowerCase()
-  return PROMPT_ARTIFACT_PATTERNS.some((pattern) => lower.includes(pattern))
-}
 
 function formatAuthors(authors: string[]) {
   if (!authors.length) return 'Author information unavailable'
@@ -609,7 +576,6 @@ export default function Home() {
   const [listItemsLoading, setListItemsLoading] = useState(false);
   const [listItemsLoadingMessage, setListItemsLoadingMessage] = useState('');
   const [cachedListItems, setCachedListItems] = useState<Map<number, ApiSearchResult[]>>(new Map());
-  const [compileState, setCompileState] = useState<CompileState>(INITIAL_COMPILE_STATE);
   const [personalFeedResults, setPersonalFeedResults] = useState<ApiSearchResult[]>([]);
   const [personalFeedLoading, setPersonalFeedLoading] = useState(false);
   const [personalFeedError, setPersonalFeedError] = useState('');
@@ -1206,7 +1172,6 @@ export default function Home() {
   const isSearchContext = keywordLoading || keywordResults.length > 0 || Boolean(lastKeywordQuery) || Boolean(keywordError);
   const isListViewActive = Boolean(selectedListId);
   const shouldShowPersonalFeed = Boolean(user && hasKeywords && !profileNeedsSetup && !isSearchContext && !isListViewActive);
-  const compileInProgress = compileState.status === 'loading';
   const personalizationInputs = (includeAction: boolean) => {
     const keywordsId = includeAction ? 'profile-keywords-editor' : 'profile-keywords';
     const resumeId = includeAction ? 'profile-resume-editor' : 'profile-resume';
@@ -1625,18 +1590,7 @@ export default function Home() {
       setScrapedContentLoading(false);
     }
   };
-
-
   const handleListClick = (listId: number) => {
-    setCompileState((previous) => {
-      if (previous.status === 'loading') {
-        return previous;
-      }
-      if (previous.listId !== null && previous.listId === listId) {
-        return previous;
-      }
-      return INITIAL_COMPILE_STATE;
-    });
     setSelectedListId(listId);
     setKeywordResults([]);
     setLastKeywordQuery('');
@@ -1645,119 +1599,6 @@ export default function Home() {
     fetchListItems(listId);
     // Clear selected paper or set to first item once loaded
     setSelectedPaper(null);
-  };
-
-
-
-  const handleCompileAction = async (actionId: CompileActionId, actionLabel: string) => {
-    if (!selectedPaper) {
-      return;
-    }
-
-    if (!user) {
-      authModal.openSignup();
-      return;
-    }
-
-    if (compileState.status === 'loading') {
-      return;
-    }
-
-    const tempListId = -Date.now();
-    const truncatedTitle = truncateTitleForList(selectedPaper.title);
-    const placeholderName = `${actionLabel}: ${truncatedTitle}`;
-
-    setCompileState({
-      actionId,
-      status: 'loading',
-      message: actionId === 'compile-claims'
-        ? 'Researching similar claims…'
-        : 'Researching similar methods…',
-      tempListId,
-      listName: placeholderName,
-      listId: null,
-      summary: null,
-    });
-
-    setUserLists((previous) => {
-      const filtered = previous.filter((list) => list.id !== tempListId);
-      return [
-        { id: tempListId, name: placeholderName, items_count: 0, status: 'loading' },
-        ...filtered,
-      ];
-    });
-
-    try {
-      const goal = actionId === 'compile-claims' ? 'claims' : 'methods';
-
-      const response = await fetch('/api/research/compile', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          paper: selectedPaper,
-          goal,
-          options: {
-            listName: `${actionLabel}: ${truncateTitleForList(selectedPaper.title, 80)}`,
-            maxResults: 12,
-          },
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.message || 'Failed to compile research.');
-      }
-
-      const result = await response.json();
-
-      if (!result.success || !result.list) {
-        throw new Error(result.message || 'Research compilation failed.');
-      }
-
-      if (!isMountedRef.current) {
-        return;
-      }
-
-      const createdList = result.list as { id: number; name: string; items_count: number };
-
-      setCompileState({
-        actionId,
-        status: 'success',
-        message: '',
-        tempListId: null,
-        listName: createdList.name,
-        listId: createdList.id,
-        summary: null,
-      });
-
-      setUserLists((previous) => {
-        const filtered = previous.filter((list) => list.id !== tempListId && list.id !== createdList.id);
-        return [
-          { id: createdList.id, name: createdList.name, items_count: createdList.items_count, status: 'ready' },
-          ...filtered,
-        ];
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Research compilation failed.';
-
-      if (!isMountedRef.current) {
-        return;
-      }
-
-      setCompileState({
-        actionId,
-        status: 'error',
-        message: errorMessage,
-        tempListId: null,
-        listName: placeholderName,
-        listId: null,
-        summary: null,
-      });
-
-      setUserLists((previous) => previous.filter((list) => list.id !== tempListId));
-    }
   };
 
   const handleOrcidSave = async () => {
@@ -2559,88 +2400,37 @@ export default function Home() {
                     </button>
                   </div>
                   <h2 className="text-2xl font-semibold text-slate-900">{selectedPaper.title}</h2>
-                  {metaSummary && (
-                    <p className="text-xs text-slate-600">{metaSummary}</p>
+                  {metaSummary ? (
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                      <p className="text-xs text-slate-600">{metaSummary}</p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            document.getElementById('reproducibility-checklist')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          }}
+                          className={DETAIL_REPRO_BUTTON_CLASSES}
+                        >
+                          Is this reproducible?
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-end">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            document.getElementById('reproducibility-checklist')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          }}
+                          className={DETAIL_REPRO_BUTTON_CLASSES}
+                        >
+                          Is this reproducible?
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
-
-
-              <div className={ACTION_LIST_CLASSES}>
-                {TILE_ACTIONS.map((action) => {
-                  const isDisabled = Boolean(action.disabled)
-                  const isCompileAction = action.id === 'compile-methods' || action.id === 'compile-claims'
-                  const isActiveCompileAction = isCompileAction && compileState.actionId === action.id
-                  const disableAction = isDisabled || (isCompileAction && compileInProgress)
-                  const rawStatusMessage = isActiveCompileAction && compileState.status !== 'idle' ? compileState.message : ''
-                  const statusMessage = rawStatusMessage && !containsResearchPromptArtifacts(rawStatusMessage)
-                    ? rawStatusMessage
-                    : ''
-                  const statusTone = compileState.status === 'error'
-                    ? 'text-rose-600'
-                    : compileState.status === 'success'
-                      ? 'text-emerald-600'
-                      : 'text-sky-600'
-                  const showSpinner = isActiveCompileAction && compileState.status === 'loading'
-                  const layoutClasses = ''
-
-                  const displayLabel = action.label
-                  const displayDescription = action.description
-                  const content = (
-                    <div className="flex h-full flex-col gap-2">
-                      <span className={ACTION_LABEL_CLASSES}>
-                        {displayLabel}
-                        {showSpinner && (
-                          <span className="ml-2 inline-flex items-center" aria-hidden="true">
-                            <span className={ACTION_SPINNER_CLASSES} />
-                          </span>
-                        )}
-                      </span>
-                      {displayDescription && (
-                        <span className={`${ACTION_DESCRIPTION_CLASSES} ${(disableAction && !isActiveCompileAction) ? 'text-slate-400' : ''}`}>
-                          {displayDescription}
-                        </span>
-                      )}
-                      {statusMessage && (
-                        <span className={`${ACTION_DESCRIPTION_CLASSES} ${statusTone}`}>
-                          {statusMessage}
-                        </span>
-                      )}
-                    </div>
-                  )
-
-                  if (isDisabled) {
-                    return (
-                      <div
-                        key={action.id}
-                        className={`${ACTION_ITEM_BASE_CLASSES} ${ACTION_ITEM_DISABLED_CLASSES} ${layoutClasses}`}
-                        aria-disabled="true"
-                        title="Coming soon"
-                      >
-                        {content}
-                      </div>
-                    )
-                  }
-
-                  return (
-                    <button
-                      key={action.id}
-                      type="button"
-                      className={`${ACTION_ITEM_BASE_CLASSES} ${ACTION_ITEM_INTERACTIVE_CLASSES} ${layoutClasses}`}
-                      disabled={disableAction}
-                      aria-busy={isActiveCompileAction && compileState.status === 'loading'}
-                      onClick={() => {
-                        if (action.id === 'compile-methods' || action.id === 'compile-claims') {
-                          void handleCompileAction(action.id, action.label)
-                          return
-                        }
-                        console.log(`${action.label} clicked for`, selectedPaper.id)
-                      }}
-                    >
-                      {content}
-                    </button>
-                  )
-                })}
-              </div>
 
               <section className="space-y-4">
                 <div>
@@ -2655,6 +2445,33 @@ export default function Home() {
                   <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
                     {selectedPaper.abstract ?? 'Abstract not available for this entry.'}
                   </p>
+                </div>
+
+                <div id="reproducibility-checklist" className="space-y-4 rounded-2xl border border-sky-100 bg-sky-50/60 p-5">
+                  <div>
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Reproducibility template</h3>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Use these prompts to capture the evidence you need for a trustworthy replication plan.
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    {REPRO_CHECKLIST_SECTIONS.map((section) => (
+                      <div key={section.title} className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+                        <h4 className="text-sm font-semibold text-slate-800">{section.title}</h4>
+                        <ul className="mt-2 space-y-2 text-sm text-slate-700">
+                          {section.prompts.map((prompt, index) => (
+                            <li
+                              key={`${section.title}-${index}`}
+                              className="rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-2"
+                            >
+                              <p>{prompt}</p>
+                              <p className="mt-1 text-xs uppercase tracking-wide text-slate-400">Notes</p>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Action buttons - moved above scraped content */}
