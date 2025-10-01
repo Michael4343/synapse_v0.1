@@ -1084,6 +1084,8 @@ export default function Home() {
               profile_personalization: result.personalization,
               last_profile_enriched_at: result.last_profile_enriched_at,
               profile_enrichment_version: result.profile_enrichment_version,
+              email_digest_enabled: false,
+              last_digest_sent_at: null,
             };
           }
 
