@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient as createServerClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-server'
 import { Resend } from 'resend'
 import { generateDailyDigestEmail } from '@/lib/email-templates/daily-digest'
+import { fetchPerplexityRecentPapers, type PerplexityPaperCandidate } from '@/lib/perplexity'
+import { enrichPerplexityCandidate } from '@/lib/semantic-scholar-fetch'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -36,18 +38,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const supabase = createServerClient()
-
   try {
     // Get all users with email digest enabled
-    const { data: users, error: usersError } = await supabase
+    const { data: users, error: usersError } = await supabaseAdmin
       .from('profiles')
       .select('id, profile_personalization')
       .eq('email_digest_enabled', true)
 
     if (usersError) {
       console.error('Failed to fetch users:', usersError)
-      return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 })
+      const payload =
+        process.env.NODE_ENV !== 'production'
+          ? { error: 'Failed to fetch users', details: String(usersError?.message ?? usersError) }
+          : { error: 'Failed to fetch users' }
+      return NextResponse.json(payload, { status: 500 })
     }
 
     if (!users || users.length === 0) {
@@ -59,7 +63,7 @@ export async function GET(request: NextRequest) {
     const results = []
     for (const user of users) {
       try {
-        const result = await processUserDigest(user as UserProfile, supabase)
+        const result = await processUserDigest(user as UserProfile)
         results.push(result)
       } catch (error) {
         console.error(`Failed to process digest for user ${user.id}:`, error)
@@ -83,7 +87,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function processUserDigest(user: UserProfile, supabase: any) {
+async function processUserDigest(user: UserProfile) {
   // Get manual keywords from profile
   const manualKeywords = user.profile_personalization?.manual_keywords || []
 
@@ -93,7 +97,7 @@ async function processUserDigest(user: UserProfile, supabase: any) {
   }
 
   // Get user's auth data for email
-  const { data: authData, error: authError } = await supabase.auth.admin.getUserById(user.id)
+  const { data: authData, error: authError } = await supabaseAdmin.auth.admin.getUserById(user.id)
 
   if (authError || !authData?.user?.email) {
     console.error(`Failed to get email for user ${user.id}:`, authError)
@@ -105,18 +109,25 @@ async function processUserDigest(user: UserProfile, supabase: any) {
 
   // Generate personal feed (limit to 4 keywords for performance)
   const keywords = manualKeywords.slice(0, 4)
-  const papers = await fetchPersonalFeed(keywords)
+  let digestPapers = await buildDailyPerplexityDigest(keywords)
 
-  // Filter papers from last 24-48 hours
-  const recentPapers = filterRecentPapers(papers, 48)
+  let noNewPapers = false
 
-  if (recentPapers.length === 0) {
-    console.log(`No recent papers for user ${user.id}, skipping email`)
-    return { userId: user.id, success: true, skipped: true, reason: 'No new papers' }
+  if (!digestPapers.length) {
+    digestPapers = await fetchPersonalFeedFallback(keywords)
+    digestPapers = filterRecentPapers(digestPapers, 48)
   }
 
-  // Limit to top 10 papers
-  const digestPapers = recentPapers.slice(0, 10)
+  if (!digestPapers.length) {
+    noNewPapers = true
+  }
+
+  // Limit to top 10 papers (may be empty)
+  digestPapers = digestPapers.slice(0, 10)
+
+  if (noNewPapers) {
+    console.log(`No fresh papers for user ${user.id}, sending no-update notice`)
+  }
 
   // Generate email
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
@@ -141,7 +152,7 @@ async function processUserDigest(user: UserProfile, supabase: any) {
   }
 
   // Update last_digest_sent_at
-  const { error: updateError } = await supabase
+  const { error: updateError } = await supabaseAdmin
     .from('profiles')
     .update({ last_digest_sent_at: new Date().toISOString() })
     .eq('id', user.id)
@@ -157,11 +168,53 @@ async function processUserDigest(user: UserProfile, supabase: any) {
     success: true,
     email: userEmail,
     paperCount: digestPapers.length,
-    emailId: emailData?.id
+    emailId: emailData?.id,
+    noNewPapers
   }
 }
 
-async function fetchPersonalFeed(keywords: string[]): Promise<Paper[]> {
+async function buildDailyPerplexityDigest(keywords: string[]): Promise<Paper[]> {
+  if (!keywords.length) {
+    return []
+  }
+
+  try {
+    const candidates = await fetchPerplexityRecentPapers(keywords.slice(0, 4))
+    if (!candidates.length) {
+      return []
+    }
+
+    const enriched: Paper[] = []
+    for (const candidate of candidates) {
+      const paper = await enrichPerplexityCandidate(candidate)
+      if (paper && isWithinHours(paper.publicationDate, 24)) {
+        enriched.push(paper)
+        if (enriched.length >= 10) {
+          break
+        }
+        continue
+      }
+
+      // Fallback to candidate data when Semantic Scholar is not yet updated
+      const fallback = buildFallbackPaper(candidate)
+      if (fallback && isWithinHours(fallback.publicationDate, 24)) {
+        enriched.push(fallback)
+
+        if (enriched.length >= 10) {
+          break
+        }
+      }
+
+    }
+
+    return enriched
+  } catch (error) {
+    console.error('Failed to build Perplexity digest', error)
+    return []
+  }
+}
+
+async function fetchPersonalFeedFallback(keywords: string[]): Promise<Paper[]> {
   const allResults: Paper[] = []
   const seenIds = new Set<string>()
 
@@ -210,4 +263,50 @@ function filterRecentPapers(papers: Paper[], hoursAgo: number): Paper[] {
     const pubDate = new Date(paper.publicationDate)
     return pubDate >= cutoffDate
   })
+}
+
+function isWithinHours(dateString: string | null, hours: number): boolean {
+  if (!dateString) {
+    return false
+  }
+
+  const date = new Date(dateString)
+  if (Number.isNaN(date.getTime())) {
+    return false
+  }
+
+  const cutoff = new Date()
+  cutoff.setHours(cutoff.getHours() - hours)
+  const now = new Date()
+
+  return date >= cutoff && date <= now
+}
+
+function buildFallbackPaper(candidate: PerplexityPaperCandidate): Paper | null {
+  const publicationDate = candidate.publicationDate ?? null
+  const url = candidate.url ?? null
+  const doi = candidate.doi ?? null
+
+  if (!url && !doi) {
+    return null
+  }
+
+  const parsedDate = publicationDate ? new Date(publicationDate) : null
+  const year = parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate.getUTCFullYear() : null
+
+  return {
+    id: doi || url || candidate.title,
+    title: candidate.title,
+    abstract: candidate.summary ?? null,
+    authors: [],
+    year,
+    venue: null,
+    citationCount: null,
+    semanticScholarId: doi || url || candidate.title,
+    arxivId: null,
+    doi,
+    url,
+    source: 'perplexity_direct',
+    publicationDate,
+  }
 }

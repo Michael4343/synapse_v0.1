@@ -23,8 +23,11 @@ interface DailyDigestData {
 export function generateDailyDigestEmail(data: DailyDigestData): { subject: string; html: string } {
   const { userName, papers, feedUrl, unsubscribeUrl } = data
   const paperCount = papers.length
+  const hasUpdates = paperCount > 0
 
-  const subject = `Your Daily Research Digest - ${paperCount} New ${paperCount === 1 ? 'Paper' : 'Papers'}`
+  const subject = hasUpdates
+    ? `Your Daily Research Digest - ${paperCount} New ${paperCount === 1 ? 'Paper' : 'Papers'}`
+    : 'Your Daily Research Digest - No New Papers Today'
 
   const html = `
     <!DOCTYPE html>
@@ -47,11 +50,17 @@ export function generateDailyDigestEmail(data: DailyDigestData): { subject: stri
             Hello ${escapeHtml(userName)},
           </p>
           <p style="margin: 0 0 30px 0; color: #475569; font-size: 15px;">
-            Here's what's new in your research areas today:
+            ${hasUpdates
+              ? "Here's what's new in your research areas today:"
+              : "We didn't find any brand new papers for your topics in the last 24 hours. We'll keep looking and let you know as soon as something publishes."}
           </p>
 
           <!-- Papers -->
-          ${papers.map(paper => generatePaperCard(paper)).join('\n')}
+          ${hasUpdates
+            ? papers.map(paper => generatePaperCard(paper)).join('\n')
+            : `<div style="background: #f1f5f9; border-radius: 12px; padding: 24px; border: 1px dashed #cbd5f5; text-align: center; color: #64748b; font-size: 14px;">
+                No fresh papers today. Take this moment to review your saved lists or broaden your keywords to catch more results.
+              </div>`}
         </div>
 
         <!-- CTA Button -->
