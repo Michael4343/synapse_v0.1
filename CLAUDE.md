@@ -276,6 +276,19 @@ Building a Next.js + Supabase academic research aggregation platform that allows
   - **Smart filtering**: Digests only include papers from last 24-48 hours, sorted by publication date
   - **Performance**: Reuses existing personal feed logic, limits to 4 keywords and 10 papers per email
   - **Email service**: Uses Resend with test domain (onboarding@resend.dev) - production requires domain verification
+- **Academic Website Scraper (v0.2.2)**: Implemented website scraping for keyword extraction from academic profile pages:
+  - **Website scraper utility**: Created `/lib/website-scraper.ts` using Firecrawl API for robust scraping that bypasses bot detection
+  - **API endpoint**: Built `/api/profile/keywords-from-website` that scrapes websites and uses Gemini LLM to extract academic keywords
+  - **Firecrawl integration**: Uses existing Firecrawl API setup (`FIRECRAWL_API_KEY`), requests markdown format with `onlyMainContent: true`
+  - **Bot detection bypass**: Firecrawl handles 403 errors, JavaScript rendering, and university site protections that block native fetch
+  - **Profile UI**: Enabled "Academic website" input field with "Save" button and "(keywords auto-generated)" hint
+  - **Workflow**: Enter website URL → Save → Firecrawl scrapes page → Gemini extracts keywords → Keywords appended to existing
+  - **Keyword combination**: Both ORCID and website scrapers append to existing keywords with case-insensitive deduplication
+  - **Error handling**: Specific messages for 402 (paywall), 403 (forbidden), 429 (rate limit), timeouts, and network errors
+  - **Content validation**: Checks for minimum 200 chars, truncates at 50KB for LLM processing
+  - **LLM integration**: Reuses proven Gemini keyword extraction pattern from ORCID flow, optimized for website content analysis
+  - **Fallback logic**: If LLM fails, uses frequency-based keyword extraction excluding common academic terms
+  - **User experience**: Users can combine keywords from ORCID + website + manual entry for comprehensive personalization
 
 ### Current Directory Structure
 ```
@@ -313,6 +326,9 @@ Building a Next.js + Supabase academic research aggregation platform that allows
         │   │   ├── lists/                   # List management API
         │   │   │   ├── route.ts             # Create/fetch user lists
         │   │   │   └── [id]/items/route.ts  # Add/remove papers from lists
+        │   │   ├── profile/                 # Profile personalization API
+        │   │   │   ├── keywords-from-orcid/route.ts   # Extract keywords from ORCID publications
+        │   │   │   └── keywords-from-website/route.ts # Extract keywords from academic websites
         │   │   ├── cron/
         │   │   │   └── daily-digest/route.ts # Daily digest cron job (protected by CRON_SECRET)
         │   │   └── test-digest/route.ts     # Test digest endpoint for development
@@ -330,6 +346,8 @@ Building a Next.js + Supabase academic research aggregation platform that allows
             ├── auth-context.tsx             # Auth state management
             ├── auth-hooks.ts                # Auth utility hooks
             ├── cache-utils.ts               # Enhanced caching with TTL and background refresh
+            ├── website-scraper.ts           # Website content scraping utility for keyword extraction
+            ├── profile-enrichment.ts        # Profile personalization generation with Gemini LLM
             ├── email-templates/
             │   └── daily-digest.ts          # Daily digest email HTML template generator
             ├── supabase.ts                  # Browser client

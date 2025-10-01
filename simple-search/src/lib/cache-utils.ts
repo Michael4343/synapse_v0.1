@@ -56,7 +56,7 @@ export function clearCachedData(key: string): void {
 }
 
 // Cache TTL constants
-export const PERSONAL_FEED_TTL_MS = 1000 * 60 * 60 * 24 // 24 hours
+export const PERSONAL_FEED_TTL_MS = 1000 * 60 * 60 * 24 * 7 // 7 days; scheduling logic gates refreshes
 
 // Simple cache keys
 export const PERSONAL_FEED_CACHE_KEY = 'evidentia-personal-feed'

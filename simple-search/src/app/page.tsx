@@ -126,6 +126,52 @@ const SAMPLE_PAPERS: ApiSearchResult[] = [
   }
 ]
 
+const AEST_OFFSET_MINUTES = 10 * 60
+const AEST_OFFSET_MS = AEST_OFFSET_MINUTES * 60 * 1000
+
+function toAest(date: Date): Date {
+  return new Date(date.getTime() + AEST_OFFSET_MS)
+}
+
+// Determine the next time (in UTC) that the scheduled 9am AEST refresh should run
+function getNextPersonalFeedRunUtc(lastRun: Date): Date {
+  const lastRunAest = toAest(lastRun)
+
+  const year = lastRunAest.getUTCFullYear()
+  const month = lastRunAest.getUTCMonth()
+  const day = lastRunAest.getUTCDate()
+
+  const sameDayNineAmAest = new Date(Date.UTC(year, month, day, 9, 0, 0))
+  const msSinceMidnight =
+    lastRunAest.getUTCHours() * 3_600_000 +
+    lastRunAest.getUTCMinutes() * 60_000 +
+    lastRunAest.getUTCSeconds() * 1_000 +
+    lastRunAest.getUTCMilliseconds()
+
+  const nineAmMs = 9 * 3_600_000
+
+  if (msSinceMidnight >= nineAmMs) {
+    sameDayNineAmAest.setUTCDate(sameDayNineAmAest.getUTCDate() + 1)
+  }
+
+  return new Date(sameDayNineAmAest.getTime() - AEST_OFFSET_MS)
+}
+
+// Decide whether the personal feed needs a fresh search based on the scheduling rules
+function shouldRunScheduledPersonalFeed(lastUpdatedIso: string | null | undefined): boolean {
+  if (!lastUpdatedIso) {
+    return true
+  }
+
+  const lastUpdated = new Date(lastUpdatedIso)
+  if (Number.isNaN(lastUpdated.getTime())) {
+    return true
+  }
+
+  const nextRunUtc = getNextPersonalFeedRunUtc(lastUpdated)
+  return Date.now() >= nextRunUtc.getTime()
+}
+
 function getSectionIcon(type: string): string {
   return ''
 }
@@ -551,6 +597,7 @@ export default function Home() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileEnrichmentLoading, setProfileEnrichmentLoading] = useState(false);
   const [profileEnrichmentError, setProfileEnrichmentError] = useState('');
+  const [websiteScrapingLoading, setWebsiteScrapingLoading] = useState(false);
   const [emailDigestEnabled, setEmailDigestEnabled] = useState(false);
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [paperToSave, setPaperToSave] = useState<ApiSearchResult | null>(null);
@@ -799,7 +846,6 @@ export default function Home() {
         return;
       }
 
-      // Get manual keywords from profile or use override
       const manualKeywordsArray = keywordsOverride || profile?.profile_personalization?.manual_keywords || [];
       if (manualKeywordsArray.length === 0) {
         setPersonalFeedResults([]);
@@ -807,23 +853,26 @@ export default function Home() {
         return;
       }
 
-      // Simple caching
       const cacheKey = `${PERSONAL_FEED_CACHE_KEY}-${user.id}-${JSON.stringify(manualKeywordsArray)}`;
-      if (!force) {
-        const cached = getCachedData<{ results: ApiSearchResult[]; lastUpdated: string }>(cacheKey, PERSONAL_FEED_TTL_MS);
-        if (cached) {
-          setPersonalFeedResults(cached.results);
-          setPersonalFeedError('');
-          setPersonalFeedLastUpdated(cached.lastUpdated);
-          return;
-        }
+      const cached = getCachedData<{ results: ApiSearchResult[]; lastUpdated: string }>(cacheKey, PERSONAL_FEED_TTL_MS) || null;
+
+      if (cached) {
+        setPersonalFeedResults(cached.results);
+        setPersonalFeedError('');
+        setPersonalFeedLastUpdated(cached.lastUpdated);
+      }
+
+      const lastKnownUpdateIso = cached?.lastUpdated ?? personalFeedLastUpdated ?? null;
+      const shouldRunSearch = force || !lastKnownUpdateIso || shouldRunScheduledPersonalFeed(lastKnownUpdateIso);
+
+      if (!shouldRunSearch) {
+        return;
       }
 
       if (personalFeedLoading) {
         return;
       }
 
-      // Use keywords array and limit to 4 for performance
       const keywords = manualKeywordsArray.slice(0, 4);
 
       setPersonalFeedLoading(true);
@@ -833,12 +882,10 @@ export default function Home() {
         const allResults: ApiSearchResult[] = [];
         const seenIds = new Set<string>();
 
-        // Sequential queries for each keyword with recent year filtering
         for (let i = 0; i < keywords.length; i++) {
           const keyword = keywords[i];
 
           try {
-            // Use current year for personal feed to get recent papers
             const currentYear = new Date().getFullYear();
             const response = await fetch('/api/search', {
               method: 'POST',
@@ -852,7 +899,6 @@ export default function Home() {
               results = Array.isArray(data.results) ? data.results : [];
             }
 
-            // If we get fewer than 3 results from current year, also try previous year
             if (results.length < 3) {
               try {
                 const previousYear = currentYear - 1;
@@ -865,8 +911,6 @@ export default function Home() {
                 if (fallbackResponse.ok) {
                   const fallbackData = await fallbackResponse.json();
                   const fallbackResults = Array.isArray(fallbackData.results) ? fallbackData.results : [];
-
-                  // Add previous year results to current year results
                   results = [...results, ...fallbackResults];
                 }
               } catch (fallbackError) {
@@ -874,19 +918,17 @@ export default function Home() {
               }
             }
 
-            // Filter by recency with progressive expansion for personal feed
-            let filteredResults = filterByRecency(results, 7); // Try 7 days first
+            let filteredResults = filterByRecency(results, 7);
             if (filteredResults.length < 3) {
-              filteredResults = filterByRecency(results, 14); // Expand to 14 days
+              filteredResults = filterByRecency(results, 14);
             }
             if (filteredResults.length < 3) {
-              filteredResults = filterByRecency(results, 30); // Expand to 30 days
+              filteredResults = filterByRecency(results, 30);
             }
             if (filteredResults.length < 3) {
-              filteredResults = results; // Use all results if still insufficient
+              filteredResults = results;
             }
 
-            // Add unique results
             for (const result of filteredResults) {
               if (!seenIds.has(result.id) && allResults.length < 12) {
                 allResults.push(result);
@@ -894,7 +936,6 @@ export default function Home() {
               }
             }
 
-            // Update UI with progressive results
             if (allResults.length > 0) {
               const sorted = [...allResults].sort((a, b) => {
                 if (!a.publicationDate && !b.publicationDate) return 0;
@@ -913,7 +954,6 @@ export default function Home() {
         if (allResults.length === 0) {
           setPersonalFeedError('No papers found for your keywords. Try different or broader terms.');
         } else {
-          // Final sort and cache
           const sorted = allResults.sort((a, b) => {
             if (!a.publicationDate && !b.publicationDate) return 0;
             if (!a.publicationDate) return 1;
@@ -934,7 +974,12 @@ export default function Home() {
         setPersonalFeedLoading(false);
       }
     },
-    [user, profile?.profile_personalization?.manual_keywords, personalFeedLoading]
+    [
+      user,
+      profile?.profile_personalization?.manual_keywords,
+      personalFeedLoading,
+      personalFeedLastUpdated,
+    ]
   );
 
   useEffect(() => {
@@ -1300,43 +1345,26 @@ export default function Home() {
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
             <label htmlFor="profile-website" className={PROFILE_LABEL_CLASSES}>
-              Academic website
+              Academic website <span className="text-xs font-normal text-slate-500">(keywords auto-generated)</span>
             </label>
-            <span className={PROFILE_COMING_SOON_HINT_CLASSES}>Coming soon</span>
           </div>
           <div className="flex gap-2">
             <input
               id="profile-website"
               type="text"
-              placeholder="Enter your website URL"
+              placeholder="Enter your academic website URL"
               value={profileFormWebsite}
               onChange={(event) => setProfileFormWebsite(event.target.value)}
-              disabled={profile?.academic_website && !websiteEditingMode}
-              className={`flex-1 ${PROFILE_INPUT_CLASSES} bg-slate-100 text-slate-500 cursor-not-allowed`}
+              className={`flex-1 ${PROFILE_INPUT_CLASSES}`}
             />
-            {profile?.academic_website && !websiteEditingMode && (
-              <button
-                type="button"
-                onClick={() => setWebsiteEditingMode(true)}
-                className="px-4 py-2 text-sm font-medium text-slate-400 bg-slate-50 border border-slate-200 rounded-lg cursor-not-allowed"
-                disabled
-              >
-                Update
-              </button>
-            )}
-            {websiteEditingMode && (
-              <button
-                type="button"
-                onClick={() => {
-                  setWebsiteEditingMode(false);
-                  setProfileFormWebsite(profile?.academic_website ?? '');
-                }}
-                className="px-4 py-2 text-sm font-medium text-slate-400 bg-slate-50 border border-slate-200 rounded-lg cursor-not-allowed"
-                disabled
-              >
-                Cancel
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handleWebsiteSave}
+              disabled={websiteScrapingLoading}
+              className="px-4 py-2 text-sm font-medium text-white bg-sky-600 border border-sky-600 rounded-lg hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {websiteScrapingLoading ? 'Saving…' : 'Save'}
+            </button>
           </div>
         </div>
 
@@ -1773,9 +1801,23 @@ export default function Home() {
 
       const result = await response.json();
 
-      // Set the generated keywords in the manual keywords field
+      // Combine generated keywords with existing keywords
       if (result.keywords && result.keywords.length > 0) {
-        setProfileManualKeywords(result.keywords.join(', '));
+        // Get existing keywords
+        const existingKeywords = parseManualKeywords(profileManualKeywords);
+
+        // Combine and deduplicate (case-insensitive)
+        const allKeywords = [...existingKeywords];
+        const lowerCaseExisting = existingKeywords.map(k => k.toLowerCase());
+
+        for (const newKeyword of result.keywords) {
+          if (!lowerCaseExisting.includes(newKeyword.toLowerCase())) {
+            allKeywords.push(newKeyword);
+            lowerCaseExisting.push(newKeyword.toLowerCase());
+          }
+        }
+
+        setProfileManualKeywords(allKeywords.join(', '));
         setProfileEnrichmentError('');
       } else {
         setProfileEnrichmentError('No keywords could be generated from your ORCID profile.');
@@ -1796,6 +1838,85 @@ export default function Home() {
       }
     } finally {
       setProfileEnrichmentLoading(false);
+    }
+  };
+
+  const handleWebsiteSave = async () => {
+    if (!user) {
+      authModal.openSignup();
+      return;
+    }
+
+    const trimmedWebsite = profileFormWebsite.trim();
+
+    if (!trimmedWebsite) {
+      setProfileEnrichmentError('Please enter your academic website URL to generate keywords.');
+      return;
+    }
+
+    // Basic URL validation
+    if (!trimmedWebsite.match(/^(https?:\/\/)?([\w\-]+\.)+[\w\-]+(\/.*)?$/i)) {
+      setProfileEnrichmentError('Please enter a valid website URL.');
+      return;
+    }
+
+    try {
+      setProfileEnrichmentError('');
+      setWebsiteScrapingLoading(true);
+
+      // Create a simple API call to generate keywords from website
+      const response = await fetch('/api/profile/keywords-from-website', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          websiteUrl: trimmedWebsite,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate keywords from website.');
+      }
+
+      const result = await response.json();
+
+      // Combine generated keywords with existing keywords
+      if (result.keywords && result.keywords.length > 0) {
+        // Get existing keywords
+        const existingKeywords = parseManualKeywords(profileManualKeywords);
+
+        // Combine and deduplicate (case-insensitive)
+        const allKeywords = [...existingKeywords];
+        const lowerCaseExisting = existingKeywords.map(k => k.toLowerCase());
+
+        for (const newKeyword of result.keywords) {
+          if (!lowerCaseExisting.includes(newKeyword.toLowerCase())) {
+            allKeywords.push(newKeyword);
+            lowerCaseExisting.push(newKeyword.toLowerCase());
+          }
+        }
+
+        setProfileManualKeywords(allKeywords.join(', '));
+        setProfileEnrichmentError('');
+      } else {
+        setProfileEnrichmentError('No keywords could be generated from your website.');
+      }
+
+    } catch (error) {
+      if (error instanceof Error) {
+        // Only log technical errors to console, not user-facing ones
+        if (!error.message.includes('Website returned status') &&
+            !error.message.includes('Invalid URL') &&
+            !error.message.includes('Could not extract')) {
+          console.error('Website keyword generation error', error);
+        }
+        setProfileEnrichmentError(error.message);
+      } else {
+        console.error('Website keyword generation error', error);
+        setProfileEnrichmentError('Failed to generate keywords from website. Please try again.');
+      }
+    } finally {
+      setWebsiteScrapingLoading(false);
     }
   };
 
@@ -2028,7 +2149,7 @@ export default function Home() {
     setLastYearQuery(null);
     setSelectedListId(null);
     setListItems([]);
-    loadPersonalFeed(true);
+    loadPersonalFeed();
   }, [loadPersonalFeed]);
 
 
