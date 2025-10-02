@@ -377,7 +377,7 @@ const VERIFICATION_DATA: Record<string, MockReproReport> = {
   // CRISPR Paper
   '68d962effe5520777791bd6ec8ffa4b963ba4f38': {
     stage: 'ai_research',
-    lastUpdated: '2024-07-02',
+    lastUpdated: '2025-02-10',
     reviewers: ['AI Research Desk'],
     paper: {
       title: 'A Programmable Dual-RNA–Guided DNA Endonuclease in Adaptive Bacterial Immunity',
@@ -386,34 +386,211 @@ const VERIFICATION_DATA: Record<string, MockReproReport> = {
       doi: '10.1126/science.1225829'
     },
     verdict: {
-      grade: 'A',
+      grade: 'A-',
       confidence: 'High',
-      mainMessage: '[To be provided - CRISPR reproducibility assessment]',
+      mainMessage: 'Highly reproducible for well-equipped molecular biology labs. Main challenge is capital investment and specialized expertise for multi-step Cas9 protein purification.',
       successProbability: 0.85,
-      timeToFirstResult: '[To be provided]',
-      totalCost: '[To be provided]',
-      skillCeiling: '[To be provided]',
+      timeToFirstResult: '2-4 months',
+      totalCost: '$6,000-$10,000 (or $500-$2,000 using commercial Cas9)',
+      skillCeiling: 'Graduate-level molecular biologist with protein purification expertise',
       confidenceLevel: 'ai_inferred'
     },
-    feasibilityQuestions: [],
-    criticalPath: [],
+    feasibilityQuestions: [
+      {
+        id: 'plasmids',
+        question: 'Can you access and afford key plasmids from Addgene?',
+        weight: 1,
+        category: 'Materials Access',
+        helper: 'Essential plasmids: pMJ806 (Cas9 WT), pMJ826 (H840A mutant), pMJ839 (N. meningitidis). ~$89 each from Addgene.'
+      },
+      {
+        id: 'fplc',
+        question: 'Do you have access to FPLC system for protein purification?',
+        weight: 3,
+        category: 'Equipment Access',
+        helper: 'FPLC essential for multi-step Cas9 purification. New: $30K-120K. Used: $10K-60K. Core facility alternative available.'
+      },
+      {
+        id: 'phosphorimager',
+        question: 'Can you access phosphorimager/laser gel scanner for radiolabeled assays?',
+        weight: 2,
+        category: 'Equipment Access',
+        helper: 'Required to visualize DNA cleavage assays. New: $50K+. Used: $15K-25K. Core facility rates available.'
+      },
+      {
+        id: 'protein-expertise',
+        question: 'Does your team have expertise in large-scale protein purification?',
+        weight: 3,
+        category: 'Technical Expertise',
+        helper: 'Multi-step FPLC purification is most demanding task. Requires optimizing expression, preventing inclusion bodies, chromatography.'
+      },
+      {
+        id: 'rna-technique',
+        question: 'Are you proficient in RNase-free RNA techniques and in vitro transcription?',
+        weight: 2,
+        category: 'Technical Expertise',
+        helper: 'Guide RNA synthesis requires meticulous RNase-free technique. Low yield or contamination is common blocker.'
+      }
+    ],
+    criticalPath: [
+      {
+        id: 'materials',
+        phase: 'Material acquisition and vector preparation',
+        duration: '2-3 weeks',
+        cost: '~$500',
+        riskLevel: 'Low',
+        dependencies: [],
+        requirements: ['Order plasmids from Addgene', 'Transform into E. coli', 'Prepare large-scale sequence-verified stocks'],
+        outputs: ['Sequence-verified bacterial glycerol stocks', 'Purified plasmid DNA for Cas9 expression and cleavage targets'],
+        blockers: [
+          {
+            severity: 'minor',
+            issue: 'Plasmid fails to arrive or has incorrect sequence',
+            mitigation: 'Order from reliable source (Addgene). Perform sequence verification as standard QC step.',
+            verificationStatus: 'verified'
+          }
+        ]
+      },
+      {
+        id: 'purification',
+        phase: 'Recombinant Cas9 protein expression and purification',
+        duration: '4-6 weeks (includes optimization)',
+        cost: '$3,000-$5,000',
+        riskLevel: 'High',
+        dependencies: ['materials'],
+        requirements: ['Transform expression plasmid', 'Large-scale culture growth', 'IPTG induction', 'Multi-step FPLC purification'],
+        outputs: ['>1 mg of >95% pure, soluble, active Cas9 protein (WT and mutants)', 'SDS-PAGE verification'],
+        blockers: [
+          {
+            severity: 'critical',
+            issue: 'Low protein expression or high insolubility (inclusion bodies)',
+            mitigation: 'Optimize expression conditions: lower temperature, vary IPTG concentration. MBP fusion tag helps solubility.',
+            verificationStatus: 'inferred'
+          },
+          {
+            severity: 'moderate',
+            issue: 'Complex FPLC optimization required - salt gradients, flow rates, fraction collection not fully specified',
+            mitigation: 'Empirical optimization needed. Alternatively, purchase commercial Cas9 protein to bypass this phase entirely.',
+            verificationStatus: 'inferred'
+          }
+        ]
+      },
+      {
+        id: 'rna-prep',
+        phase: 'Guide RNA and DNA substrate preparation',
+        duration: '2 weeks',
+        cost: '~$1,500',
+        riskLevel: 'Medium',
+        dependencies: ['materials'],
+        requirements: ['PCR DNA templates for RNA', 'In vitro transcription (crRNA, tracrRNA, sgRNA)', 'Radiolabel DNA substrates'],
+        outputs: ['Purified, quantified RNA stocks (crRNA, tracrRNA, sgRNA)', 'Radiolabeled DNA oligonucleotide substrates', 'Plasmid targets'],
+        blockers: [
+          {
+            severity: 'moderate',
+            issue: 'Low yield or poor quality RNA due to RNase contamination',
+            mitigation: 'Meticulous RNase-free technique is critical. Use DEPC-treated water, fresh reagents, dedicated pipettes.',
+            verificationStatus: 'verified'
+          }
+        ]
+      },
+      {
+        id: 'assays',
+        phase: 'Biochemical cleavage assays',
+        duration: '1-2 weeks',
+        cost: '~$1,000',
+        riskLevel: 'Medium',
+        dependencies: ['purification', 'rna-prep'],
+        requirements: ['Assemble Cas9-RNA ribonucleoprotein complex', 'Mix RNP with DNA substrates', 'Gel electrophoresis and phosphorimaging'],
+        outputs: ['Gel images demonstrating sequence-specific, RNA-guided DNA cleavage', 'Replication of key paper findings (Figures 1-5)'],
+        blockers: [
+          {
+            severity: 'moderate',
+            issue: 'No DNA cleavage observed in positive control reactions',
+            mitigation: 'Indicates upstream failure, likely inactive Cas9. Systematic troubleshooting of all components. Test protein activity.',
+            verificationStatus: 'verified'
+          }
+        ]
+      }
+    ],
     evidenceBase: {
-      strongEvidence: [],
-      gaps: [],
-      assumptions: []
+      strongEvidence: [
+        {
+          claim: 'Cas9 requires two RNA molecules for site-specific DNA cleavage: crRNA for targeting and trans-activating tracrRNA.',
+          source: 'Figure 1, A and B',
+          verificationStatus: 'verified',
+          notes: 'Gel images unambiguously show cleavage only when Cas9, crRNA, and tracrRNA are all present. Clear negative controls make evidence highly reliable.'
+        },
+        {
+          claim: 'Cas9 has two active nuclease domains (RuvC-like and HNH), each cleaving one strand of target DNA.',
+          source: 'Figure 2, A and B',
+          verificationStatus: 'verified',
+          notes: 'Site-directed mutagenesis inactivating each domain resulted in "nickase" proteins that only cut one strand. Elegantly demonstrates both domains required for DSB.'
+        },
+        {
+          claim: 'S. pyogenes Cas9-RNA complex requires PAM sequence (5\'-NGG-3\') immediately downstream of target sequence.',
+          source: 'Figure 4, A and C',
+          verificationStatus: 'verified',
+          notes: 'Cleavage assays with systematically mutated PAMs show cleavage abolished unless canonical NGG (or NAG) PAM present.'
+        },
+        {
+          claim: 'A "seed" sequence of ~8-10 nucleotides at PAM-proximal end is critical; mismatches in this region not tolerated.',
+          source: 'Figure 3, D and E',
+          verificationStatus: 'verified',
+          notes: 'Single mismatch assays clearly show mismatches within first ~8 nucleotides completely abolish cleavage. Distal mismatches tolerated.'
+        },
+        {
+          claim: 'Natural dual-RNA (tracrRNA:crRNA) can be engineered into single chimeric "sgRNA" that is fully functional.',
+          source: 'Figure 5, B and C',
+          verificationStatus: 'verified',
+          notes: 'Revolutionary finding. Figure 5C provides direct experimental evidence via in vitro plasmid cleavage assay. This enabled CRISPR revolution.'
+        }
+      ],
+      gaps: [
+        {
+          concern: 'Potential for off-target cleavage in complex genomes not systematically investigated.',
+          impact: 'For therapeutic applications, off-target effects are critical safety concern. Unintended cuts could cause harmful mutations.',
+          severity: 'critical',
+          resolvableWithExpertAnalysis: false
+        },
+        {
+          concern: 'Full range and limitations of target programmability (GC content, DNA structure effects) not explored.',
+          impact: 'Utility as "programmable" tool depends on ability to target wide range of sequences with predictable efficiency. Led to guide design algorithms.',
+          severity: 'minor',
+          resolvableWithExpertAnalysis: false
+        },
+        {
+          concern: 'Molecular mechanism of target search within genome not elucidated.',
+          impact: 'Understanding search process fundamental to on-target efficiency and off-target binding. Requires specialized biophysical experiments.',
+          severity: 'minor',
+          resolvableWithExpertAnalysis: false
+        },
+        {
+          concern: 'Experiments exclusively in vitro - functionality in living eukaryotic cells unknown.',
+          impact: 'Revolutionary potential for gene therapy entirely dependent on in vivo functionality. If failed in cells, applications severely limited.',
+          severity: 'critical',
+          resolvableWithExpertAnalysis: false
+        }
+      ],
+      assumptions: [
+        'Recombinant Cas9 from E. coli is biochemically identical in function to native protein in S. pyogenes',
+        'In vitro cleavage assays using purified, naked DNA are reliable proxy for fundamental DNA recognition/cleavage capabilities',
+        'Fusing crRNA and tracrRNA with GAAA tetraloop correctly orients functional domains of sgRNA',
+        'Plasmids from Addgene are functionally identical to those used in original publication',
+        'Commercial reagents today are equal or higher quality than 2012 and will produce comparable results'
+      ]
     },
     expertEnhancements: {
       authorContacted: false,
-      datasetsVerified: [],
-      protocolClarifications: [],
-      additionalResources: [],
+      datasetsVerified: ['Key plasmids publicly available from Addgene: pMJ806 (#39312), pMJ826 (#39316), pMJ839 (#39317)', 'All oligonucleotide sequences available in supplementary materials'],
+      protocolClarifications: ['FPLC parameters (salt gradients, flow rates, fractions) require empirical optimization', 'Detailed Cas9 purification protocols published since 2012', 'Commercial Cas9 protein available to bypass purification'],
+      additionalResources: ['Commercial Cas9 protein sources (NEB, IDT, Addgene)', 'Modern step-by-step CRISPR protocols', 'ImageJ/Fiji software for gel analysis (free, open-source)'],
       turnaround: 'Delivered within 12 business days'
     }
   },
   // AlexNet Paper
   'abd1c342495432171beb7ca8fd9551ef13cbd0ff': {
     stage: 'ai_research',
-    lastUpdated: '2024-07-02',
+    lastUpdated: '2025-02-10',
     reviewers: ['AI Research Desk'],
     paper: {
       title: 'ImageNet Classification with Deep Convolutional Neural Networks',
@@ -422,34 +599,210 @@ const VERIFICATION_DATA: Record<string, MockReproReport> = {
       doi: '10.1145/3065386'
     },
     verdict: {
-      grade: 'A-',
+      grade: 'A',
       confidence: 'High',
-      mainMessage: '[To be provided - AlexNet reproducibility assessment]',
-      successProbability: 0.80,
-      timeToFirstResult: '[To be provided]',
-      totalCost: '[To be provided]',
-      skillCeiling: '[To be provided]',
+      mainMessage: 'Highly reproducible for teams with GPU access and deep learning expertise. Main challenge is computational resources and exact hyperparameter matching.',
+      successProbability: 0.90,
+      timeToFirstResult: '3-5 weeks',
+      totalCost: '$500 - $2,000 (cloud GPU compute)',
+      skillCeiling: 'Graduate-level ML engineer with CNN expertise',
       confidenceLevel: 'ai_inferred'
     },
-    feasibilityQuestions: [],
-    criticalPath: [],
+    feasibilityQuestions: [
+      {
+        id: 'dataset',
+        question: 'Can you access and download the ImageNet LSVRC-2012 dataset?',
+        weight: 3,
+        category: 'Data Access',
+        helper: 'Requires registration at image-net.org. Dataset is ~150GB. Alternative: Use ImageNet subsets or pre-downloaded versions.'
+      },
+      {
+        id: 'gpu',
+        question: 'Do you have access to modern GPUs (8GB+ VRAM) or cloud compute?',
+        weight: 3,
+        category: 'Compute Infrastructure',
+        helper: 'Original used 2x GTX 580 (3GB each). Modern single GPU (RTX 3090, A100) is sufficient. Cloud alternatives: AWS, GCP, Lambda Labs.'
+      },
+      {
+        id: 'frameworks',
+        question: 'Are you proficient in PyTorch or TensorFlow?',
+        weight: 2,
+        category: 'Software Skills',
+        helper: 'Paper predates modern frameworks. Implementation requires translating architecture to PyTorch/TensorFlow/JAX.'
+      },
+      {
+        id: 'training-time',
+        question: 'Can you allocate 3-5 days of continuous GPU training time?',
+        weight: 2,
+        category: 'Time Resources',
+        helper: 'Original training took 5-6 days on 2012 hardware. Modern GPUs reduce this to 1-3 days but still requires dedicated compute.'
+      },
+      {
+        id: 'expertise',
+        question: 'Does your team have experience training large-scale CNNs from scratch?',
+        weight: 1,
+        category: 'Domain Expertise',
+        helper: 'Understanding convergence issues, learning rate scheduling, and debugging training dynamics is essential.'
+      }
+    ],
+    criticalPath: [
+      {
+        id: 'dataset-prep',
+        phase: 'Dataset preparation and preprocessing',
+        duration: '1 week',
+        cost: '$50 (storage)',
+        riskLevel: 'Low',
+        dependencies: [],
+        requirements: ['ImageNet registration approved', 'Download pipeline (150GB)', 'Preprocessing scripts (resize to 256x256, normalization)'],
+        outputs: ['Preprocessed ImageNet train/val splits', 'Data loading pipeline with augmentation'],
+        blockers: [
+          {
+            severity: 'minor',
+            issue: 'ImageNet download can be slow or interrupted',
+            mitigation: 'Use academic torrents or pre-downloaded cloud buckets. Verify checksums.',
+            verificationStatus: 'verified'
+          }
+        ]
+      },
+      {
+        id: 'implementation',
+        phase: 'Model architecture implementation',
+        duration: '3-5 days',
+        cost: '$0',
+        riskLevel: 'Low',
+        dependencies: ['dataset-prep'],
+        requirements: ['PyTorch/TensorFlow setup', 'Implement 8-layer CNN (5 conv + 3 FC)', 'ReLU, dropout, LRN layers'],
+        outputs: ['Working AlexNet implementation', 'Unit tests for layer dimensions', 'Training loop with SGD+momentum'],
+        blockers: [
+          {
+            severity: 'minor',
+            issue: 'Local Response Normalization (LRN) not in modern frameworks',
+            mitigation: 'Implement custom LRN layer or use BatchNorm as modern alternative. Original paper uses LRN but BatchNorm gives similar results.',
+            verificationStatus: 'inferred'
+          }
+        ]
+      },
+      {
+        id: 'training',
+        phase: 'Model training and hyperparameter tuning',
+        duration: '2-4 weeks',
+        cost: '$500-$2,000',
+        riskLevel: 'Medium',
+        dependencies: ['implementation'],
+        requirements: ['GPU cluster or cloud instances', 'Learning rate schedule (0.01 initial, divide by 10 when plateau)', 'Monitoring tools (TensorBoard, W&B)'],
+        outputs: ['Trained model checkpoint', 'Training curves (loss, top-1/top-5 accuracy)', 'Hyperparameter log'],
+        blockers: [
+          {
+            severity: 'moderate',
+            issue: 'Exact learning rate schedule not fully specified in paper',
+            mitigation: 'Paper says "divide by 10 when validation error stops improving". Experiment with schedules or use modern cosine annealing.',
+            verificationStatus: 'inferred'
+          },
+          {
+            severity: 'moderate',
+            issue: 'GPU memory constraints with large batch sizes',
+            mitigation: 'Original used batch size 128. Reduce to 64 or use gradient accumulation. Modern mixed-precision training (fp16) helps.',
+            verificationStatus: 'verified'
+          }
+        ]
+      },
+      {
+        id: 'evaluation',
+        phase: 'Evaluation and result comparison',
+        duration: '3-5 days',
+        cost: '$50',
+        riskLevel: 'Low',
+        dependencies: ['training'],
+        requirements: ['Validation set evaluation script', 'Top-1 and top-5 error metrics', 'Comparison with paper results'],
+        outputs: ['Final top-1/top-5 error rates', 'Confusion analysis', 'Result comparison report'],
+        blockers: [
+          {
+            severity: 'minor',
+            issue: 'Minor accuracy differences due to framework/hardware variations',
+            mitigation: 'Expect ~1-2% variance from paper. Modern implementations often exceed original due to better optimization.',
+            verificationStatus: 'verified'
+          }
+        ]
+      }
+    ],
     evidenceBase: {
-      strongEvidence: [],
-      gaps: [],
-      assumptions: []
+      strongEvidence: [
+        {
+          claim: 'AlexNet achieved 15.3% top-5 error on ImageNet ILSVRC-2012, substantially better than previous 26% error rate.',
+          source: 'Abstract and Table 2 (test set results)',
+          verificationStatus: 'verified',
+          notes: 'Result has been reproduced in thousands of implementations. Modern reproductions achieve 15-17% top-5 error.'
+        },
+        {
+          claim: 'ReLU nonlinearity trains 6x faster than tanh on this dataset.',
+          source: 'Figure 1 and Section 3.1',
+          verificationStatus: 'verified',
+          notes: 'Specific comparison on CIFAR-10 shown in Figure 1. Result widely accepted and reproduced.'
+        },
+        {
+          claim: 'Data augmentation (translations, reflections, PCA color) reduces overfitting significantly.',
+          source: 'Section 4.1',
+          verificationStatus: 'verified',
+          notes: 'Paper states augmentation reduces top-1 error by over 1%. Technique is now standard practice.'
+        },
+        {
+          claim: 'Dropout with p=0.5 in first two FC layers prevents overfitting.',
+          source: 'Section 4.2',
+          verificationStatus: 'verified',
+          notes: 'Paper shows dropout approximately doubles training iterations to converge but improves generalization. Widely reproduced.'
+        },
+        {
+          claim: 'Multi-GPU training with model parallelism enables training deeper networks.',
+          source: 'Section 3.5 and Figure 2',
+          verificationStatus: 'inferred',
+          notes: 'Specific GPU communication pattern described. Modern data parallelism often preferred but model parallelism works as described.'
+        }
+      ],
+      gaps: [
+        {
+          concern: 'Exact learning rate schedule not fully specified - paper says "divide by 10 when validation stops improving" but exact epochs unclear.',
+          impact: 'Different schedules yield different convergence speed and final accuracy. Requires experimentation to match exactly.',
+          severity: 'moderate',
+          resolvableWithExpertAnalysis: true
+        },
+        {
+          concern: 'Weight initialization details incomplete - "Gaussian with std 0.01" mentioned but some layer-specific values unclear.',
+          impact: 'Can affect early training dynamics. Modern Xavier/He initialization works well as alternative.',
+          severity: 'minor',
+          resolvableWithExpertAnalysis: false
+        },
+        {
+          concern: 'Local Response Normalization (LRN) sensitivity not analyzed - exact impact of k, n, α, β parameters unknown.',
+          impact: 'Modern implementations often skip LRN entirely and use BatchNorm. May prevent exact result replication.',
+          severity: 'minor',
+          resolvableWithExpertAnalysis: false
+        },
+        {
+          concern: 'Original code and exact training logs not released by authors.',
+          impact: 'Cannot verify implementation details beyond what\'s in paper. Community implementations may differ in subtle ways.',
+          severity: 'moderate',
+          resolvableWithExpertAnalysis: true
+        }
+      ],
+      assumptions: [
+        'Modern GPUs (2020+) can reproduce results faster than original 2012 GTX 580 setup',
+        'PyTorch/TensorFlow implementations are faithful to Caffe-style layer semantics from 2012',
+        'ImageNet dataset preprocessing is standard across reproductions (256x256 resize, center/random crops)',
+        'Minor framework differences (LRN vs BatchNorm, exact SGD implementation) don\'t substantially affect results'
+      ]
     },
     expertEnhancements: {
       authorContacted: false,
-      datasetsVerified: [],
-      protocolClarifications: [],
-      additionalResources: [],
+      datasetsVerified: ['ImageNet LSVRC-2012 available at image-net.org', 'Public PyTorch/TensorFlow implementations available on GitHub'],
+      protocolClarifications: ['Optimal learning rate schedule for modern hardware', 'Batch size adjustments for different GPU memory'],
+      additionalResources: ['AWS/GCP GPU instance setup guides', 'Pre-trained AlexNet checkpoints for transfer learning'],
       turnaround: 'Delivered within 12 business days'
     }
   },
   // Graphene Paper
   'c92bd747a97eeafdb164985b0d044caa1dc6e73e': {
     stage: 'ai_research',
-    lastUpdated: '2024-07-02',
+    lastUpdated: '2025-02-10',
     reviewers: ['AI Research Desk'],
     paper: {
       title: 'Electric Field Effect in Atomically Thin Carbon Films',
@@ -459,62 +812,404 @@ const VERIFICATION_DATA: Record<string, MockReproReport> = {
     },
     verdict: {
       grade: 'B+',
-      confidence: 'Medium',
-      mainMessage: '[To be provided - Graphene reproducibility assessment]',
-      successProbability: 0.70,
-      timeToFirstResult: '[To be provided]',
-      totalCost: '[To be provided]',
-      skillCeiling: '[To be provided]',
+      confidence: 'High',
+      mainMessage: 'Highly reproducible in well-equipped condensed matter labs. Primary challenge is acquiring tacit knowledge for mechanical exfoliation and flake identification.',
+      successProbability: 0.75,
+      timeToFirstResult: '3-6 months',
+      totalCost: '$1,000 consumables + facility fees (or $200K+ for dedicated setup)',
+      skillCeiling: 'Graduate-level materials scientist with cleanroom & cryogenics expertise',
       confidenceLevel: 'ai_inferred'
     },
-    feasibilityQuestions: [],
-    criticalPath: [],
+    feasibilityQuestions: [
+      {
+        id: 'materials',
+        question: 'Can you procure HOPG, Si/SiO₂ wafers, and scotch tape?',
+        weight: 1,
+        category: 'Materials Access',
+        helper: 'HOPG: $100-300, Si wafers with 300nm SiO₂: ~$130 per 4-inch wafer, tape: <$10. All commercially available.'
+      },
+      {
+        id: 'microscopy',
+        question: 'Do you have access to optical microscope and AFM for flake identification?',
+        weight: 3,
+        category: 'Equipment Access',
+        helper: 'AFM essential for confirming monolayer thickness. Core facility access: $27-168/hour. Purchase: $30K-300K.'
+      },
+      {
+        id: 'cleanroom',
+        question: 'Can you access nanofabrication facilities for device patterning?',
+        weight: 3,
+        category: 'Infrastructure',
+        helper: 'Requires photolithography/e-beam lithography and metal evaporation. Most universities have shared cleanrooms.'
+      },
+      {
+        id: 'cryostation',
+        question: 'Do you have access to cryogenic probe station for low-temp measurements?',
+        weight: 2,
+        category: 'Equipment Access',
+        helper: 'Room-temp station: <$15K. Full cryogenic system: >$100K. Core facility rates vary.'
+      },
+      {
+        id: 'tacit-knowledge',
+        question: 'Can you dedicate 4-8 weeks to master mechanical exfoliation technique?',
+        weight: 3,
+        category: 'Skill Development',
+        helper: 'The "Scotch tape method" requires significant practice. Success depends on correct pressure, peel speed, angle. Optical identification also needs training.'
+      }
+    ],
+    criticalPath: [
+      {
+        id: 'setup',
+        phase: 'Setup and material acquisition',
+        duration: '2-4 weeks',
+        cost: '~$1,000 consumables',
+        riskLevel: 'Low',
+        dependencies: [],
+        requirements: ['Procure HOPG, Si/SiO₂ wafers, tape, chemicals', 'Secure equipment access and training', 'Book cleanroom and probe station time'],
+        outputs: ['All materials on hand', 'User certified on all necessary equipment', 'Facility time reserved'],
+        blockers: [
+          {
+            severity: 'minor',
+            issue: 'Long lead times for equipment training slots at core facilities',
+            mitigation: 'Plan and book facility time well in advance (4-6 weeks typical)',
+            verificationStatus: 'verified'
+          }
+        ]
+      },
+      {
+        id: 'exfoliation',
+        phase: 'Graphene exfoliation and identification',
+        duration: '4-8 weeks',
+        cost: 'Minimal materials + facility fees',
+        riskLevel: 'High',
+        dependencies: ['setup'],
+        requirements: ['Master scotch tape exfoliation technique', 'Optical microscopy scanning workflow', 'AFM thickness confirmation protocol'],
+        outputs: ['Portfolio of substrates with mapped monolayer, bilayer, trilayer flakes', 'Documented exfoliation parameters'],
+        blockers: [
+          {
+            severity: 'critical',
+            issue: 'Low yield of high-quality monolayer flakes - requires mastering "experimental art"',
+            mitigation: 'Extensive practice and iteration. Consultation with experienced researchers. Expect weeks of learning curve.',
+            verificationStatus: 'verified'
+          },
+          {
+            severity: 'moderate',
+            issue: 'Difficulty in optical identification of monolayer vs few-layer graphene',
+            mitigation: 'Practice with known samples. Use specific 300nm SiO₂ thickness for optimal contrast. Confirm all candidates with AFM.',
+            verificationStatus: 'verified'
+          }
+        ]
+      },
+      {
+        id: 'fabrication',
+        phase: 'Device fabrication',
+        duration: '1-2 weeks per batch',
+        cost: 'Cleanroom fees + materials (photoresist, metal targets)',
+        riskLevel: 'Medium',
+        dependencies: ['exfoliation'],
+        requirements: ['Pattern Hall bar contacts via lithography', 'Metal evaporation (Ti/Au or Cr/Au)', 'Lift-off process'],
+        outputs: ['Fully fabricated multi-terminal Hall bar devices', 'Electrical continuity confirmed'],
+        blockers: [
+          {
+            severity: 'moderate',
+            issue: 'Contamination or damage to atomically thin flake during processing',
+            mitigation: 'Meticulous cleanroom technique. Gentle resist development. Optimize metal deposition parameters.',
+            verificationStatus: 'verified'
+          },
+          {
+            severity: 'moderate',
+            issue: 'Poor electrical contact resistance to graphene',
+            mitigation: 'Proper contact metal choice (Cr/Au or Ti/Au). Consider edge contacts for better transmission.',
+            verificationStatus: 'inferred'
+          }
+        ]
+      },
+      {
+        id: 'characterization',
+        phase: 'Electrical characterization',
+        duration: '1-3 weeks',
+        cost: 'Probe station fees + liquid cryogens',
+        riskLevel: 'Medium',
+        dependencies: ['fabrication'],
+        requirements: ['Back-gate voltage sweep', 'Hall effect measurement setup', 'Temperature control (300K, 70K, 5K)'],
+        outputs: ['Ambipolar field effect data (resistivity vs gate voltage)', 'Hall coefficient sign reversal', 'Mobility extraction'],
+        blockers: [
+          {
+            severity: 'moderate',
+            issue: 'Noisy measurements or poor signal-to-noise at charge neutrality point',
+            mitigation: 'Use lock-in amplifiers for low-current measurements. Proper electromagnetic shielding. Low excitation currents.',
+            verificationStatus: 'verified'
+          },
+          {
+            severity: 'minor',
+            issue: 'Device failure at low temperatures due to thermal cycling',
+            mitigation: 'Gradual cool-down/warm-up rates. Proper wire bonding and packaging.',
+            verificationStatus: 'verified'
+          }
+        ]
+      }
+    ],
     evidenceBase: {
-      strongEvidence: [],
-      gaps: [],
-      assumptions: []
+      strongEvidence: [
+        {
+          claim: 'Stable, atomically thin graphitic films can be isolated via mechanical exfoliation and are stable under ambient conditions.',
+          source: 'Methods section (p. 667) and Figure 1',
+          verificationStatus: 'verified',
+          notes: 'Enabling discovery for entire field. Confirmed by thousands of research groups globally. Contributed to 2010 Nobel Prize.'
+        },
+        {
+          claim: 'Graphene exhibits a strong ambipolar electric field effect - resistivity peaks at charge neutrality point.',
+          source: 'Figure 2A (Resistivity vs Gate Voltage)',
+          verificationStatus: 'verified',
+          notes: 'Sharp symmetric peak is unambiguous evidence of carrier tuning through minimum density. Now canonical signature of graphene.'
+        },
+        {
+          claim: 'Dominant charge carriers can be tuned from holes to electrons via back-gate voltage.',
+          source: 'Figure 2C (Hall Coefficient vs Gate Voltage)',
+          verificationStatus: 'verified',
+          notes: 'Clean reversal of Hall coefficient sign provides definitive proof of hole-to-electron transition.'
+        },
+        {
+          claim: 'Graphene possesses high room-temperature carrier mobility of 3,000-10,000 cm²/V·s.',
+          source: 'Page 668, calculation from field-effect and magnetoresistance data',
+          verificationStatus: 'verified',
+          notes: 'Exceptionally high for 2004. Routinely reproduced for graphene on SiO₂. Vastly exceeded in cleaner devices (suspended, hBN-encapsulated).'
+        }
+      ],
+      gaps: [
+        {
+          concern: 'Initial physical model ("2D semimetal with small overlap") was an approximation that understated exotic physics.',
+          impact: 'Subsequent discovery of massless Dirac fermions (2005) was major conceptual leap. Initial model was functional but incomplete.',
+          severity: 'minor',
+          resolvableWithExpertAnalysis: true
+        },
+        {
+          concern: 'Role of SiO₂ substrate as dominant source of charge scattering not fully characterized.',
+          impact: 'Understanding substrate effects was critical for achieving higher mobilities (suspended graphene, hBN encapsulation). Drove decades of follow-up research.',
+          severity: 'minor',
+          resolvableWithExpertAnalysis: true
+        },
+        {
+          concern: 'Mechanical exfoliation method is not scalable for industrial production.',
+          impact: 'Low yield and small flake size unsuitable for commercial applications. Led to massive effort in CVD and other synthesis techniques.',
+          severity: 'minor',
+          resolvableWithExpertAnalysis: true
+        }
+      ],
+      assumptions: [
+        'Standard parallel-plate capacitor model used to calculate induced carrier density from gate voltage (well-justified)',
+        'Simple Drude model of conductivity used to extract carrier mobility (standard assumption)',
+        'Explosive growth of graphene field and 2010 Nobel Prize serve as community-wide verification of core findings',
+        'Lack of publicly available code/raw data is typical for 2004 publication era and does not detract from reproducibility'
+      ]
     },
     expertEnhancements: {
       authorContacted: false,
-      datasetsVerified: [],
-      protocolClarifications: [],
-      additionalResources: [],
+      datasetsVerified: ['HOPG commercially available from multiple suppliers', 'Si/SiO₂ wafers standard semiconductor commodity'],
+      protocolClarifications: ['Optimal scotch tape technique (pressure, peel speed, angle)', 'Optical contrast settings for 300nm SiO₂', 'Contact metal optimization'],
+      additionalResources: ['Access to experienced graphene researcher for hands-on training', 'Literature guide to post-2004 exfoliation improvements', 'Alternative methods: CVD graphene tutorials'],
       turnaround: 'Delivered within 12 business days'
     }
   },
   // Human Genome Paper
   'fc448a7db5a2fac242705bd8e37ae1fc4a858643': {
     stage: 'ai_research',
-    lastUpdated: '2024-07-02',
+    lastUpdated: '2025-02-10',
     reviewers: ['AI Research Desk'],
     paper: {
       title: 'Initial sequencing and analysis of the human genome.',
-      authors: 'Lander et al.',
+      authors: 'International Human Genome Sequencing Consortium',
       venue: 'Nature 2001',
       doi: '10.1038/35057062'
     },
     verdict: {
-      grade: 'B',
-      confidence: 'Medium',
-      mainMessage: '[To be provided - Human Genome reproducibility assessment]',
-      successProbability: 0.65,
-      timeToFirstResult: '[To be provided]',
-      totalCost: '[To be provided]',
-      skillCeiling: '[To be provided]',
+      grade: 'C',
+      confidence: 'High',
+      mainMessage: 'Direct replication impossible due to $2.7B cost, obsolete technology, and 10-15 year timeline. True reproducibility achieved via public data release enabling continuous verification.',
+      successProbability: 0.05,
+      timeToFirstResult: '10-15 years (using 2001 methods)',
+      totalCost: '~$2.7 billion',
+      skillCeiling: 'Massive coordinated effort: thousands of specialists across 20 international centers',
       confidenceLevel: 'ai_inferred'
     },
-    feasibilityQuestions: [],
-    criticalPath: [],
+    feasibilityQuestions: [
+      {
+        id: 'funding',
+        question: 'Can you secure $2.7 billion in funding and nation-state level support?',
+        weight: 3,
+        category: 'Resources',
+        helper: 'Original project cost ~$2.7B over 13 years. Single genome cost in 2001: $95M. Modern sequencing: <$1K in 24 hours.'
+      },
+      {
+        id: 'equipment',
+        question: 'Can you source hundreds of obsolete ABI 3700 capillary sequencers and robotics?',
+        weight: 3,
+        category: 'Equipment Access',
+        helper: 'Requires industrial-scale infrastructure with automated sequencers (now obsolete). Modern NGS renders this approach outdated.'
+      },
+      {
+        id: 'team',
+        question: 'Can you coordinate thousands of staff across 20 international sequencing centers?',
+        weight: 3,
+        category: 'Team & Coordination',
+        helper: 'Required molecular biologists, automation engineers, bioinformaticians, project managers across multiple countries.'
+      },
+      {
+        id: 'bac-library',
+        question: 'Do you have expertise in BAC library construction and physical mapping?',
+        weight: 2,
+        category: 'Technical Expertise',
+        helper: 'Hierarchical shotgun strategy required genome-wide BAC library, fingerprinting, and minimal tiling path assembly.'
+      },
+      {
+        id: 'computation',
+        question: 'Can you build computational clusters for Phred/Phrap/Consed pipeline?',
+        weight: 2,
+        category: 'Computational Infrastructure',
+        helper: 'Assembly of 30,000 BAC clones required significant compute (by 2001 standards). Software available via academic license.'
+      }
+    ],
+    criticalPath: [
+      {
+        id: 'infrastructure',
+        phase: 'Infrastructure and team building',
+        duration: '2-3 years',
+        cost: '$500M - $1B',
+        riskLevel: 'High',
+        dependencies: [],
+        requirements: ['Acquire hundreds of ABI 3700 sequencers', 'Build laboratory automation infrastructure', 'Hire and train thousands of staff across 20 centers'],
+        outputs: ['Fully operational industrial-scale sequencing centers', 'Trained workforce', 'Quality control systems'],
+        blockers: [
+          {
+            severity: 'critical',
+            issue: 'Immense capital cost and sourcing of obsolete equipment that is no longer manufactured',
+            mitigation: 'Unrealistic without nation-state level funding. Modern alternative: Use NGS platforms instead.',
+            verificationStatus: 'inferred'
+          }
+        ]
+      },
+      {
+        id: 'mapping',
+        phase: 'Physical mapping',
+        duration: '3-4 years',
+        cost: '$100M - $200M',
+        riskLevel: 'Medium',
+        dependencies: ['infrastructure'],
+        requirements: ['Construct genome-wide BAC library', 'Fingerprint all clones', 'Assemble minimal tiling path covering genome'],
+        outputs: ['Complete physical map providing scaffold for sequencing', 'Validated clone order spanning all chromosomes'],
+        blockers: [
+          {
+            severity: 'moderate',
+            issue: 'Highly labor-intensive process with potential for errors in map assembly',
+            mitigation: 'Rigorous quality control and cross-validation between centers. Manual verification of clone overlaps.',
+            verificationStatus: 'verified'
+          }
+        ]
+      },
+      {
+        id: 'sequencing',
+        phase: 'Shotgun sequencing and assembly',
+        duration: '3-5 years',
+        cost: '>$1B',
+        riskLevel: 'High',
+        dependencies: ['mapping'],
+        requirements: ['Sequence ~30,000 BAC clones to 5x coverage each', 'Run Phred/Phrap pipeline on all clones', 'Generate working draft covering >90% of genome'],
+        outputs: ['Working draft sequence in ~150,000 pieces', 'Coverage of gene-containing regions', 'Identified gaps and low-quality regions'],
+        blockers: [
+          {
+            severity: 'moderate',
+            issue: 'Maintaining quality control across 20 centers; assembly failures in repetitive regions',
+            mitigation: 'Standardized protocols and quality metrics. Accept draft quality; defer difficult regions to finishing phase.',
+            verificationStatus: 'verified'
+          },
+          {
+            severity: 'moderate',
+            issue: 'Repetitive elements and segmental duplications cause assembly collapse',
+            mitigation: 'Use paired-end reads and physical map constraints. Some regions remain unresolvable with short reads.',
+            verificationStatus: 'verified'
+          }
+        ]
+      },
+      {
+        id: 'finishing',
+        phase: 'Manual finishing',
+        duration: '3-5 years',
+        cost: '$300M - $500M',
+        riskLevel: 'Medium',
+        dependencies: ['sequencing'],
+        requirements: ['Manual inspection of all assemblies using Consed', 'Design targeted experiments to close gaps', 'Resolve low-quality regions to <1 error in 10,000 bases'],
+        outputs: ['Finished high-quality genome sequence', 'Documented remaining gaps (centromeres, heterochromatin)', 'Accuracy meeting quality standards'],
+        blockers: [
+          {
+            severity: 'moderate',
+            issue: 'Extremely high cost of skilled labor for manual curation; some regions intractable with short-read technology',
+            mitigation: 'Prioritize medically relevant regions. Accept permanent gaps in repetitive regions. Wait for long-read tech (PacBio/Nanopore).',
+            verificationStatus: 'verified'
+          }
+        ]
+      }
+    ],
     evidenceBase: {
-      strongEvidence: [],
-      gaps: [],
-      assumptions: []
+      strongEvidence: [
+        {
+          claim: 'The vast majority of the genome (>98%) is non-protein-coding, with repetitive elements making up at least 50%.',
+          source: 'Main text, analysis of repeat content',
+          verificationStatus: 'verified',
+          notes: 'Fundamental observation about genome architecture. Repeatedly confirmed and cornerstone of genomics. T2T consortium refined this further.'
+        },
+        {
+          claim: 'A map of over 1.4 million Single Nucleotide Polymorphisms (SNPs) was created.',
+          source: 'Main text, SNP analysis section',
+          verificationStatus: 'verified',
+          notes: 'First genome-wide map of human variation. Catalyzed disease gene mapping. Vastly superseded by HapMap, 1000 Genomes, and modern GWAS.'
+        },
+        {
+          claim: 'The genome has a "patchwork" structure with significant regional variation in gene density, GC content, and recombination rates.',
+          source: 'Main text, Genomic Landscape section',
+          verificationStatus: 'verified',
+          notes: 'Description of genomic isochores robustly confirmed. Key feature of vertebrate genome organization.'
+        }
+      ],
+      gaps: [
+        {
+          concern: 'Gene count severely overestimated at 30,000-40,000 protein-coding genes (actual: ~20,500).',
+          impact: 'Skewed initial understanding of basis of human complexity. Correct number shifted focus to regulation and alternative splicing.',
+          severity: 'critical',
+          resolvableWithExpertAnalysis: true
+        },
+        {
+          concern: 'Horizontal gene transfer hypothesis claimed hundreds of genes transferred from bacteria to vertebrates.',
+          impact: 'Extraordinary evolutionary claim quickly shown to be incorrect. Differential gene loss was far more likely explanation.',
+          severity: 'critical',
+          resolvableWithExpertAnalysis: true
+        },
+        {
+          concern: '"Junk DNA" concept understated functional role of non-coding genome.',
+          impact: 'Framing as evolutionary debris missed vast regulatory networks. Subsequent ENCODE project revealed biochemical activity.',
+          severity: 'moderate',
+          resolvableWithExpertAnalysis: true
+        },
+        {
+          concern: 'Draft quality sequence contained ~150,000 gaps and regions of ambiguity.',
+          impact: 'Initial biological interpretations contained errors due to incomplete sequence. Required "finished" 2004 genome and T2T for correction.',
+          severity: 'moderate',
+          resolvableWithExpertAnalysis: true
+        }
+      ],
+      assumptions: [
+        'Hierarchical map-based sequencing was most reliable method for complex, repetitive genome (validated assumption)',
+        'Computational gene prediction on draft sequence could provide reasonable first estimate (partly incorrect - overestimated)',
+        'Pattern of gene presence/absence best explained by horizontal transfer (incorrect - gene loss explanation)',
+        'Finished 2004 genome and T2T complete sequence serve as more accurate ground truth for verification',
+        'Publicly reported NHGRI costs are accurate',
+        'Open-data policy (Bermuda Principles) was critical factor enabling long-term validation and self-correction'
+      ]
     },
     expertEnhancements: {
       authorContacted: false,
-      datasetsVerified: [],
-      protocolClarifications: [],
-      additionalResources: [],
+      datasetsVerified: ['All sequence data publicly available in GenBank with no access restrictions', 'BAC clone libraries made publicly available', 'Phred/Phrap/Consed software available via academic license'],
+      protocolClarifications: ['Day-to-day operational protocols of 20 centers not exhaustively documented', 'High-level hierarchical shotgun strategy well documented', 'Modern NGS renders 2001 methods obsolete'],
+      additionalResources: ['Modern alternative: Illumina NovaSeq ($1K, 24 hours)', 'Long-read alternative: PacBio HiFi + Oxford Nanopore', 'Finished reference: 2004 complete genome and 2022 T2T-CHM13'],
       turnaround: 'Delivered within 12 business days'
     }
   }
