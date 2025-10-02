@@ -58,8 +58,10 @@ export async function GET(
     systemPrompt,
     userPrompt,
     responseSchema,
-    timeoutMs: 30_000,
-    maxRetries: 2
+    // Deep research calls can take close to two minutes when Perplexity performs multiple searches.
+    // We only attempt once to avoid blowing out latency for the user if the platform is rate limited.
+    timeoutMs: 110_000,
+    maxRetries: 0
   })
 
   if (researchResult.ok) {
@@ -71,12 +73,20 @@ export async function GET(
       raw: researchResult.parsed
     })
   } else {
+    console.error('[reproducibility] deep research failure', {
+      paperId,
+      error: researchResult.error,
+      status: researchResult.status,
+      durationMs: researchResult.durationMs,
+      retryCount: researchResult.retryCount
+    })
+    const reason = summariseDeepResearchError(researchResult)
     payload = createFallbackReproducibilityPayload({
       paperId,
       paperTitle: paper.title,
       query,
       durationMs: researchResult.durationMs || Date.now() - startedAt,
-      reason: `Perplexity Deep Research returned an error: ${researchResult.error}`
+      reason
     })
   }
 
@@ -169,6 +179,31 @@ function logOutcome(paperId: string, payload: VerifyReproducibilityPayload) {
     assessment: payload.assessment,
     durationMs: payload.metadata.durationMs,
     citationCount: payload.metadata.citationCount,
-    status: payload.metadata.status
+    status: payload.metadata.status,
+    notes: payload.metadata.notes
   })
+}
+
+function summariseDeepResearchError(result: { status?: number; error: string }): string {
+  const plain = stripHtml(result.error).slice(0, 600)
+  if (result.status === 401) {
+    return 'Perplexity Deep Research rejected the request (401 unauthorised). Confirm PERPLEXITY_API_KEY is valid and has Deep Research access.'
+  }
+  if (result.status === 403) {
+    return 'Perplexity Deep Research denied the request (403 forbidden). The account may lack permission for deep research.'
+  }
+  if (result.status === 429) {
+    return 'Perplexity Deep Research rate limited the request (429). Please wait a few minutes before retrying.'
+  }
+  if (result.status && plain) {
+    return `Perplexity Deep Research returned status ${result.status}: ${plain}`
+  }
+  if (plain) {
+    return `Perplexity Deep Research failed: ${plain}`
+  }
+  return 'Perplexity Deep Research failed for an unknown reason.'
+}
+
+function stripHtml(value: string): string {
+  return value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
 }

@@ -86,15 +86,17 @@ export async function runPerplexityDeepResearch(params: DeepResearchParams): Pro
       }
 
       const payload = await response.json()
-      const message = payload?.choices?.[0]?.message
-      const rawContent = typeof message?.content === 'string' ? message.content : ''
+      const rawContent = extractMessageContent(payload)
       const parsed = tryParseContent(rawContent)
       const citations = extractCitations(payload)
 
       if (!parsed) {
+        const truncated = rawContent ? rawContent.slice(0, 800) : ''
         return {
           ok: false,
-          error: 'Perplexity response could not be parsed as JSON',
+          error: truncated
+            ? `Perplexity response could not be parsed as JSON. Sample: ${truncated}`
+            : 'Perplexity response could not be parsed as JSON',
           status: response.status,
           durationMs,
           retryCount: attempt
@@ -170,14 +172,22 @@ function tryParseContent(content: string): unknown {
     return null
   }
 
-  const direct = safeJsonParse(content)
+  const cleaned = stripReasoningBlocks(content)
+  const unwrapped = unwrapCodeFence(cleaned)
+
+  const direct = safeJsonParse(unwrapped)
   if (direct) {
     return direct
   }
 
-  const fencedMatch = content.match(/```json\s*([\s\S]*?)```/i)
-  if (fencedMatch) {
-    return safeJsonParse(fencedMatch[1])
+  const fallback = safeJsonParse(cleaned)
+  if (fallback) {
+    return fallback
+  }
+
+  const inlineJson = extractInlineJson(cleaned)
+  if (inlineJson) {
+    return safeJsonParse(inlineJson)
   }
 
   return null
@@ -215,4 +225,121 @@ async function safeReadText(response: Response): Promise<string> {
   } catch (error) {
     return ''
   }
+}
+
+function extractMessageContent(payload: any): string {
+  const choice = payload?.choices?.[0] ?? payload?.output?.[0]
+  const messageContent = choice?.message?.content ?? choice?.content
+
+  if (typeof messageContent === 'string') {
+    return messageContent
+  }
+
+  if (Array.isArray(messageContent)) {
+    const joined = messageContent
+      .map((segment) => {
+        if (typeof segment === 'string') {
+          return segment
+        }
+        if (segment && typeof segment.text === 'string') {
+          return segment.text
+        }
+        if (segment && typeof segment.content === 'string') {
+          return segment.content
+        }
+        return ''
+      })
+      .filter(Boolean)
+      .join('\n')
+    if (joined) {
+      return joined
+    }
+  }
+
+  const outputText = choice?.message?.output_text || choice?.output_text || payload?.output_text
+  if (Array.isArray(outputText)) {
+    const joined = outputText
+      .map((segment: unknown) => (typeof segment === 'string' ? segment : ''))
+      .filter(Boolean)
+      .join('\n')
+    if (joined) {
+      return joined
+    }
+  }
+
+  if (typeof outputText === 'string') {
+    return outputText
+  }
+
+  return ''
+}
+
+function stripReasoningBlocks(content: string): string {
+  return content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
+}
+
+function unwrapCodeFence(content: string): string {
+  const trimmed = content.trim()
+  if (!trimmed.startsWith('```')) {
+    return trimmed
+  }
+
+  const fenceMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)```$/i)
+  if (fenceMatch && fenceMatch[1]) {
+    return fenceMatch[1].trim()
+  }
+
+  return trimmed
+}
+
+function extractInlineJson(content: string): string | null {
+  const start = content.indexOf('{')
+  const end = content.lastIndexOf('}')
+  if (start === -1 || end === -1 || end <= start) {
+    return null
+  }
+
+  const candidate = content.slice(start, end + 1).trim()
+  const balanced = isProbablyBalancedJson(candidate)
+  return balanced ? candidate : null
+}
+
+function isProbablyBalancedJson(content: string): boolean {
+  let depth = 0
+  let inString = false
+  let escapeNext = false
+
+  for (let i = 0; i < content.length; i++) {
+    const char = content[i]
+
+    if (escapeNext) {
+      escapeNext = false
+      continue
+    }
+
+    if (char === '\\') {
+      escapeNext = true
+      continue
+    }
+
+    if (char === '"') {
+      inString = !inString
+      continue
+    }
+
+    if (inString) {
+      continue
+    }
+
+    if (char === '{' || char === '[') {
+      depth += 1
+    } else if (char === '}' || char === ']') {
+      depth -= 1
+      if (depth < 0) {
+        return false
+      }
+    }
+  }
+
+  return depth === 0 && !inString
 }

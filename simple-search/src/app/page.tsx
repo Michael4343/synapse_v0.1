@@ -2830,10 +2830,20 @@ export default function Home() {
   const selectedPaperPrimaryLink = selectedPaper ? getPrimaryLink(selectedPaper) : null;
 
   const isLandingSampleSelected = selectedPaper ? SAMPLE_PAPERS.some((paper) => paper.id === selectedPaper.id) : false;
+  const isUserLoggedIn = Boolean(user);
+  const hasSelectedPaper = Boolean(selectedPaper);
+  const hasStaticVerification = selectedPaper ? Boolean(VERIFICATION_DATA[selectedPaper.id]) : false;
+  const shouldDisableRepro = !hasSelectedPaper || isUserLoggedIn;
+  const shouldDisableClaims = !hasSelectedPaper || isUserLoggedIn;
 
   const handleVerificationModeChange = (mode: 'repro' | 'claims') => {
-    const requiresAuthentication = mode === 'repro' && !user && !isLandingSampleSelected;
-    if (requiresAuthentication) {
+    const isDisabled = mode === 'repro' ? shouldDisableRepro : shouldDisableClaims;
+    if (isDisabled) {
+      return;
+    }
+
+    const viewingSamplePaper = isLandingSampleSelected;
+    if (!user && !viewingSamplePaper) {
       authModal.openSignup();
       return;
     }
@@ -2854,15 +2864,26 @@ export default function Home() {
     }
     return classes.join(' ');
   };
-  const hasSelectedPaper = Boolean(selectedPaper);
-  const hasStaticVerification = selectedPaper ? Boolean(VERIFICATION_DATA[selectedPaper.id]) : false;
-  const isClaimsActionEnabled = false;
-
   useEffect(() => {
-    if (!isClaimsActionEnabled && verificationMode === 'claims') {
+    if (shouldDisableClaims && verificationMode === 'claims') {
       setVerificationMode(null);
     }
-  }, [isClaimsActionEnabled, verificationMode]);
+  }, [shouldDisableClaims, verificationMode]);
+
+  const getVerificationButtonTitle = (mode: 'repro' | 'claims', isDisabled: boolean): string => {
+    if (!isDisabled) {
+      return '';
+    }
+    if (!hasSelectedPaper) {
+      return 'Select a paper to generate the briefing.';
+    }
+    if (isUserLoggedIn) {
+      return 'Verification is temporarily unavailable for signed in accounts.';
+    }
+    return mode === 'repro'
+      ? 'Select a paper to generate the reproducibility briefing.'
+      : 'Verification is not available for this paper.';
+  };
 
   const verificationButtons = (
     <div className="flex items-center gap-3 sm:gap-4">
@@ -2870,10 +2891,10 @@ export default function Home() {
         <button
           type="button"
           onClick={() => handleVerificationModeChange('repro')}
-          className={getVerificationButtonClasses('repro', !hasSelectedPaper)}
+          className={getVerificationButtonClasses('repro', shouldDisableRepro)}
           aria-pressed={verificationMode === 'repro'}
-          disabled={!hasSelectedPaper}
-          title={!hasSelectedPaper ? 'Select a paper to generate the reproducibility briefing.' : ''}
+          disabled={shouldDisableRepro}
+          title={getVerificationButtonTitle('repro', shouldDisableRepro)}
         >
           <span className="flex items-center gap-2">
             Verify reproducibility
@@ -2887,10 +2908,10 @@ export default function Home() {
         <button
           type="button"
           onClick={() => handleVerificationModeChange('claims')}
-          className={getVerificationButtonClasses('claims', !isClaimsActionEnabled)}
+          className={getVerificationButtonClasses('claims', shouldDisableClaims)}
           aria-pressed={verificationMode === 'claims'}
-          disabled={!isClaimsActionEnabled}
-          title={isClaimsActionEnabled ? '' : 'Claims verification will unlock once automated grading is ready.'}
+          disabled={shouldDisableClaims}
+          title={getVerificationButtonTitle('claims', shouldDisableClaims)}
         >
           <span className="flex items-center gap-2">
             Verify claims
