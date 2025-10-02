@@ -2918,7 +2918,7 @@ export default function Home() {
           </span>
         </button>
         <span
-          className={`h-1 w-full rounded-full bg-gradient-to-r from-violet-400 via-sky-500 to-emerald-400 transition-all duration-200 ease-out ${verificationMode === 'claims' ? 'opacity-100 scale-100' : 'opacity-40 scale-90'}`}
+          className={`h-1 w-full rounded-full bg-gradient-to-r from-violet-400 via-sky-500 to-emerald-400 transition-all duration-200 ease-out ${verificationMode === 'claims' ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
         />
       </div>
     </div>
