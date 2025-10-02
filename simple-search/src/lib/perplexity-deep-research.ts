@@ -16,7 +16,7 @@ interface DeepResearchSuccess {
   retryCount: number
 }
 
-interface DeepResearchFailure {
+export interface DeepResearchFailure {
   ok: false
   error: string
   status?: number

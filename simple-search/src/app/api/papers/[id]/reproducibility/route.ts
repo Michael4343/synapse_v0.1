@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { runPerplexityDeepResearch } from '@/lib/perplexity-deep-research'
+import { runPerplexityDeepResearch, type DeepResearchFailure } from '@/lib/perplexity-deep-research'
 import {
   buildReproducibilityResponseFormat,
   createFallbackReproducibilityPayload,
@@ -73,19 +73,21 @@ export async function GET(
       raw: researchResult.parsed
     })
   } else {
+    // Type narrowing: researchResult is DeepResearchFailure
+    const failure = researchResult as DeepResearchFailure
     console.error('[reproducibility] deep research failure', {
       paperId,
-      error: researchResult.error,
-      status: researchResult.status,
-      durationMs: researchResult.durationMs,
-      retryCount: researchResult.retryCount
+      error: failure.error,
+      status: failure.status,
+      durationMs: failure.durationMs,
+      retryCount: failure.retryCount
     })
-    const reason = summariseDeepResearchError(researchResult)
+    const reason = summariseDeepResearchError(failure)
     payload = createFallbackReproducibilityPayload({
       paperId,
       paperTitle: paper.title,
       query,
-      durationMs: researchResult.durationMs || Date.now() - startedAt,
+      durationMs: failure.durationMs || Date.now() - startedAt,
       reason
     })
   }
