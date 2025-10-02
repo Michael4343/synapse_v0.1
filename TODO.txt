@@ -3,3 +3,128 @@ Email daily update (opt out to weekly or no update) - check this works at 9am em
 
 improve personal speed load - WAITING FOR API KEY
 refactor code - GPT codex
+
+Make tiles for these 4 papers
+"A Programmable Dual-RNA–Guided DNA Endonuclease in Adaptive Bacterial Immunity"
+
+"ImageNet Classification with Deep Convolutional Neural Networks"
+
+"Electric Field Effect in Atomically Thin Carbon Films"
+
+"Initial sequencing and analysis of the human genome"
+
+● # Deep Research Prompt: Paper Reproducibility & Claims Verification Analysis
+
+  Analyze the following academic paper for reproducibility feasibility and claims verification:
+
+  **Paper Title:** [INSERT PAPER TITLE]
+  **Paper ID/DOI:** [INSERT DOI OR ARXIV ID]
+  **Authors:** [INSERT AUTHORS]
+
+  ---
+
+  ## Part 1: Reproducibility Assessment
+
+  ### 1.1 Overall Verdict
+  - Provide a concise verdict message summarizing reproducibility feasibility (1-2 sentences)
+  - Focus on the main challenge or opportunity
+
+  ### 1.2 Feasibility Analysis
+  For each category below, assess what resources/capabilities would be needed:
+
+  **Data & Materials:**
+  - Are datasets publicly available? Provide links and access requirements
+  - Are biological materials/compounds/reagents commercially available?
+  - Identify any proprietary or restricted materials
+
+  **Protocols & Methods:**
+  - How detailed are the methods sections?
+  - Are supplementary protocols available?
+  - Are there missing parameters or ambiguous procedures?
+  - Are there validated alternative approaches?
+
+  **Equipment & Infrastructure:**
+  - What specialized equipment is required?
+  - Typical cost range for key equipment
+  - Are there core facility alternatives?
+
+  **Expertise & Skills:**
+  - What domain expertise is required?
+  - Estimated skill level (undergraduate, graduate, specialist, expert)
+  - Are training resources available?
+
+  **Software & Code:**
+  - Is analysis code publicly available?
+  - What software/computational resources are needed?
+  - Are there licensing or access barriers?
+
+  ### 1.3 Critical Path
+  Identify 3-5 major phases needed to reproduce the work:
+
+  For each phase, provide:
+  - **Phase name** and brief description
+  - **Duration estimate** (realistic timeline)
+  - **Cost estimate** (equipment, materials, labor if applicable)
+  - **Key outputs** (what you achieve in this phase)
+  - **Primary blockers** (what could go wrong)
+    - Issue description
+    - Mitigation strategy
+    - Verification status (verified/inferred/uncertain)
+  - **Dependencies** (what must be completed first)
+  - **Risk level** (Low/Medium/High)
+
+  ---
+
+  ## Part 2: Claims Verification
+
+  ### 2.1 Headline Finding
+  - Extract the paper's most important/novel claim
+  - Identify the primary source/evidence (e.g., "Figure 3A", "Table 2", "Supplementary Data")
+
+  ### 2.2 Primary Open Question
+  - What is the biggest uncertainty or gap in the evidence?
+  - What is the potential impact if this gap matters?
+
+  ### 2.3 Strong Evidence
+  Identify 3-5 claims that have strong supporting evidence:
+
+  For each:
+  - **Claim statement**
+  - **Source** (where in the paper/supplements)
+  - **Notes** (why this evidence is reliable)
+  - **Verification status** (verified/inferred/uncertain)
+
+  ### 2.4 Gaps & Follow-ups
+  Identify 3-5 areas where evidence is weak or missing:
+
+  For each gap:
+  - **Concern** (what's missing or uncertain)
+  - **Impact** (why it matters)
+  - **Severity** (Low/Medium/High)
+  - **Resolvable with expert analysis?** (yes/no)
+
+  ### 2.5 Assumptions
+  List key assumptions made in your analysis or by the authors
+
+  ---
+
+  ## Research Guidelines
+
+  **Sources to check:**
+  - Paper full text and all supplementary materials
+  - Author-provided code repositories (GitHub, etc.)
+  - Public datasets referenced (GEO, ProteomeXchange, etc.)
+  - Citations to methods papers
+  - Author websites/lab pages for additional protocols
+  - Vendor documentation for reagents/equipment
+  - Community forums/discussions about the paper
+
+  **Output format:**
+  - Be specific with sources (don't say "the paper mentions" - say "Figure 2C shows")
+  - Distinguish between what's explicitly stated vs. inferred
+  - Flag areas where you lack information
+  - Prioritize actionable, concrete findings over speculation
+
+  ---
+  This prompt should give you comprehensive analysis covering all the sections we kept in the UI. You can paste this into a deep research        
+  tool and just swap in the paper details at the top.

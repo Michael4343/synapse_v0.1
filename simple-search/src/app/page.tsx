@@ -65,79 +65,64 @@ const FEED_SKELETON_ITEMS = Array.from({ length: 6 })
 // Sample papers to show in default feed
 const SAMPLE_PAPERS: ApiSearchResult[] = [
   {
-    id: 'sample-vcp',
-    title: 'Compounds activating VCP D1 ATPase enhance both autophagic and proteasomal neurotoxic protein clearance',
-    abstract: 'VCP ATPase modulators have emerged as promising tools for restoring proteostasis in neurodegeneration. This study profiles a panel of small molecules that selectively boost VCP D1 activity, reporting improved autophagic flux, enhanced proteasomal turnover, and reduced aggregate burden in patient-derived neurons.',
-    authors: ['Maria Chen', 'Rahul Iyer', 'Elena Petrova', 'Samuel Lee'],
-    year: 2023,
-    venue: 'Cell Reports',
-    citationCount: 48,
-    semanticScholarId: 'sample-vcp',
+    id: '68d962effe5520777791bd6ec8ffa4b963ba4f38',
+    title: 'A Programmable Dual-RNA–Guided DNA Endonuclease in Adaptive Bacterial Immunity',
+    abstract: 'The RNA-guided Cas9 nuclease from the microbial clustered regularly interspaced short palindromic repeats (CRISPR) adaptive immune system can be used to facilitate efficient genome engineering in eukaryotic cells by simply specifying a 20-nucleotide targeting sequence within its guide RNA. We describe a set of tools for Cas9-mediated genome editing via non-homologous end joining or homology-directed repair in mammalian cells, demonstrating that this system enables RNA-programmed genome editing with multiplexed and high-throughput capability.',
+    authors: ['M. Jinek', 'Krzysztof Chylinski', 'Ines Fonfara', 'Michael H. Hauer', 'J. Doudna', 'E. Charpentier'],
+    year: 2012,
+    venue: 'Science',
+    citationCount: 14227,
+    semanticScholarId: '68d962effe5520777791bd6ec8ffa4b963ba4f38',
     arxivId: null,
-    doi: '10.1234/vcp.2023.001',
-    url: 'https://example.org/vcp-d1-atpase-activation',
-    source: 'sample_data',
-    publicationDate: '2023-11-14'
+    doi: '10.1126/science.1225829',
+    url: 'https://www.semanticscholar.org/paper/68d962effe5520777791bd6ec8ffa4b963ba4f38',
+    source: 'semantic_scholar',
+    publicationDate: '2012-08-17'
   },
   {
-    id: 'sample-1',
-    title: 'Attention Is All You Need',
-    abstract: 'The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.',
-    authors: ['Ashish Vaswani', 'Noam Shazeer', 'Niki Parmar', 'Jakob Uszkoreit'],
-    year: 2017,
-    venue: 'NeurIPS',
-    citationCount: 89247,
-    semanticScholarId: 'sample-1',
-    arxivId: '1706.03762',
-    doi: '10.48550/arXiv.1706.03762',
-    url: 'https://arxiv.org/abs/1706.03762',
-    source: 'sample_data',
-    publicationDate: '2017-06-12'
+    id: 'abd1c342495432171beb7ca8fd9551ef13cbd0ff',
+    title: 'ImageNet Classification with Deep Convolutional Neural Networks',
+    abstract: 'We trained a large, deep convolutional neural network to classify the 1.2 million high-resolution images in the ImageNet LSVRC-2010 contest into the 1000 different classes. On the test data, we achieved top-1 and top-5 error rates of 37.5% and 17.0% which is considerably better than the previous state-of-the-art. The neural network, which has 60 million parameters and 650,000 neurons, consists of five convolutional layers, some of which are followed by max-pooling layers, and three fully-connected layers with a final 1000-way softmax.',
+    authors: ['A. Krizhevsky', 'I. Sutskever', 'Geoffrey E. Hinton'],
+    year: 2012,
+    venue: 'Communications of the ACM',
+    citationCount: 122474,
+    semanticScholarId: 'abd1c342495432171beb7ca8fd9551ef13cbd0ff',
+    arxivId: null,
+    doi: '10.1145/3065386',
+    url: 'https://www.semanticscholar.org/paper/abd1c342495432171beb7ca8fd9551ef13cbd0ff',
+    source: 'semantic_scholar',
+    publicationDate: '2012-12-03'
   },
   {
-    id: 'sample-2',
-    title: 'Language Models are Few-Shot Learners',
-    abstract: 'Recent work has demonstrated substantial gains on many NLP tasks and benchmarks by pre-training on a large corpus of text followed by fine-tuning on a specific task. While typically task-agnostic in architecture, this method still requires task-specific fine-tuning datasets of thousands or tens of thousands of examples.',
-    authors: ['Tom B. Brown', 'Benjamin Mann', 'Nick Ryder', 'Melanie Subbiah'],
-    year: 2020,
-    venue: 'NeurIPS',
-    citationCount: 42156,
-    semanticScholarId: 'sample-2',
-    arxivId: '2005.14165',
-    doi: '10.48550/arXiv.2005.14165',
-    url: 'https://arxiv.org/abs/2005.14165',
-    source: 'sample_data',
-    publicationDate: '2020-05-28'
+    id: 'c92bd747a97eeafdb164985b0d044caa1dc6e73e',
+    title: 'Electric Field Effect in Atomically Thin Carbon Films',
+    abstract: 'We describe monocrystalline graphitic films, which are a few atoms thick but are nonetheless stable under ambient conditions, metallic, and of remarkably high quality. The films are found to be a two-dimensional semimetal with a tiny overlap between valence and conductance bands, and they exhibit a strong ambipolar electric field effect such that electrons and holes in concentrations up to 1013 per square centimeter and with room-temperature mobilities of ~10,000 square centimeters per volt-second can be induced by applying gate voltage.',
+    authors: ['K. Novoselov', 'A.K. Geim', 'S. Morozov', 'D. Jiang', 'Y. Zhang', 'S. Dubonos', 'I. Grigorieva', 'A. Firsov'],
+    year: 2004,
+    venue: 'Science',
+    citationCount: 57311,
+    semanticScholarId: 'c92bd747a97eeafdb164985b0d044caa1dc6e73e',
+    arxivId: 'cond-mat/0410550',
+    doi: '10.1126/science.1102896',
+    url: 'https://www.semanticscholar.org/paper/c92bd747a97eeafdb164985b0d044caa1dc6e73e',
+    source: 'semantic_scholar',
+    publicationDate: '2004-10-21'
   },
   {
-    id: 'sample-3',
-    title: 'Deep Residual Learning for Image Recognition',
-    abstract: 'Deeper neural networks are more difficult to train. We present a residual learning framework to ease the training of networks that are substantially deeper than those used previously. We explicitly reformulate the layers as learning residual functions with reference to the layer inputs, instead of learning unreferenced functions.',
-    authors: ['Kaiming He', 'Xiangyu Zhang', 'Shaoqing Ren', 'Jian Sun'],
-    year: 2016,
-    venue: 'CVPR',
-    citationCount: 156892,
-    semanticScholarId: 'sample-3',
-    arxivId: '1512.03385',
-    doi: '10.1109/CVPR.2016.90',
-    url: 'https://arxiv.org/abs/1512.03385',
-    source: 'sample_data',
-    publicationDate: '2015-12-10'
-  },
-  {
-    id: 'sample-4',
-    title: 'BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding',
-    abstract: 'We introduce a new language representation model called BERT, which stands for Bidirectional Encoder Representations from Transformers. Unlike recent language representation models, BERT is designed to pre-train deep bidirectional representations from unlabeled text by jointly conditioning on both left and right context in all layers.',
-    authors: ['Jacob Devlin', 'Ming-Wei Chang', 'Kenton Lee', 'Kristina Toutanova'],
-    year: 2019,
-    venue: 'NAACL',
-    citationCount: 68431,
-    semanticScholarId: 'sample-4',
-    arxivId: '1810.04805',
-    doi: '10.48550/arXiv.1810.04805',
-    url: 'https://arxiv.org/abs/1810.04805',
-    source: 'sample_data',
-    publicationDate: '2018-10-11'
+    id: 'fc448a7db5a2fac242705bd8e37ae1fc4a858643',
+    title: 'Initial sequencing and analysis of the human genome.',
+    abstract: 'The human genome holds an extraordinary trove of information about human development, physiology, medicine and evolution. Here we report the results of an international collaboration to produce and make freely available a draft sequence of the human genome. We also present an initial analysis of the data, describing some of the insights that can be gleaned from the sequence. The development of the human genome project, the generation of a draft sequence, and the nature of the sequence itself are described, as well as an analysis of the human genome sequence.',
+    authors: ['E. Lander', 'L. Linton', 'B. Birren', 'C. Nusbaum', 'M. Zody', 'J. Baldwin', 'K. Devon', 'K. Dewar', 'M. Doyle', 'W. Fitzhugh', 'R. Funke', 'D. Gage', 'K. Harris', 'A. Heaford', 'J. Howland', 'L. Kann', 'J. Lehoczky', 'R. Levine', 'P. McEwan', 'K. McKernan', 'J. Meldrim', 'J. Mesirov', 'C. Miranda', 'W. Morris', 'J. Naylor', 'C. Raymond', 'M. Rosetti', 'R. Santos', 'A. Sheridan', 'C. Sougnez'],
+    year: 2001,
+    venue: 'Nature',
+    citationCount: 13848,
+    semanticScholarId: 'fc448a7db5a2fac242705bd8e37ae1fc4a858643',
+    arxivId: null,
+    doi: '10.1038/35057062',
+    url: 'https://www.semanticscholar.org/paper/fc448a7db5a2fac242705bd8e37ae1fc4a858643',
+    source: 'semantic_scholar',
+    publicationDate: '2001-02-15'
   }
 ]
 
@@ -387,6 +372,154 @@ const RISK_BADGES: Record<RiskLevel, string> = {
   High: 'border border-red-200 bg-red-50 text-red-700'
 }
 
+// Verification data for each sample paper
+const VERIFICATION_DATA: Record<string, MockReproReport> = {
+  // CRISPR Paper
+  '68d962effe5520777791bd6ec8ffa4b963ba4f38': {
+    stage: 'ai_research',
+    lastUpdated: '2024-07-02',
+    reviewers: ['AI Research Desk'],
+    paper: {
+      title: 'A Programmable Dual-RNA–Guided DNA Endonuclease in Adaptive Bacterial Immunity',
+      authors: 'Jinek et al.',
+      venue: 'Science 2012',
+      doi: '10.1126/science.1225829'
+    },
+    verdict: {
+      grade: 'A',
+      confidence: 'High',
+      mainMessage: '[To be provided - CRISPR reproducibility assessment]',
+      successProbability: 0.85,
+      timeToFirstResult: '[To be provided]',
+      totalCost: '[To be provided]',
+      skillCeiling: '[To be provided]',
+      confidenceLevel: 'ai_inferred'
+    },
+    feasibilityQuestions: [],
+    criticalPath: [],
+    evidenceBase: {
+      strongEvidence: [],
+      gaps: [],
+      assumptions: []
+    },
+    expertEnhancements: {
+      authorContacted: false,
+      datasetsVerified: [],
+      protocolClarifications: [],
+      additionalResources: [],
+      turnaround: 'Delivered within 12 business days'
+    }
+  },
+  // AlexNet Paper
+  'abd1c342495432171beb7ca8fd9551ef13cbd0ff': {
+    stage: 'ai_research',
+    lastUpdated: '2024-07-02',
+    reviewers: ['AI Research Desk'],
+    paper: {
+      title: 'ImageNet Classification with Deep Convolutional Neural Networks',
+      authors: 'Krizhevsky et al.',
+      venue: 'Communications of the ACM 2012',
+      doi: '10.1145/3065386'
+    },
+    verdict: {
+      grade: 'A-',
+      confidence: 'High',
+      mainMessage: '[To be provided - AlexNet reproducibility assessment]',
+      successProbability: 0.80,
+      timeToFirstResult: '[To be provided]',
+      totalCost: '[To be provided]',
+      skillCeiling: '[To be provided]',
+      confidenceLevel: 'ai_inferred'
+    },
+    feasibilityQuestions: [],
+    criticalPath: [],
+    evidenceBase: {
+      strongEvidence: [],
+      gaps: [],
+      assumptions: []
+    },
+    expertEnhancements: {
+      authorContacted: false,
+      datasetsVerified: [],
+      protocolClarifications: [],
+      additionalResources: [],
+      turnaround: 'Delivered within 12 business days'
+    }
+  },
+  // Graphene Paper
+  'c92bd747a97eeafdb164985b0d044caa1dc6e73e': {
+    stage: 'ai_research',
+    lastUpdated: '2024-07-02',
+    reviewers: ['AI Research Desk'],
+    paper: {
+      title: 'Electric Field Effect in Atomically Thin Carbon Films',
+      authors: 'Novoselov et al.',
+      venue: 'Science 2004',
+      doi: '10.1126/science.1102896'
+    },
+    verdict: {
+      grade: 'B+',
+      confidence: 'Medium',
+      mainMessage: '[To be provided - Graphene reproducibility assessment]',
+      successProbability: 0.70,
+      timeToFirstResult: '[To be provided]',
+      totalCost: '[To be provided]',
+      skillCeiling: '[To be provided]',
+      confidenceLevel: 'ai_inferred'
+    },
+    feasibilityQuestions: [],
+    criticalPath: [],
+    evidenceBase: {
+      strongEvidence: [],
+      gaps: [],
+      assumptions: []
+    },
+    expertEnhancements: {
+      authorContacted: false,
+      datasetsVerified: [],
+      protocolClarifications: [],
+      additionalResources: [],
+      turnaround: 'Delivered within 12 business days'
+    }
+  },
+  // Human Genome Paper
+  'fc448a7db5a2fac242705bd8e37ae1fc4a858643': {
+    stage: 'ai_research',
+    lastUpdated: '2024-07-02',
+    reviewers: ['AI Research Desk'],
+    paper: {
+      title: 'Initial sequencing and analysis of the human genome.',
+      authors: 'Lander et al.',
+      venue: 'Nature 2001',
+      doi: '10.1038/35057062'
+    },
+    verdict: {
+      grade: 'B',
+      confidence: 'Medium',
+      mainMessage: '[To be provided - Human Genome reproducibility assessment]',
+      successProbability: 0.65,
+      timeToFirstResult: '[To be provided]',
+      totalCost: '[To be provided]',
+      skillCeiling: '[To be provided]',
+      confidenceLevel: 'ai_inferred'
+    },
+    feasibilityQuestions: [],
+    criticalPath: [],
+    evidenceBase: {
+      strongEvidence: [],
+      gaps: [],
+      assumptions: []
+    },
+    expertEnhancements: {
+      authorContacted: false,
+      datasetsVerified: [],
+      protocolClarifications: [],
+      additionalResources: [],
+      turnaround: 'Delivered within 12 business days'
+    }
+  }
+}
+
 const MOCK_REPRO_REPORT: MockReproReport = {
   stage: 'ai_research',
   lastUpdated: '2024-07-02',
@@ -607,8 +740,8 @@ function formatProbability(probability: number): string {
   return `${Math.round(probability * 100)}%`
 }
 
-function ReproducibilityReportPreview() {
-  const report = MOCK_REPRO_REPORT
+function ReproducibilityReportPreview({ paperId }: { paperId: string }) {
+  const report = VERIFICATION_DATA[paperId] || MOCK_REPRO_REPORT
   const questions = report.feasibilityQuestions
 
   const [answers, setAnswers] = useState<Record<string, 'yes' | 'no' | null>>(() => {
@@ -641,6 +774,31 @@ function ReproducibilityReportPreview() {
       ...prev,
       [questionId]: prev[questionId] === response ? null : response
     }))
+  }
+
+  // Check if this is a placeholder (empty data)
+  const isPlaceholder = questions.length === 0 && report.criticalPath.length === 0;
+
+  if (isPlaceholder) {
+    return (
+      <div className="space-y-6">
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">{report.verdict.mainMessage}</h3>
+            <p className="mt-1 text-sm text-slate-600">{report.paper.title}</p>
+            <p className="text-xs text-slate-500">{report.paper.authors} | {report.paper.venue}</p>
+          </div>
+        </section>
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
+          <p className="text-sm font-medium text-amber-900">
+            Detailed reproducibility analysis coming soon
+          </p>
+          <p className="mt-2 text-xs text-amber-700">
+            Feasibility questions, critical path analysis, and expert insights will be added for this paper.
+          </p>
+        </section>
+      </div>
+    );
   }
 
   return (
@@ -759,11 +917,36 @@ function ReproducibilityReportPreview() {
   )
 }
 
-function ClaimsVerificationPreview() {
-  const report = MOCK_REPRO_REPORT
+function ClaimsVerificationPreview({ paperId }: { paperId: string }) {
+  const report = VERIFICATION_DATA[paperId] || MOCK_REPRO_REPORT
   const stageMeta = STAGE_META[report.stage]
   const topClaim = report.evidenceBase.strongEvidence[0]
   const topGap = report.evidenceBase.gaps[0]
+
+  // Check if this is a placeholder (empty data)
+  const isPlaceholder = report.evidenceBase.strongEvidence.length === 0 && report.evidenceBase.gaps.length === 0;
+
+  if (isPlaceholder) {
+    return (
+      <div className="space-y-6">
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Claims Verification</h3>
+            <p className="mt-1 text-sm text-slate-600">{report.paper.title}</p>
+            <p className="text-xs text-slate-500">{report.paper.authors} | {report.paper.venue}</p>
+          </div>
+        </section>
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
+          <p className="text-sm font-medium text-amber-900">
+            Detailed claims analysis coming soon
+          </p>
+          <p className="mt-2 text-xs text-amber-700">
+            Strong evidence, gaps, and follow-up questions will be added for this paper.
+          </p>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -2047,13 +2230,18 @@ export default function Home() {
     });
   };
 
-  const getVerificationButtonClasses = (mode: 'repro' | 'claims') => {
+  const getVerificationButtonClasses = (mode: 'repro' | 'claims', isDisabled: boolean) => {
     const classes = [DETAIL_REPRO_BUTTON_CLASSES];
+    if (isDisabled) {
+      return 'inline-flex items-center justify-center rounded-lg border border-slate-200 bg-slate-100 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400 cursor-not-allowed opacity-60';
+    }
     if (verificationMode === mode) {
       classes.push(DETAIL_VERIFY_BUTTON_ACTIVE_CLASSES);
     }
     return classes.join(' ');
   };
+
+  const hasVerificationData = selectedPaper && selectedPaper.id in VERIFICATION_DATA;
 
   const verificationButtons = (
     <div className="flex items-center gap-3 sm:gap-4">
@@ -2061,30 +2249,34 @@ export default function Home() {
         <button
           type="button"
           onClick={() => handleVerificationModeChange('repro')}
-          className={getVerificationButtonClasses('repro')}
+          className={getVerificationButtonClasses('repro', !hasVerificationData)}
           aria-pressed={verificationMode === 'repro'}
+          disabled={!hasVerificationData}
+          title={!hasVerificationData ? 'Verification available only for featured papers' : ''}
         >
           <span className="flex items-center gap-2">
             Verify reproducibility
           </span>
         </button>
         <span
-          className={`h-1 w-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-sky-600 transition-all duration-200 ease-out ${verificationMode === 'repro' ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
+          className={`h-1 w-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-sky-600 transition-all duration-200 ease-out ${verificationMode === 'repro' && hasVerificationData ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
         />
       </div>
       <div className="flex flex-col items-center gap-1">
         <button
           type="button"
           onClick={() => handleVerificationModeChange('claims')}
-          className={getVerificationButtonClasses('claims')}
+          className={getVerificationButtonClasses('claims', !hasVerificationData)}
           aria-pressed={verificationMode === 'claims'}
+          disabled={!hasVerificationData}
+          title={!hasVerificationData ? 'Verification available only for featured papers' : ''}
         >
           <span className="flex items-center gap-2">
             Verify claims
           </span>
         </button>
         <span
-          className={`h-1 w-full rounded-full bg-gradient-to-r from-violet-400 via-sky-500 to-emerald-400 transition-all duration-200 ease-out ${verificationMode === 'claims' ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
+          className={`h-1 w-full rounded-full bg-gradient-to-r from-violet-400 via-sky-500 to-emerald-400 transition-all duration-200 ease-out ${verificationMode === 'claims' && hasVerificationData ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
         />
       </div>
     </div>
@@ -3028,10 +3220,21 @@ export default function Home() {
                 </div>
 
                 <div id="verification-panel" className="space-y-4">
-                  {verificationMode === 'repro' ? (
-                    <ReproducibilityReportPreview />
+                  {hasVerificationData ? (
+                    verificationMode === 'repro' ? (
+                      <ReproducibilityReportPreview paperId={selectedPaper.id} />
+                    ) : (
+                      <ClaimsVerificationPreview paperId={selectedPaper.id} />
+                    )
                   ) : (
-                    <ClaimsVerificationPreview />
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-8 text-center">
+                      <p className="text-sm font-medium text-slate-600">
+                        Verification data is currently available only for featured papers.
+                      </p>
+                      <p className="mt-2 text-xs text-slate-500">
+                        This feature will be expanded to all papers soon.
+                      </p>
+                    </div>
                   )}
                 </div>
 
