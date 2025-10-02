@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { ReactNode } from 'react';
-import { LogOut, Rss, User, UserCog, X } from 'lucide-react';
+import { LogOut, Rss, User, UserCog, X, AlertTriangle, CheckCircle2, Sparkles } from 'lucide-react';
 import { useAuth } from '../lib/auth-context';
 import { useAuthModal, getUserDisplayName } from '../lib/auth-hooks';
 import { createClient } from '../lib/supabase';
@@ -64,6 +64,21 @@ const FEED_SKELETON_ITEMS = Array.from({ length: 6 })
 
 // Sample papers to show in default feed
 const SAMPLE_PAPERS: ApiSearchResult[] = [
+  {
+    id: 'sample-vcp',
+    title: 'Compounds activating VCP D1 ATPase enhance both autophagic and proteasomal neurotoxic protein clearance',
+    abstract: 'VCP ATPase modulators have emerged as promising tools for restoring proteostasis in neurodegeneration. This study profiles a panel of small molecules that selectively boost VCP D1 activity, reporting improved autophagic flux, enhanced proteasomal turnover, and reduced aggregate burden in patient-derived neurons.',
+    authors: ['Maria Chen', 'Rahul Iyer', 'Elena Petrova', 'Samuel Lee'],
+    year: 2023,
+    venue: 'Cell Reports',
+    citationCount: 48,
+    semanticScholarId: 'sample-vcp',
+    arxivId: null,
+    doi: '10.1234/vcp.2023.001',
+    url: 'https://example.org/vcp-d1-atpase-activation',
+    source: 'sample_data',
+    publicationDate: '2023-11-14'
+  },
   {
     id: 'sample-1',
     title: 'Attention Is All You Need',
@@ -263,6 +278,7 @@ const SIDEBAR_SECONDARY_BUTTON_CLASSES = 'flex items-center justify-center round
 const SEARCH_SPINNER_CLASSES = 'inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent';
 const DETAIL_SAVE_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 sm:px-8 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50';
 const DETAIL_REPRO_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-lg border border-sky-200 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50';
+const DETAIL_VERIFY_BUTTON_ACTIVE_CLASSES = 'border-sky-400 bg-sky-50 text-sky-900 shadow-[0_12px_28px_rgba(56,189,248,0.25)] ring-2 ring-offset-2 ring-sky-200';
 const PROFILE_CARD_CLASSES = 'rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
 const ACCOUNT_ICON_BUTTON_CLASSES = 'inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-900';
 const PROFILE_LABEL_CLASSES = 'text-sm font-medium text-slate-700';
@@ -271,36 +287,624 @@ const PROFILE_PRIMARY_BUTTON_CLASSES = 'inline-flex items-center justify-center 
 const PROFILE_COMING_SOON_HINT_CLASSES = 'text-xs font-medium text-slate-400';
 const PROFILE_DISABLED_UPLOAD_BUTTON_CLASSES = 'flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-400 cursor-not-allowed';
 
-const REPRO_CHECKLIST_SECTIONS: Array<{ title: string; prompts: string[] }> = [
-  {
-    title: 'Data & Inputs',
-    prompts: [
-      'What datasets or inputs are required, and how can they be accessed?',
-      'Do any licences, approvals, or preprocessing steps block immediate reuse?'
-    ]
-  },
-  {
-    title: 'Implementation Details',
-    prompts: [
-      'Is the experimental procedure described step-by-step so it can be followed verbatim?',
-      'Which hyperparameters or configuration choices are critical to replicate the results?'
-    ]
-  },
-  {
-    title: 'Code & Artifacts',
-    prompts: [
-      'Is source code or a public repository provided? Where should it be cloned from?',
-      'Are there pretrained models, checkpoints, or auxiliary files that must be downloaded?'
-    ]
-  },
-  {
-    title: 'Environment & Validation',
-    prompts: [
-      'What hardware/software environment (framework versions, GPUs, OS) does the paper assume?',
-      'How will you validate that reproduced results align with the paper’s reported metrics?'
-    ]
+type VerificationStatus = 'verified' | 'inferred' | 'uncertain'
+type GapSeverity = 'critical' | 'moderate' | 'minor'
+type RiskLevel = 'Low' | 'Medium' | 'High'
+
+interface MockFeasibilityQuestion {
+  id: string
+  question: string
+  weight: number
+  category: string
+  helper?: string
+}
+
+interface MockBlocker {
+  severity: GapSeverity
+  issue: string
+  mitigation: string
+  verificationStatus: VerificationStatus
+}
+
+interface MockCriticalPhase {
+  id: string
+  phase: string
+  duration: string
+  cost: string
+  riskLevel: RiskLevel
+  dependencies: string[]
+  requirements: string[]
+  outputs: string[]
+  blockers: MockBlocker[]
+}
+
+interface MockEvidenceItem {
+  claim: string
+  source: string
+  verificationStatus: VerificationStatus
+  notes?: string
+}
+
+interface MockGap {
+  concern: string
+  impact: string
+  severity: GapSeverity
+  resolvableWithExpertAnalysis: boolean
+}
+
+interface MockReproReport {
+  stage: 'ai_research' | 'expert_verified'
+  lastUpdated: string
+  reviewers: string[]
+  paper: {
+    title: string
+    authors: string
+    venue: string
+    doi: string
   }
+  verdict: {
+    grade: string
+    confidence: string
+    mainMessage: string
+    successProbability: number
+    timeToFirstResult: string
+    totalCost: string
+    skillCeiling: string
+    confidenceLevel: 'ai_inferred' | 'expert_verified'
+  }
+  criticalPath: MockCriticalPhase[]
+  evidenceBase: {
+    strongEvidence: MockEvidenceItem[]
+    gaps: MockGap[]
+    assumptions: string[]
+  }
+  feasibilityQuestions: MockFeasibilityQuestion[]
+  expertEnhancements: {
+    authorContacted: boolean
+    datasetsVerified: string[]
+    protocolClarifications: string[]
+    additionalResources: string[]
+    turnaround: string
+  }
+}
+
+const STAGE_META: Record<MockReproReport['stage'], { label: string; description: string; badgeClasses: string }> = {
+  ai_research: {
+    label: 'AI Deep Research',
+    description: 'Automated synthesis from public sources',
+    badgeClasses: 'bg-sky-100 text-sky-600 border border-sky-200'
+  },
+  expert_verified: {
+    label: 'Expert-Verified Analysis',
+    description: 'Humans validated sources, protocols, and access',
+    badgeClasses: 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+  }
+}
+
+const RISK_BADGES: Record<RiskLevel, string> = {
+  Low: 'border border-emerald-200 bg-emerald-50 text-emerald-700',
+  Medium: 'border border-amber-200 bg-amber-50 text-amber-700',
+  High: 'border border-red-200 bg-red-50 text-red-700'
+}
+
+const MOCK_REPRO_REPORT: MockReproReport = {
+  stage: 'ai_research',
+  lastUpdated: '2024-07-02',
+  reviewers: ['AI Research Desk'],
+  paper: {
+    title: 'Compounds activating VCP D1 ATPase enhance both autophagic and proteasomal neurotoxic protein clearance',
+    authors: 'Chen et al.',
+    venue: 'Cell Reports 2023',
+    doi: '10.1234/vcp.2023.001'
+  },
+  verdict: {
+    grade: 'A-',
+    confidence: 'Medium',
+    mainMessage: 'Viable for neurodegeneration labs with mature proteostasis assays.',
+    successProbability: 0.68,
+    timeToFirstResult: '5-7 weeks',
+    totalCost: '$35k - $55k',
+    skillCeiling: 'Neuro cell biologist + proteostasis specialist',
+    confidenceLevel: 'ai_inferred'
+  },
+  feasibilityQuestions: [
+    {
+      id: 'models',
+      question: 'Do you maintain human iPSC-derived neurons or comparable VCP disease models?',
+      weight: 3,
+      category: 'Model Systems',
+      helper: 'Authors relied on patient-derived cortical neurons; organoids are acceptable with baseline QC.'
+    },
+    {
+      id: 'imaging',
+      question: 'Can you run high-content imaging or time-lapse microscopy for autophagy flux?',
+      weight: 2,
+      category: 'Instrumentation',
+      helper: 'Needed to quantify LC3, SQSTM1, and aggregate clearance across dosing windows.'
+    },
+    {
+      id: 'assays',
+      question: 'Do you have validated autophagy and proteasome activity assays ready to deploy?',
+      weight: 2,
+      category: 'Assays',
+      helper: 'Study used paired LC3-II westerns, proteasome-Glo readouts, and ubiquitin clearance panels.'
+    },
+    {
+      id: 'compounds',
+      question: 'Can you source or synthesize the VCP activator compound panel described?',
+      weight: 2,
+      category: 'Materials',
+      helper: 'Lead molecules ship from two specialized vendors; analog synthesis support may be required.'
+    },
+    {
+      id: 'compliance',
+      question: 'Are your approvals for patient-derived cell handling current and traceable?',
+      weight: 1,
+      category: 'Operations',
+      helper: 'Requires IRB amendments plus cold-chain documentation for neuron stocks.'
+    }
+  ],
+  criticalPath: [
+    {
+      id: 'planning',
+      phase: 'Compound sourcing and quality control',
+      duration: '1 week',
+      cost: '$4k',
+      riskLevel: 'Medium',
+      dependencies: [],
+      requirements: ['Confirm vendor availability', 'Set up HPLC and mass spec QC workflow', 'Prepare storage and dosing stocks'],
+      outputs: ['Validated compound panel', 'Stability and solubility profiles'],
+      blockers: [
+        {
+          severity: 'moderate',
+          issue: 'Lead compounds currently on allocation with 6 week replenishment lead time',
+          mitigation: 'Engage alternate supplier identified in supplementary methods or pursue CRO synthesis slot.',
+          verificationStatus: 'inferred'
+        }
+      ]
+    },
+    {
+      id: 'models',
+      phase: 'Neuronal model setup and characterization',
+      duration: '2-3 weeks',
+      cost: '$12k',
+      riskLevel: 'Medium',
+      dependencies: ['planning'],
+      requirements: ['Differentiate iPSC neurons or thaw VCP mutant lines', 'Benchmark baseline autophagy and proteasome markers'],
+      outputs: ['QC validated neurons ready for dosing', 'Baseline proteostasis reference set'],
+      blockers: [
+        {
+          severity: 'critical',
+          issue: 'Differentiation batches show day-to-day variability that shifts proteostasis baseline',
+          mitigation: 'Adopt author SOP for maturation days and include internal healthy control lines.',
+          verificationStatus: 'inferred'
+        },
+        {
+          severity: 'moderate',
+          issue: 'Neurons require mycoplasma-negative confirmation before dosing window',
+          mitigation: 'Schedule third-party sterility panel in advance; include kill step in SOP.',
+          verificationStatus: 'inferred'
+        }
+      ]
+    },
+    {
+      id: 'assays',
+      phase: 'Autophagy and proteasome assays',
+      duration: '10 days',
+      cost: '$9k',
+      riskLevel: 'High',
+      dependencies: ['models'],
+      requirements: ['High-content imaging pipeline configured', 'Proteasome activity kit validated with controls'],
+      outputs: ['Flux curves across compound doses', 'Proteasome recovery metrics'],
+      blockers: [
+        {
+          severity: 'moderate',
+          issue: 'Compound cytotoxicity window is narrow beyond 48 hours',
+          mitigation: 'Adopt staggered dosing schedule and include viability gating described in supplement.',
+          verificationStatus: 'inferred'
+        }
+      ]
+    },
+    {
+      id: 'analysis',
+      phase: 'Data integration and reporting',
+      duration: '1 week',
+      cost: '$3k',
+      riskLevel: 'Low',
+      dependencies: ['assays'],
+      requirements: ['Analysis scripts for proteostasis metrics', 'Predefined QC gates for outlier exclusion'],
+      outputs: ['Integrated autophagy and proteasome report', 'Recommendations for in vivo follow-up'],
+      blockers: [
+        {
+          severity: 'minor',
+          issue: 'Normalization requires internal controls not included in public data dump',
+          mitigation: 'Recreate control curves using provided spreadsheets or request raw files via expert channel.',
+          verificationStatus: 'inferred'
+        }
+      ]
+    }
+  ],
+  evidenceBase: {
+    strongEvidence: [
+      {
+        claim: 'VCP-874 compound boosted autophagic flux by 45 percent in patient-derived neurons.',
+        source: 'Chen et al. Supplementary Figure 4',
+        verificationStatus: 'verified'
+      },
+      {
+        claim: 'Proteasome-Glo assays showed 1.6x activity recovery after 24 hour dosing.',
+        source: 'Main text Figure 3C + methods section',
+        verificationStatus: 'inferred',
+        notes: 'Authors provide raw luminescence tables with positive control alignment.'
+      },
+      {
+        claim: 'Co-treatment with NRF2 activator reduced aggregate burden without additional toxicity.',
+        source: 'Appendix synergy screen',
+        verificationStatus: 'inferred'
+      }
+    ],
+    gaps: [
+      {
+        concern: 'Exact supplier formulation for lead compound not disclosed.',
+        impact: 'Potency may drift if excipients differ.',
+        severity: 'critical',
+        resolvableWithExpertAnalysis: true
+      },
+      {
+        concern: 'Long-term toxicity data limited to 48 hour window.',
+        impact: 'Chronic dosing plans remain speculative.',
+        severity: 'moderate',
+        resolvableWithExpertAnalysis: true
+      },
+      {
+        concern: 'Proteasome assay instrumentation details are high level.',
+        impact: 'Labs may burn cycles troubleshooting calibration.',
+        severity: 'minor',
+        resolvableWithExpertAnalysis: false
+      }
+    ],
+    assumptions: [
+      'Lab can allocate uninterrupted incubator capacity for 3 week neuronal maturation.',
+      'Reproduction focuses on in vitro clearance outcomes; in vivo validation is out of scope.'
+    ]
+  },
+  expertEnhancements: {
+    authorContacted: false,
+    datasetsVerified: ['Vendor roster for VCP activators with batch QC sheets', 'Validated iPSC differentiation SOP with day-by-day milestones'],
+    protocolClarifications: ['Autophagy imaging acquisition settings', 'Proteasome activity normalization script'],
+    additionalResources: ['Chemistry CRO intro for analog synthesis', 'Template for IRB amendment covering VCP neuron work'],
+    turnaround: 'Delivered within 12 business days'
+  }
+}
+
+const EXPERT_UPGRADE_NOTES = [
+  'Secure compound supply details, batch QC, and alternate vendors.',
+  'Review the authors autophagy and proteasome assay playbooks with annotated settings.',
+  'Coordinate a live Q&A with the study team on dosing cadence and toxicity monitoring.'
 ]
+
+function getFeasibilitySummary(score: number): string {
+  if (score >= 80) {
+    return 'Ready to execute'
+  }
+  if (score >= 55) {
+    return 'Needs targeted support'
+  }
+  return 'High risk - secure collaborators'
+}
+
+function getFeasibilityTone(score: number): string {
+  if (score >= 80) {
+    return 'text-emerald-600'
+  }
+  if (score >= 55) {
+    return 'text-amber-600'
+  }
+  return 'text-red-600'
+}
+
+function formatProbability(probability: number): string {
+  return `${Math.round(probability * 100)}%`
+}
+
+function ReproducibilityReportPreview() {
+  const report = MOCK_REPRO_REPORT
+  const questions = report.feasibilityQuestions
+
+  const [answers, setAnswers] = useState<Record<string, 'yes' | 'no' | null>>(() => {
+    const initial: Record<string, 'yes' | 'no' | null> = {}
+    questions.forEach((question) => {
+      initial[question.id] = null
+    })
+    return initial
+  })
+
+  const totalWeight = useMemo(() => questions.reduce((sum, question) => sum + question.weight, 0), [questions])
+  const yesWeight = useMemo(
+    () => questions.reduce((sum, question) => sum + (answers[question.id] === 'yes' ? question.weight : 0), 0),
+    [answers, questions]
+  )
+  const answeredCount = useMemo(
+    () => questions.reduce((sum, question) => sum + (answers[question.id] ? 1 : 0), 0),
+    [answers, questions]
+  )
+
+  const feasibilityScore = totalWeight > 0 ? Math.round((yesWeight / totalWeight) * 100) : 0
+  const feasibilitySummary = getFeasibilitySummary(feasibilityScore)
+  const feasibilityTone = getFeasibilityTone(feasibilityScore)
+
+  const stageMeta = STAGE_META[report.stage]
+  const confidenceSource = report.verdict.confidenceLevel === 'ai_inferred' ? 'AI generated' : 'Expert verified'
+
+  function handleAnswer(questionId: string, response: 'yes' | 'no') {
+    setAnswers((prev) => ({
+      ...prev,
+      [questionId]: prev[questionId] === response ? null : response
+    }))
+  }
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="flex gap-4">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-sky-50 text-2xl font-semibold text-sky-600">
+              {report.verdict.grade}
+            </div>
+            <div>
+              <div className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${stageMeta.badgeClasses}`}>
+                {stageMeta.label}
+              </div>
+              <h3 className="mt-2 text-lg font-semibold text-slate-900">{report.verdict.mainMessage}</h3>
+              <p className="mt-1 text-sm text-slate-600">{report.paper.title}</p>
+              <p className="text-xs text-slate-500">{report.paper.authors} | {report.paper.venue}</p>
+            </div>
+          </div>
+          <div className="text-sm text-slate-500 md:text-right">
+            <p>Last updated {report.lastUpdated}</p>
+            <p>{stageMeta.description}</p>
+            <p className="mt-1 text-xs uppercase tracking-wide text-slate-400">Confidence: {report.verdict.confidence} ({confidenceSource})</p>
+          </div>
+        </div>
+        <dl className="mt-6 grid gap-4 text-sm text-slate-700 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-slate-500">Success chance</dt>
+            <dd className="mt-1 font-semibold text-slate-900">{formatProbability(report.verdict.successProbability)}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-slate-500">Time to first result</dt>
+            <dd className="mt-1 font-semibold text-slate-900">{report.verdict.timeToFirstResult}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-slate-500">Estimated cost</dt>
+            <dd className="mt-1 font-semibold text-slate-900">{report.verdict.totalCost}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-slate-500">Skill required</dt>
+            <dd className="mt-1 font-semibold text-slate-900">{report.verdict.skillCeiling}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h4 className="text-base font-semibold text-slate-900">Feasibility snapshot</h4>
+            <p className="mt-1 text-sm text-slate-600">Mark what your lab already has in place.</p>
+          </div>
+          <div className="text-right">
+            <p className={`text-3xl font-semibold ${feasibilityTone}`}>{feasibilityScore}<span className="ml-1 text-base text-slate-500">%</span></p>
+            <p className="text-xs text-slate-500">{feasibilitySummary}</p>
+            <p className="text-xs text-slate-400">{answeredCount} of {questions.length} answered</p>
+          </div>
+        </div>
+        <div className="mt-3 h-2 w-full rounded-full bg-slate-100">
+          <div
+            className={`h-2 rounded-full transition-all ${feasibilityScore >= 80 ? 'bg-emerald-500' : feasibilityScore >= 55 ? 'bg-amber-500' : 'bg-red-500'}`}
+            style={{ width: `${feasibilityScore}%` }}
+          />
+        </div>
+        <div className="mt-4 space-y-3">
+          {questions.map((question) => {
+            const currentAnswer = answers[question.id]
+            return (
+              <div key={question.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-900">{question.question}</p>
+                  <p className="mt-1 text-xs text-slate-500">{question.category} | Weight {question.weight}</p>
+                  {question.helper ? <p className="mt-1 text-xs text-slate-500">{question.helper}</p> : null}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleAnswer(question.id, 'yes')}
+                    className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${currentAnswer === 'yes' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:text-emerald-600'}`}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAnswer(question.id, 'no')}
+                    className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${currentAnswer === 'no' ? 'border-red-300 bg-red-50 text-red-700' : 'border-slate-200 bg-white text-slate-600 hover:border-red-200 hover:text-red-600'}`}
+                  >
+                    Not yet
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h4 className="text-base font-semibold text-slate-900">Critical path</h4>
+        <p className="mt-1 text-sm text-slate-600">High-level phases with the main output and risk to watch.</p>
+        <div className="mt-4 space-y-3">
+          {report.criticalPath.map((phase) => {
+            const primaryOutput = phase.outputs[0] ?? 'Output captured during expert review'
+            const primaryBlocker = phase.blockers[0]
+            const dependenciesText = phase.dependencies.length ? `Depends on: ${phase.dependencies.join(', ')}` : null
+            return (
+              <div key={phase.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{phase.phase}</p>
+                    <p className="text-xs text-slate-500">{phase.duration} | {phase.cost}</p>
+                    {dependenciesText ? <p className="text-xs text-slate-400">{dependenciesText}</p> : null}
+                  </div>
+                  <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${RISK_BADGES[phase.riskLevel]}`}>
+                    Risk {phase.riskLevel}
+                  </span>
+                </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Key output</p>
+                    <p className="mt-1 text-sm text-slate-700">{primaryOutput}</p>
+                  </div>
+                  {primaryBlocker ? (
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Watch out</p>
+                      <p className="mt-1 text-sm text-slate-700">{primaryBlocker.issue}</p>
+                      <p className="mt-1 text-xs text-slate-500">Mitigation: {primaryBlocker.mitigation}</p>
+                      <p className="mt-1 text-xs text-slate-400">Confidence: {primaryBlocker.verificationStatus}</p>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h4 className="text-base font-semibold text-slate-900">Need deeper support?</h4>
+        <p className="mt-1 text-sm text-slate-600">Stage 2 is a paid engagement that closes the remaining gaps.</p>
+        <ul className="mt-3 space-y-2 text-sm text-slate-600">
+          {EXPERT_UPGRADE_NOTES.map((note) => (
+            <li key={note} className="flex items-start gap-2">
+              <span className="mt-2 h-2 w-2 rounded-full bg-slate-400" />
+              <span>{note}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-4 flex flex-col gap-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+          <p>Turnaround: {report.expertEnhancements.turnaround}</p>
+          <button
+            type="button"
+            className="w-full rounded-xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white shadow transition hover:bg-sky-500 sm:w-auto"
+          >
+            Request expert analysis (mock)
+          </button>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function ClaimsVerificationPreview() {
+  const report = MOCK_REPRO_REPORT
+  const stageMeta = STAGE_META[report.stage]
+  const topClaim = report.evidenceBase.strongEvidence[0]
+  const topGap = report.evidenceBase.gaps[0]
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="flex gap-4">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-sky-50 text-sm font-semibold uppercase text-sky-600">
+              Claims
+            </div>
+            <div>
+              <div className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${stageMeta.badgeClasses}`}>
+                {stageMeta.label}
+              </div>
+              <h3 className="mt-2 text-lg font-semibold text-slate-900">Deep research snapshot</h3>
+              <p className="mt-1 text-sm text-slate-600">Literature, supplementary data, and community notes reviewed for this paper.</p>
+            </div>
+          </div>
+          <div className="text-sm text-slate-500 md:text-right">
+            <p>Last updated {report.lastUpdated}</p>
+            <p>Reviewers: {report.reviewers.join(', ')}</p>
+            <p className="mt-1 text-xs uppercase tracking-wide text-slate-400">Focus: Evidence confidence & open gaps</p>
+          </div>
+        </div>
+        {topClaim ? (
+          <dl className="mt-6 grid gap-4 text-sm text-slate-700 sm:grid-cols-2">
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-slate-500">Headline finding</dt>
+              <dd className="mt-1 font-semibold text-slate-900">{topClaim.claim}</dd>
+              <dd className="mt-1 text-xs text-slate-500">Source: {topClaim.source}</dd>
+            </div>
+            {topGap ? (
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-slate-500">Primary open question</dt>
+                <dd className="mt-1 font-semibold text-slate-900">{topGap.concern}</dd>
+                <dd className="mt-1 text-xs text-slate-500">Impact: {topGap.impact}</dd>
+              </div>
+            ) : null}
+          </dl>
+        ) : null}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h4 className="text-base font-semibold text-slate-900">Evidence we stand behind</h4>
+        <p className="mt-1 text-sm text-slate-600">Claims with citations or data that held up under automated review.</p>
+        <ul className="mt-4 space-y-3 text-sm text-slate-700">
+          {report.evidenceBase.strongEvidence.map((item, idx) => (
+            <li key={`evidence-${idx}`} className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <CheckCircle2 className="mt-1 h-5 w-5 text-emerald-500" />
+              <div>
+                <p className="font-medium text-slate-900">{item.claim}</p>
+                <p className="text-xs text-slate-500">Source: {item.source}</p>
+                {item.notes ? <p className="mt-1 text-xs text-slate-500">{item.notes}</p> : null}
+                <p className="mt-1 text-xs text-slate-400">Confidence: {item.verificationStatus}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h4 className="text-base font-semibold text-slate-900">Gaps and follow-ups</h4>
+        <p className="mt-1 text-sm text-slate-600">Where uncertainty remains and what we would chase next.</p>
+        <ul className="mt-4 space-y-3 text-sm text-slate-700">
+          {report.evidenceBase.gaps.map((gap, idx) => (
+            <li key={`gap-${idx}`} className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <AlertTriangle className="mt-1 h-5 w-5 text-amber-500" />
+              <div>
+                <p className="font-medium text-slate-900">{gap.concern}</p>
+                <p className="text-xs text-slate-500">Impact: {gap.impact}</p>
+                <p className="text-xs text-slate-500">Severity: {gap.severity}</p>
+                <p className="mt-1 text-xs text-slate-400">{gap.resolvableWithExpertAnalysis ? 'Expert outreach planned.' : 'Track internally for now.'}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+        {report.evidenceBase.assumptions.length ? (
+          <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Assumptions we made</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-500">
+              {report.evidenceBase.assumptions.map((assumption) => (
+                <li key={assumption}>{assumption}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h4 className="text-base font-semibold text-slate-900">Next claim checks (mock)</h4>
+        <p className="mt-1 text-sm text-slate-600">Outline of the manual follow-up the team would run if you request escalation.</p>
+        <ul className="mt-3 list-decimal space-y-2 pl-5 text-sm text-slate-600">
+          <li>Validate compound sourcing with authors and suppliers, collecting batch certificates.</li>
+          <li>Replicate proteasome assay calibration with vendor tech support on live call.</li>
+          <li>Expand toxicity window data to 7 days using controlled dosing schedule.</li>
+        </ul>
+      </section>
+    </div>
+  )
+}
 
 function formatAuthors(authors: string[]) {
   if (!authors.length) return 'Author information unavailable'
@@ -587,6 +1191,7 @@ export default function Home() {
   const [scrapedContentLoading, setScrapedContentLoading] = useState(false);
   const [scrapedContentError, setScrapedContentError] = useState('');
   const [scrapedContentIsStructured, setScrapedContentIsStructured] = useState(false);
+  const [verificationMode, setVerificationMode] = useState<'repro' | 'claims'>('repro');
 
   const profileManualKeywordsRef = useRef('');
   const isMountedRef = useRef(true);
@@ -1031,6 +1636,10 @@ export default function Home() {
   useEffect(() => {
     setScrapedContent(null);
     setScrapedContentError('');
+  }, [selectedPaper?.id]);
+
+  useEffect(() => {
+    setVerificationMode('repro');
   }, [selectedPaper?.id]);
 
   const runProfileEnrichment = useCallback(
@@ -1491,6 +2100,56 @@ export default function Home() {
   }
   const shouldShowProfileSpinner = Boolean(user) && profileLoading;
   const selectedPaperPrimaryLink = selectedPaper ? getPrimaryLink(selectedPaper) : null;
+
+  const handleVerificationModeChange = (mode: 'repro' | 'claims') => {
+    setVerificationMode(mode);
+    requestAnimationFrame(() => {
+      document.getElementById('verification-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const getVerificationButtonClasses = (mode: 'repro' | 'claims') => {
+    const classes = [DETAIL_REPRO_BUTTON_CLASSES];
+    if (verificationMode === mode) {
+      classes.push(DETAIL_VERIFY_BUTTON_ACTIVE_CLASSES);
+    }
+    return classes.join(' ');
+  };
+
+  const verificationButtons = (
+    <div className="flex items-center gap-3 sm:gap-4">
+      <div className="flex flex-col items-center gap-1">
+        <button
+          type="button"
+          onClick={() => handleVerificationModeChange('repro')}
+          className={getVerificationButtonClasses('repro')}
+          aria-pressed={verificationMode === 'repro'}
+        >
+          <span className="flex items-center gap-2">
+            Verify reproducibility
+          </span>
+        </button>
+        <span
+          className={`h-1 w-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-sky-600 transition-all duration-200 ease-out ${verificationMode === 'repro' ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
+        />
+      </div>
+      <div className="flex flex-col items-center gap-1">
+        <button
+          type="button"
+          onClick={() => handleVerificationModeChange('claims')}
+          className={getVerificationButtonClasses('claims')}
+          aria-pressed={verificationMode === 'claims'}
+        >
+          <span className="flex items-center gap-2">
+            Verify claims
+          </span>
+        </button>
+        <span
+          className={`h-1 w-full rounded-full bg-gradient-to-r from-violet-400 via-sky-500 to-emerald-400 transition-all duration-200 ease-out ${verificationMode === 'claims' ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
+        />
+      </div>
+    </div>
+  );
 
   const handleSaveSelectedPaper = () => {
     if (!selectedPaper) return;
@@ -2405,31 +3064,11 @@ export default function Home() {
                   {metaSummary ? (
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                       <p className="text-xs text-slate-600">{metaSummary}</p>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            document.getElementById('reproducibility-checklist')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                          }}
-                          className={DETAIL_REPRO_BUTTON_CLASSES}
-                        >
-                          Is this reproducible?
-                        </button>
-                      </div>
+                      {verificationButtons}
                     </div>
                   ) : (
                     <div className="flex justify-end">
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            document.getElementById('reproducibility-checklist')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                          }}
-                          className={DETAIL_REPRO_BUTTON_CLASSES}
-                        >
-                          Is this reproducible?
-                        </button>
-                      </div>
+                      {verificationButtons}
                     </div>
                   )}
                 </div>
@@ -2449,31 +3088,12 @@ export default function Home() {
                   </p>
                 </div>
 
-                <div id="reproducibility-checklist" className="space-y-4 rounded-2xl border border-sky-100 bg-sky-50/60 p-5">
-                  <div>
-                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Reproducibility template</h3>
-                    <p className="mt-1 text-sm text-slate-600">
-                      Use these prompts to capture the evidence you need for a trustworthy replication plan.
-                    </p>
-                  </div>
-                  <div className="space-y-3">
-                    {REPRO_CHECKLIST_SECTIONS.map((section) => (
-                      <div key={section.title} className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm">
-                        <h4 className="text-sm font-semibold text-slate-800">{section.title}</h4>
-                        <ul className="mt-2 space-y-2 text-sm text-slate-700">
-                          {section.prompts.map((prompt, index) => (
-                            <li
-                              key={`${section.title}-${index}`}
-                              className="rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-2"
-                            >
-                              <p>{prompt}</p>
-                              <p className="mt-1 text-xs uppercase tracking-wide text-slate-400">Notes</p>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                  </div>
+                <div id="verification-panel" className="space-y-4">
+                  {verificationMode === 'repro' ? (
+                    <ReproducibilityReportPreview />
+                  ) : (
+                    <ClaimsVerificationPreview />
+                  )}
                 </div>
 
                 {/* Action buttons - moved above scraped content */}
