@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { ReactNode } from 'react';
-import { LogOut, Rss, User, UserCog, X, AlertTriangle, CheckCircle2, Sparkles } from 'lucide-react';
+import { LogOut, Rss, User, UserCog, X, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../lib/auth-context';
 import { useAuthModal, getUserDisplayName } from '../lib/auth-hooks';
 import { createClient } from '../lib/supabase';
@@ -11,6 +11,7 @@ import type { ProfilePersonalization } from '../lib/profile-types';
 import { SaveToListModal } from '../components/save-to-list-modal';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import type { VerifyReproducibilityPayload } from '../lib/reproducibility-report';
 import {
   getCachedData,
   setCachedData,
@@ -272,1457 +273,6 @@ const PROFILE_PRIMARY_BUTTON_CLASSES = 'inline-flex items-center justify-center 
 const PROFILE_COMING_SOON_HINT_CLASSES = 'text-xs font-medium text-slate-400';
 const PROFILE_DISABLED_UPLOAD_BUTTON_CLASSES = 'flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-400 cursor-not-allowed';
 
-type VerificationStatus = 'verified' | 'inferred' | 'uncertain'
-type GapSeverity = 'critical' | 'moderate' | 'minor'
-type RiskLevel = 'Low' | 'Medium' | 'High'
-
-interface MockFeasibilityQuestion {
-  id: string
-  question: string
-  weight: number
-  category: string
-  helper?: string
-}
-
-interface MockBlocker {
-  severity: GapSeverity
-  issue: string
-  mitigation: string
-  verificationStatus: VerificationStatus
-}
-
-interface MockCriticalPhase {
-  id: string
-  phase: string
-  duration: string
-  cost: string
-  riskLevel: RiskLevel
-  dependencies: string[]
-  requirements: string[]
-  outputs: string[]
-  blockers: MockBlocker[]
-}
-
-interface MockEvidenceItem {
-  claim: string
-  source: string
-  verificationStatus: VerificationStatus
-  notes?: string
-}
-
-interface MockGap {
-  concern: string
-  impact: string
-  severity: GapSeverity
-  resolvableWithExpertAnalysis: boolean
-}
-
-interface MockReproReport {
-  stage: 'ai_research' | 'expert_verified'
-  lastUpdated: string
-  reviewers: string[]
-  paper: {
-    title: string
-    authors: string
-    venue: string
-    doi: string
-  }
-  verdict: {
-    grade: string
-    confidence: string
-    mainMessage: string
-    successProbability: number
-    timeToFirstResult: string
-    totalCost: string
-    skillCeiling: string
-    confidenceLevel: 'ai_inferred' | 'expert_verified'
-  }
-  criticalPath: MockCriticalPhase[]
-  evidenceBase: {
-    strongEvidence: MockEvidenceItem[]
-    gaps: MockGap[]
-    assumptions: string[]
-  }
-  feasibilityQuestions: MockFeasibilityQuestion[]
-  expertEnhancements: {
-    authorContacted: boolean
-    datasetsVerified: string[]
-    protocolClarifications: string[]
-    additionalResources: string[]
-    turnaround: string
-  }
-}
-
-const STAGE_META: Record<MockReproReport['stage'], { label: string; description: string; badgeClasses: string }> = {
-  ai_research: {
-    label: 'AI Deep Research',
-    description: 'Automated synthesis from public sources',
-    badgeClasses: 'bg-sky-100 text-sky-600 border border-sky-200'
-  },
-  expert_verified: {
-    label: 'Expert-Verified Analysis',
-    description: 'Humans validated sources, protocols, and access',
-    badgeClasses: 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-  }
-}
-
-const RISK_BADGES: Record<RiskLevel, string> = {
-  Low: 'border border-emerald-200 bg-emerald-50 text-emerald-700',
-  Medium: 'border border-amber-200 bg-amber-50 text-amber-700',
-  High: 'border border-red-200 bg-red-50 text-red-700'
-}
-
-// Verification data for each sample paper
-const VERIFICATION_DATA: Record<string, MockReproReport> = {
-  // CRISPR Paper
-  '68d962effe5520777791bd6ec8ffa4b963ba4f38': {
-    stage: 'ai_research',
-    lastUpdated: '2025-02-10',
-    reviewers: ['AI Research Desk'],
-    paper: {
-      title: 'A Programmable Dual-RNA–Guided DNA Endonuclease in Adaptive Bacterial Immunity',
-      authors: 'Jinek et al.',
-      venue: 'Science 2012',
-      doi: '10.1126/science.1225829'
-    },
-    verdict: {
-      grade: 'A-',
-      confidence: 'High',
-      mainMessage: 'Highly reproducible for well-equipped molecular biology labs. Main challenge is capital investment and specialized expertise for multi-step Cas9 protein purification.',
-      successProbability: 0.85,
-      timeToFirstResult: '2-4 months',
-      totalCost: '$6,000-$10,000 (or $500-$2,000 using commercial Cas9)',
-      skillCeiling: 'Graduate-level molecular biologist with protein purification expertise',
-      confidenceLevel: 'ai_inferred'
-    },
-    feasibilityQuestions: [
-      {
-        id: 'plasmids',
-        question: 'Can you access and afford key plasmids from Addgene?',
-        weight: 1,
-        category: 'Materials Access',
-        helper: 'Essential plasmids: pMJ806 (Cas9 WT), pMJ826 (H840A mutant), pMJ839 (N. meningitidis). ~$89 each from Addgene.'
-      },
-      {
-        id: 'fplc',
-        question: 'Do you have access to FPLC system for protein purification?',
-        weight: 3,
-        category: 'Equipment Access',
-        helper: 'FPLC essential for multi-step Cas9 purification. New: $30K-120K. Used: $10K-60K. Core facility alternative available.'
-      },
-      {
-        id: 'phosphorimager',
-        question: 'Can you access phosphorimager/laser gel scanner for radiolabeled assays?',
-        weight: 2,
-        category: 'Equipment Access',
-        helper: 'Required to visualize DNA cleavage assays. New: $50K+. Used: $15K-25K. Core facility rates available.'
-      },
-      {
-        id: 'protein-expertise',
-        question: 'Does your team have expertise in large-scale protein purification?',
-        weight: 3,
-        category: 'Technical Expertise',
-        helper: 'Multi-step FPLC purification is most demanding task. Requires optimizing expression, preventing inclusion bodies, chromatography.'
-      },
-      {
-        id: 'rna-technique',
-        question: 'Are you proficient in RNase-free RNA techniques and in vitro transcription?',
-        weight: 2,
-        category: 'Technical Expertise',
-        helper: 'Guide RNA synthesis requires meticulous RNase-free technique. Low yield or contamination is common blocker.'
-      }
-    ],
-    criticalPath: [
-      {
-        id: 'materials',
-        phase: 'Material acquisition and vector preparation',
-        duration: '2-3 weeks',
-        cost: '~$500',
-        riskLevel: 'Low',
-        dependencies: [],
-        requirements: ['Order plasmids from Addgene', 'Transform into E. coli', 'Prepare large-scale sequence-verified stocks'],
-        outputs: ['Sequence-verified bacterial glycerol stocks', 'Purified plasmid DNA for Cas9 expression and cleavage targets'],
-        blockers: [
-          {
-            severity: 'minor',
-            issue: 'Plasmid fails to arrive or has incorrect sequence',
-            mitigation: 'Order from reliable source (Addgene). Perform sequence verification as standard QC step.',
-            verificationStatus: 'verified'
-          }
-        ]
-      },
-      {
-        id: 'purification',
-        phase: 'Recombinant Cas9 protein expression and purification',
-        duration: '4-6 weeks (includes optimization)',
-        cost: '$3,000-$5,000',
-        riskLevel: 'High',
-        dependencies: ['materials'],
-        requirements: ['Transform expression plasmid', 'Large-scale culture growth', 'IPTG induction', 'Multi-step FPLC purification'],
-        outputs: ['>1 mg of >95% pure, soluble, active Cas9 protein (WT and mutants)', 'SDS-PAGE verification'],
-        blockers: [
-          {
-            severity: 'critical',
-            issue: 'Low protein expression or high insolubility (inclusion bodies)',
-            mitigation: 'Optimize expression conditions: lower temperature, vary IPTG concentration. MBP fusion tag helps solubility.',
-            verificationStatus: 'inferred'
-          },
-          {
-            severity: 'moderate',
-            issue: 'Complex FPLC optimization required - salt gradients, flow rates, fraction collection not fully specified',
-            mitigation: 'Empirical optimization needed. Alternatively, purchase commercial Cas9 protein to bypass this phase entirely.',
-            verificationStatus: 'inferred'
-          }
-        ]
-      },
-      {
-        id: 'rna-prep',
-        phase: 'Guide RNA and DNA substrate preparation',
-        duration: '2 weeks',
-        cost: '~$1,500',
-        riskLevel: 'Medium',
-        dependencies: ['materials'],
-        requirements: ['PCR DNA templates for RNA', 'In vitro transcription (crRNA, tracrRNA, sgRNA)', 'Radiolabel DNA substrates'],
-        outputs: ['Purified, quantified RNA stocks (crRNA, tracrRNA, sgRNA)', 'Radiolabeled DNA oligonucleotide substrates', 'Plasmid targets'],
-        blockers: [
-          {
-            severity: 'moderate',
-            issue: 'Low yield or poor quality RNA due to RNase contamination',
-            mitigation: 'Meticulous RNase-free technique is critical. Use DEPC-treated water, fresh reagents, dedicated pipettes.',
-            verificationStatus: 'verified'
-          }
-        ]
-      },
-      {
-        id: 'assays',
-        phase: 'Biochemical cleavage assays',
-        duration: '1-2 weeks',
-        cost: '~$1,000',
-        riskLevel: 'Medium',
-        dependencies: ['purification', 'rna-prep'],
-        requirements: ['Assemble Cas9-RNA ribonucleoprotein complex', 'Mix RNP with DNA substrates', 'Gel electrophoresis and phosphorimaging'],
-        outputs: ['Gel images demonstrating sequence-specific, RNA-guided DNA cleavage', 'Replication of key paper findings (Figures 1-5)'],
-        blockers: [
-          {
-            severity: 'moderate',
-            issue: 'No DNA cleavage observed in positive control reactions',
-            mitigation: 'Indicates upstream failure, likely inactive Cas9. Systematic troubleshooting of all components. Test protein activity.',
-            verificationStatus: 'verified'
-          }
-        ]
-      }
-    ],
-    evidenceBase: {
-      strongEvidence: [
-        {
-          claim: 'Cas9 requires two RNA molecules for site-specific DNA cleavage: crRNA for targeting and trans-activating tracrRNA.',
-          source: 'Figure 1, A and B',
-          verificationStatus: 'verified',
-          notes: 'Gel images unambiguously show cleavage only when Cas9, crRNA, and tracrRNA are all present. Clear negative controls make evidence highly reliable.'
-        },
-        {
-          claim: 'Cas9 has two active nuclease domains (RuvC-like and HNH), each cleaving one strand of target DNA.',
-          source: 'Figure 2, A and B',
-          verificationStatus: 'verified',
-          notes: 'Site-directed mutagenesis inactivating each domain resulted in "nickase" proteins that only cut one strand. Elegantly demonstrates both domains required for DSB.'
-        },
-        {
-          claim: 'S. pyogenes Cas9-RNA complex requires PAM sequence (5\'-NGG-3\') immediately downstream of target sequence.',
-          source: 'Figure 4, A and C',
-          verificationStatus: 'verified',
-          notes: 'Cleavage assays with systematically mutated PAMs show cleavage abolished unless canonical NGG (or NAG) PAM present.'
-        },
-        {
-          claim: 'A "seed" sequence of ~8-10 nucleotides at PAM-proximal end is critical; mismatches in this region not tolerated.',
-          source: 'Figure 3, D and E',
-          verificationStatus: 'verified',
-          notes: 'Single mismatch assays clearly show mismatches within first ~8 nucleotides completely abolish cleavage. Distal mismatches tolerated.'
-        },
-        {
-          claim: 'Natural dual-RNA (tracrRNA:crRNA) can be engineered into single chimeric "sgRNA" that is fully functional.',
-          source: 'Figure 5, B and C',
-          verificationStatus: 'verified',
-          notes: 'Revolutionary finding. Figure 5C provides direct experimental evidence via in vitro plasmid cleavage assay. This enabled CRISPR revolution.'
-        }
-      ],
-      gaps: [
-        {
-          concern: 'Potential for off-target cleavage in complex genomes not systematically investigated.',
-          impact: 'For therapeutic applications, off-target effects are critical safety concern. Unintended cuts could cause harmful mutations.',
-          severity: 'critical',
-          resolvableWithExpertAnalysis: false
-        },
-        {
-          concern: 'Full range and limitations of target programmability (GC content, DNA structure effects) not explored.',
-          impact: 'Utility as "programmable" tool depends on ability to target wide range of sequences with predictable efficiency. Led to guide design algorithms.',
-          severity: 'minor',
-          resolvableWithExpertAnalysis: false
-        },
-        {
-          concern: 'Molecular mechanism of target search within genome not elucidated.',
-          impact: 'Understanding search process fundamental to on-target efficiency and off-target binding. Requires specialized biophysical experiments.',
-          severity: 'minor',
-          resolvableWithExpertAnalysis: false
-        },
-        {
-          concern: 'Experiments exclusively in vitro - functionality in living eukaryotic cells unknown.',
-          impact: 'Revolutionary potential for gene therapy entirely dependent on in vivo functionality. If failed in cells, applications severely limited.',
-          severity: 'critical',
-          resolvableWithExpertAnalysis: false
-        }
-      ],
-      assumptions: [
-        'Recombinant Cas9 from E. coli is biochemically identical in function to native protein in S. pyogenes',
-        'In vitro cleavage assays using purified, naked DNA are reliable proxy for fundamental DNA recognition/cleavage capabilities',
-        'Fusing crRNA and tracrRNA with GAAA tetraloop correctly orients functional domains of sgRNA',
-        'Plasmids from Addgene are functionally identical to those used in original publication',
-        'Commercial reagents today are equal or higher quality than 2012 and will produce comparable results'
-      ]
-    },
-    expertEnhancements: {
-      authorContacted: false,
-      datasetsVerified: ['Key plasmids publicly available from Addgene: pMJ806 (#39312), pMJ826 (#39316), pMJ839 (#39317)', 'All oligonucleotide sequences available in supplementary materials'],
-      protocolClarifications: ['FPLC parameters (salt gradients, flow rates, fractions) require empirical optimization', 'Detailed Cas9 purification protocols published since 2012', 'Commercial Cas9 protein available to bypass purification'],
-      additionalResources: ['Commercial Cas9 protein sources (NEB, IDT, Addgene)', 'Modern step-by-step CRISPR protocols', 'ImageJ/Fiji software for gel analysis (free, open-source)'],
-      turnaround: 'Delivered within 12 business days'
-    }
-  },
-  // AlexNet Paper
-  'abd1c342495432171beb7ca8fd9551ef13cbd0ff': {
-    stage: 'ai_research',
-    lastUpdated: '2025-02-10',
-    reviewers: ['AI Research Desk'],
-    paper: {
-      title: 'ImageNet Classification with Deep Convolutional Neural Networks',
-      authors: 'Krizhevsky et al.',
-      venue: 'Communications of the ACM 2012',
-      doi: '10.1145/3065386'
-    },
-    verdict: {
-      grade: 'A',
-      confidence: 'High',
-      mainMessage: 'Highly reproducible for teams with GPU access and deep learning expertise. Main challenge is computational resources and exact hyperparameter matching.',
-      successProbability: 0.90,
-      timeToFirstResult: '3-5 weeks',
-      totalCost: '$500 - $2,000 (cloud GPU compute)',
-      skillCeiling: 'Graduate-level ML engineer with CNN expertise',
-      confidenceLevel: 'ai_inferred'
-    },
-    feasibilityQuestions: [
-      {
-        id: 'dataset',
-        question: 'Can you access and download the ImageNet LSVRC-2012 dataset?',
-        weight: 3,
-        category: 'Data Access',
-        helper: 'Requires registration at image-net.org. Dataset is ~150GB. Alternative: Use ImageNet subsets or pre-downloaded versions.'
-      },
-      {
-        id: 'gpu',
-        question: 'Do you have access to modern GPUs (8GB+ VRAM) or cloud compute?',
-        weight: 3,
-        category: 'Compute Infrastructure',
-        helper: 'Original used 2x GTX 580 (3GB each). Modern single GPU (RTX 3090, A100) is sufficient. Cloud alternatives: AWS, GCP, Lambda Labs.'
-      },
-      {
-        id: 'frameworks',
-        question: 'Are you proficient in PyTorch or TensorFlow?',
-        weight: 2,
-        category: 'Software Skills',
-        helper: 'Paper predates modern frameworks. Implementation requires translating architecture to PyTorch/TensorFlow/JAX.'
-      },
-      {
-        id: 'training-time',
-        question: 'Can you allocate 3-5 days of continuous GPU training time?',
-        weight: 2,
-        category: 'Time Resources',
-        helper: 'Original training took 5-6 days on 2012 hardware. Modern GPUs reduce this to 1-3 days but still requires dedicated compute.'
-      },
-      {
-        id: 'expertise',
-        question: 'Does your team have experience training large-scale CNNs from scratch?',
-        weight: 1,
-        category: 'Domain Expertise',
-        helper: 'Understanding convergence issues, learning rate scheduling, and debugging training dynamics is essential.'
-      }
-    ],
-    criticalPath: [
-      {
-        id: 'dataset-prep',
-        phase: 'Dataset preparation and preprocessing',
-        duration: '1 week',
-        cost: '$50 (storage)',
-        riskLevel: 'Low',
-        dependencies: [],
-        requirements: ['ImageNet registration approved', 'Download pipeline (150GB)', 'Preprocessing scripts (resize to 256x256, normalization)'],
-        outputs: ['Preprocessed ImageNet train/val splits', 'Data loading pipeline with augmentation'],
-        blockers: [
-          {
-            severity: 'minor',
-            issue: 'ImageNet download can be slow or interrupted',
-            mitigation: 'Use academic torrents or pre-downloaded cloud buckets. Verify checksums.',
-            verificationStatus: 'verified'
-          }
-        ]
-      },
-      {
-        id: 'implementation',
-        phase: 'Model architecture implementation',
-        duration: '3-5 days',
-        cost: '$0',
-        riskLevel: 'Low',
-        dependencies: ['dataset-prep'],
-        requirements: ['PyTorch/TensorFlow setup', 'Implement 8-layer CNN (5 conv + 3 FC)', 'ReLU, dropout, LRN layers'],
-        outputs: ['Working AlexNet implementation', 'Unit tests for layer dimensions', 'Training loop with SGD+momentum'],
-        blockers: [
-          {
-            severity: 'minor',
-            issue: 'Local Response Normalization (LRN) not in modern frameworks',
-            mitigation: 'Implement custom LRN layer or use BatchNorm as modern alternative. Original paper uses LRN but BatchNorm gives similar results.',
-            verificationStatus: 'inferred'
-          }
-        ]
-      },
-      {
-        id: 'training',
-        phase: 'Model training and hyperparameter tuning',
-        duration: '2-4 weeks',
-        cost: '$500-$2,000',
-        riskLevel: 'Medium',
-        dependencies: ['implementation'],
-        requirements: ['GPU cluster or cloud instances', 'Learning rate schedule (0.01 initial, divide by 10 when plateau)', 'Monitoring tools (TensorBoard, W&B)'],
-        outputs: ['Trained model checkpoint', 'Training curves (loss, top-1/top-5 accuracy)', 'Hyperparameter log'],
-        blockers: [
-          {
-            severity: 'moderate',
-            issue: 'Exact learning rate schedule not fully specified in paper',
-            mitigation: 'Paper says "divide by 10 when validation error stops improving". Experiment with schedules or use modern cosine annealing.',
-            verificationStatus: 'inferred'
-          },
-          {
-            severity: 'moderate',
-            issue: 'GPU memory constraints with large batch sizes',
-            mitigation: 'Original used batch size 128. Reduce to 64 or use gradient accumulation. Modern mixed-precision training (fp16) helps.',
-            verificationStatus: 'verified'
-          }
-        ]
-      },
-      {
-        id: 'evaluation',
-        phase: 'Evaluation and result comparison',
-        duration: '3-5 days',
-        cost: '$50',
-        riskLevel: 'Low',
-        dependencies: ['training'],
-        requirements: ['Validation set evaluation script', 'Top-1 and top-5 error metrics', 'Comparison with paper results'],
-        outputs: ['Final top-1/top-5 error rates', 'Confusion analysis', 'Result comparison report'],
-        blockers: [
-          {
-            severity: 'minor',
-            issue: 'Minor accuracy differences due to framework/hardware variations',
-            mitigation: 'Expect ~1-2% variance from paper. Modern implementations often exceed original due to better optimization.',
-            verificationStatus: 'verified'
-          }
-        ]
-      }
-    ],
-    evidenceBase: {
-      strongEvidence: [
-        {
-          claim: 'AlexNet achieved 15.3% top-5 error on ImageNet ILSVRC-2012, substantially better than previous 26% error rate.',
-          source: 'Abstract and Table 2 (test set results)',
-          verificationStatus: 'verified',
-          notes: 'Result has been reproduced in thousands of implementations. Modern reproductions achieve 15-17% top-5 error.'
-        },
-        {
-          claim: 'ReLU nonlinearity trains 6x faster than tanh on this dataset.',
-          source: 'Figure 1 and Section 3.1',
-          verificationStatus: 'verified',
-          notes: 'Specific comparison on CIFAR-10 shown in Figure 1. Result widely accepted and reproduced.'
-        },
-        {
-          claim: 'Data augmentation (translations, reflections, PCA color) reduces overfitting significantly.',
-          source: 'Section 4.1',
-          verificationStatus: 'verified',
-          notes: 'Paper states augmentation reduces top-1 error by over 1%. Technique is now standard practice.'
-        },
-        {
-          claim: 'Dropout with p=0.5 in first two FC layers prevents overfitting.',
-          source: 'Section 4.2',
-          verificationStatus: 'verified',
-          notes: 'Paper shows dropout approximately doubles training iterations to converge but improves generalization. Widely reproduced.'
-        },
-        {
-          claim: 'Multi-GPU training with model parallelism enables training deeper networks.',
-          source: 'Section 3.5 and Figure 2',
-          verificationStatus: 'inferred',
-          notes: 'Specific GPU communication pattern described. Modern data parallelism often preferred but model parallelism works as described.'
-        }
-      ],
-      gaps: [
-        {
-          concern: 'Exact learning rate schedule not fully specified - paper says "divide by 10 when validation stops improving" but exact epochs unclear.',
-          impact: 'Different schedules yield different convergence speed and final accuracy. Requires experimentation to match exactly.',
-          severity: 'moderate',
-          resolvableWithExpertAnalysis: true
-        },
-        {
-          concern: 'Weight initialization details incomplete - "Gaussian with std 0.01" mentioned but some layer-specific values unclear.',
-          impact: 'Can affect early training dynamics. Modern Xavier/He initialization works well as alternative.',
-          severity: 'minor',
-          resolvableWithExpertAnalysis: false
-        },
-        {
-          concern: 'Local Response Normalization (LRN) sensitivity not analyzed - exact impact of k, n, α, β parameters unknown.',
-          impact: 'Modern implementations often skip LRN entirely and use BatchNorm. May prevent exact result replication.',
-          severity: 'minor',
-          resolvableWithExpertAnalysis: false
-        },
-        {
-          concern: 'Original code and exact training logs not released by authors.',
-          impact: 'Cannot verify implementation details beyond what\'s in paper. Community implementations may differ in subtle ways.',
-          severity: 'moderate',
-          resolvableWithExpertAnalysis: true
-        }
-      ],
-      assumptions: [
-        'Modern GPUs (2020+) can reproduce results faster than original 2012 GTX 580 setup',
-        'PyTorch/TensorFlow implementations are faithful to Caffe-style layer semantics from 2012',
-        'ImageNet dataset preprocessing is standard across reproductions (256x256 resize, center/random crops)',
-        'Minor framework differences (LRN vs BatchNorm, exact SGD implementation) don\'t substantially affect results'
-      ]
-    },
-    expertEnhancements: {
-      authorContacted: false,
-      datasetsVerified: ['ImageNet LSVRC-2012 available at image-net.org', 'Public PyTorch/TensorFlow implementations available on GitHub'],
-      protocolClarifications: ['Optimal learning rate schedule for modern hardware', 'Batch size adjustments for different GPU memory'],
-      additionalResources: ['AWS/GCP GPU instance setup guides', 'Pre-trained AlexNet checkpoints for transfer learning'],
-      turnaround: 'Delivered within 12 business days'
-    }
-  },
-  // Graphene Paper
-  'c92bd747a97eeafdb164985b0d044caa1dc6e73e': {
-    stage: 'ai_research',
-    lastUpdated: '2025-02-10',
-    reviewers: ['AI Research Desk'],
-    paper: {
-      title: 'Electric Field Effect in Atomically Thin Carbon Films',
-      authors: 'Novoselov et al.',
-      venue: 'Science 2004',
-      doi: '10.1126/science.1102896'
-    },
-    verdict: {
-      grade: 'B+',
-      confidence: 'High',
-      mainMessage: 'Highly reproducible in well-equipped condensed matter labs. Primary challenge is acquiring tacit knowledge for mechanical exfoliation and flake identification.',
-      successProbability: 0.75,
-      timeToFirstResult: '3-6 months',
-      totalCost: '$1,000 consumables + facility fees (or $200K+ for dedicated setup)',
-      skillCeiling: 'Graduate-level materials scientist with cleanroom & cryogenics expertise',
-      confidenceLevel: 'ai_inferred'
-    },
-    feasibilityQuestions: [
-      {
-        id: 'materials',
-        question: 'Can you procure HOPG, Si/SiO₂ wafers, and scotch tape?',
-        weight: 1,
-        category: 'Materials Access',
-        helper: 'HOPG: $100-300, Si wafers with 300nm SiO₂: ~$130 per 4-inch wafer, tape: <$10. All commercially available.'
-      },
-      {
-        id: 'microscopy',
-        question: 'Do you have access to optical microscope and AFM for flake identification?',
-        weight: 3,
-        category: 'Equipment Access',
-        helper: 'AFM essential for confirming monolayer thickness. Core facility access: $27-168/hour. Purchase: $30K-300K.'
-      },
-      {
-        id: 'cleanroom',
-        question: 'Can you access nanofabrication facilities for device patterning?',
-        weight: 3,
-        category: 'Infrastructure',
-        helper: 'Requires photolithography/e-beam lithography and metal evaporation. Most universities have shared cleanrooms.'
-      },
-      {
-        id: 'cryostation',
-        question: 'Do you have access to cryogenic probe station for low-temp measurements?',
-        weight: 2,
-        category: 'Equipment Access',
-        helper: 'Room-temp station: <$15K. Full cryogenic system: >$100K. Core facility rates vary.'
-      },
-      {
-        id: 'tacit-knowledge',
-        question: 'Can you dedicate 4-8 weeks to master mechanical exfoliation technique?',
-        weight: 3,
-        category: 'Skill Development',
-        helper: 'The "Scotch tape method" requires significant practice. Success depends on correct pressure, peel speed, angle. Optical identification also needs training.'
-      }
-    ],
-    criticalPath: [
-      {
-        id: 'setup',
-        phase: 'Setup and material acquisition',
-        duration: '2-4 weeks',
-        cost: '~$1,000 consumables',
-        riskLevel: 'Low',
-        dependencies: [],
-        requirements: ['Procure HOPG, Si/SiO₂ wafers, tape, chemicals', 'Secure equipment access and training', 'Book cleanroom and probe station time'],
-        outputs: ['All materials on hand', 'User certified on all necessary equipment', 'Facility time reserved'],
-        blockers: [
-          {
-            severity: 'minor',
-            issue: 'Long lead times for equipment training slots at core facilities',
-            mitigation: 'Plan and book facility time well in advance (4-6 weeks typical)',
-            verificationStatus: 'verified'
-          }
-        ]
-      },
-      {
-        id: 'exfoliation',
-        phase: 'Graphene exfoliation and identification',
-        duration: '4-8 weeks',
-        cost: 'Minimal materials + facility fees',
-        riskLevel: 'High',
-        dependencies: ['setup'],
-        requirements: ['Master scotch tape exfoliation technique', 'Optical microscopy scanning workflow', 'AFM thickness confirmation protocol'],
-        outputs: ['Portfolio of substrates with mapped monolayer, bilayer, trilayer flakes', 'Documented exfoliation parameters'],
-        blockers: [
-          {
-            severity: 'critical',
-            issue: 'Low yield of high-quality monolayer flakes - requires mastering "experimental art"',
-            mitigation: 'Extensive practice and iteration. Consultation with experienced researchers. Expect weeks of learning curve.',
-            verificationStatus: 'verified'
-          },
-          {
-            severity: 'moderate',
-            issue: 'Difficulty in optical identification of monolayer vs few-layer graphene',
-            mitigation: 'Practice with known samples. Use specific 300nm SiO₂ thickness for optimal contrast. Confirm all candidates with AFM.',
-            verificationStatus: 'verified'
-          }
-        ]
-      },
-      {
-        id: 'fabrication',
-        phase: 'Device fabrication',
-        duration: '1-2 weeks per batch',
-        cost: 'Cleanroom fees + materials (photoresist, metal targets)',
-        riskLevel: 'Medium',
-        dependencies: ['exfoliation'],
-        requirements: ['Pattern Hall bar contacts via lithography', 'Metal evaporation (Ti/Au or Cr/Au)', 'Lift-off process'],
-        outputs: ['Fully fabricated multi-terminal Hall bar devices', 'Electrical continuity confirmed'],
-        blockers: [
-          {
-            severity: 'moderate',
-            issue: 'Contamination or damage to atomically thin flake during processing',
-            mitigation: 'Meticulous cleanroom technique. Gentle resist development. Optimize metal deposition parameters.',
-            verificationStatus: 'verified'
-          },
-          {
-            severity: 'moderate',
-            issue: 'Poor electrical contact resistance to graphene',
-            mitigation: 'Proper contact metal choice (Cr/Au or Ti/Au). Consider edge contacts for better transmission.',
-            verificationStatus: 'inferred'
-          }
-        ]
-      },
-      {
-        id: 'characterization',
-        phase: 'Electrical characterization',
-        duration: '1-3 weeks',
-        cost: 'Probe station fees + liquid cryogens',
-        riskLevel: 'Medium',
-        dependencies: ['fabrication'],
-        requirements: ['Back-gate voltage sweep', 'Hall effect measurement setup', 'Temperature control (300K, 70K, 5K)'],
-        outputs: ['Ambipolar field effect data (resistivity vs gate voltage)', 'Hall coefficient sign reversal', 'Mobility extraction'],
-        blockers: [
-          {
-            severity: 'moderate',
-            issue: 'Noisy measurements or poor signal-to-noise at charge neutrality point',
-            mitigation: 'Use lock-in amplifiers for low-current measurements. Proper electromagnetic shielding. Low excitation currents.',
-            verificationStatus: 'verified'
-          },
-          {
-            severity: 'minor',
-            issue: 'Device failure at low temperatures due to thermal cycling',
-            mitigation: 'Gradual cool-down/warm-up rates. Proper wire bonding and packaging.',
-            verificationStatus: 'verified'
-          }
-        ]
-      }
-    ],
-    evidenceBase: {
-      strongEvidence: [
-        {
-          claim: 'Stable, atomically thin graphitic films can be isolated via mechanical exfoliation and are stable under ambient conditions.',
-          source: 'Methods section (p. 667) and Figure 1',
-          verificationStatus: 'verified',
-          notes: 'Enabling discovery for entire field. Confirmed by thousands of research groups globally. Contributed to 2010 Nobel Prize.'
-        },
-        {
-          claim: 'Graphene exhibits a strong ambipolar electric field effect - resistivity peaks at charge neutrality point.',
-          source: 'Figure 2A (Resistivity vs Gate Voltage)',
-          verificationStatus: 'verified',
-          notes: 'Sharp symmetric peak is unambiguous evidence of carrier tuning through minimum density. Now canonical signature of graphene.'
-        },
-        {
-          claim: 'Dominant charge carriers can be tuned from holes to electrons via back-gate voltage.',
-          source: 'Figure 2C (Hall Coefficient vs Gate Voltage)',
-          verificationStatus: 'verified',
-          notes: 'Clean reversal of Hall coefficient sign provides definitive proof of hole-to-electron transition.'
-        },
-        {
-          claim: 'Graphene possesses high room-temperature carrier mobility of 3,000-10,000 cm²/V·s.',
-          source: 'Page 668, calculation from field-effect and magnetoresistance data',
-          verificationStatus: 'verified',
-          notes: 'Exceptionally high for 2004. Routinely reproduced for graphene on SiO₂. Vastly exceeded in cleaner devices (suspended, hBN-encapsulated).'
-        }
-      ],
-      gaps: [
-        {
-          concern: 'Initial physical model ("2D semimetal with small overlap") was an approximation that understated exotic physics.',
-          impact: 'Subsequent discovery of massless Dirac fermions (2005) was major conceptual leap. Initial model was functional but incomplete.',
-          severity: 'minor',
-          resolvableWithExpertAnalysis: true
-        },
-        {
-          concern: 'Role of SiO₂ substrate as dominant source of charge scattering not fully characterized.',
-          impact: 'Understanding substrate effects was critical for achieving higher mobilities (suspended graphene, hBN encapsulation). Drove decades of follow-up research.',
-          severity: 'minor',
-          resolvableWithExpertAnalysis: true
-        },
-        {
-          concern: 'Mechanical exfoliation method is not scalable for industrial production.',
-          impact: 'Low yield and small flake size unsuitable for commercial applications. Led to massive effort in CVD and other synthesis techniques.',
-          severity: 'minor',
-          resolvableWithExpertAnalysis: true
-        }
-      ],
-      assumptions: [
-        'Standard parallel-plate capacitor model used to calculate induced carrier density from gate voltage (well-justified)',
-        'Simple Drude model of conductivity used to extract carrier mobility (standard assumption)',
-        'Explosive growth of graphene field and 2010 Nobel Prize serve as community-wide verification of core findings',
-        'Lack of publicly available code/raw data is typical for 2004 publication era and does not detract from reproducibility'
-      ]
-    },
-    expertEnhancements: {
-      authorContacted: false,
-      datasetsVerified: ['HOPG commercially available from multiple suppliers', 'Si/SiO₂ wafers standard semiconductor commodity'],
-      protocolClarifications: ['Optimal scotch tape technique (pressure, peel speed, angle)', 'Optical contrast settings for 300nm SiO₂', 'Contact metal optimization'],
-      additionalResources: ['Access to experienced graphene researcher for hands-on training', 'Literature guide to post-2004 exfoliation improvements', 'Alternative methods: CVD graphene tutorials'],
-      turnaround: 'Delivered within 12 business days'
-    }
-  },
-  // Human Genome Paper
-  'fc448a7db5a2fac242705bd8e37ae1fc4a858643': {
-    stage: 'ai_research',
-    lastUpdated: '2025-02-10',
-    reviewers: ['AI Research Desk'],
-    paper: {
-      title: 'Initial sequencing and analysis of the human genome.',
-      authors: 'International Human Genome Sequencing Consortium',
-      venue: 'Nature 2001',
-      doi: '10.1038/35057062'
-    },
-    verdict: {
-      grade: 'C',
-      confidence: 'High',
-      mainMessage: 'Direct replication impossible due to $2.7B cost, obsolete technology, and 10-15 year timeline. True reproducibility achieved via public data release enabling continuous verification.',
-      successProbability: 0.05,
-      timeToFirstResult: '10-15 years (using 2001 methods)',
-      totalCost: '~$2.7 billion',
-      skillCeiling: 'Massive coordinated effort: thousands of specialists across 20 international centers',
-      confidenceLevel: 'ai_inferred'
-    },
-    feasibilityQuestions: [
-      {
-        id: 'funding',
-        question: 'Can you secure $2.7 billion in funding and nation-state level support?',
-        weight: 3,
-        category: 'Resources',
-        helper: 'Original project cost ~$2.7B over 13 years. Single genome cost in 2001: $95M. Modern sequencing: <$1K in 24 hours.'
-      },
-      {
-        id: 'equipment',
-        question: 'Can you source hundreds of obsolete ABI 3700 capillary sequencers and robotics?',
-        weight: 3,
-        category: 'Equipment Access',
-        helper: 'Requires industrial-scale infrastructure with automated sequencers (now obsolete). Modern NGS renders this approach outdated.'
-      },
-      {
-        id: 'team',
-        question: 'Can you coordinate thousands of staff across 20 international sequencing centers?',
-        weight: 3,
-        category: 'Team & Coordination',
-        helper: 'Required molecular biologists, automation engineers, bioinformaticians, project managers across multiple countries.'
-      },
-      {
-        id: 'bac-library',
-        question: 'Do you have expertise in BAC library construction and physical mapping?',
-        weight: 2,
-        category: 'Technical Expertise',
-        helper: 'Hierarchical shotgun strategy required genome-wide BAC library, fingerprinting, and minimal tiling path assembly.'
-      },
-      {
-        id: 'computation',
-        question: 'Can you build computational clusters for Phred/Phrap/Consed pipeline?',
-        weight: 2,
-        category: 'Computational Infrastructure',
-        helper: 'Assembly of 30,000 BAC clones required significant compute (by 2001 standards). Software available via academic license.'
-      }
-    ],
-    criticalPath: [
-      {
-        id: 'infrastructure',
-        phase: 'Infrastructure and team building',
-        duration: '2-3 years',
-        cost: '$500M - $1B',
-        riskLevel: 'High',
-        dependencies: [],
-        requirements: ['Acquire hundreds of ABI 3700 sequencers', 'Build laboratory automation infrastructure', 'Hire and train thousands of staff across 20 centers'],
-        outputs: ['Fully operational industrial-scale sequencing centers', 'Trained workforce', 'Quality control systems'],
-        blockers: [
-          {
-            severity: 'critical',
-            issue: 'Immense capital cost and sourcing of obsolete equipment that is no longer manufactured',
-            mitigation: 'Unrealistic without nation-state level funding. Modern alternative: Use NGS platforms instead.',
-            verificationStatus: 'inferred'
-          }
-        ]
-      },
-      {
-        id: 'mapping',
-        phase: 'Physical mapping',
-        duration: '3-4 years',
-        cost: '$100M - $200M',
-        riskLevel: 'Medium',
-        dependencies: ['infrastructure'],
-        requirements: ['Construct genome-wide BAC library', 'Fingerprint all clones', 'Assemble minimal tiling path covering genome'],
-        outputs: ['Complete physical map providing scaffold for sequencing', 'Validated clone order spanning all chromosomes'],
-        blockers: [
-          {
-            severity: 'moderate',
-            issue: 'Highly labor-intensive process with potential for errors in map assembly',
-            mitigation: 'Rigorous quality control and cross-validation between centers. Manual verification of clone overlaps.',
-            verificationStatus: 'verified'
-          }
-        ]
-      },
-      {
-        id: 'sequencing',
-        phase: 'Shotgun sequencing and assembly',
-        duration: '3-5 years',
-        cost: '>$1B',
-        riskLevel: 'High',
-        dependencies: ['mapping'],
-        requirements: ['Sequence ~30,000 BAC clones to 5x coverage each', 'Run Phred/Phrap pipeline on all clones', 'Generate working draft covering >90% of genome'],
-        outputs: ['Working draft sequence in ~150,000 pieces', 'Coverage of gene-containing regions', 'Identified gaps and low-quality regions'],
-        blockers: [
-          {
-            severity: 'moderate',
-            issue: 'Maintaining quality control across 20 centers; assembly failures in repetitive regions',
-            mitigation: 'Standardized protocols and quality metrics. Accept draft quality; defer difficult regions to finishing phase.',
-            verificationStatus: 'verified'
-          },
-          {
-            severity: 'moderate',
-            issue: 'Repetitive elements and segmental duplications cause assembly collapse',
-            mitigation: 'Use paired-end reads and physical map constraints. Some regions remain unresolvable with short reads.',
-            verificationStatus: 'verified'
-          }
-        ]
-      },
-      {
-        id: 'finishing',
-        phase: 'Manual finishing',
-        duration: '3-5 years',
-        cost: '$300M - $500M',
-        riskLevel: 'Medium',
-        dependencies: ['sequencing'],
-        requirements: ['Manual inspection of all assemblies using Consed', 'Design targeted experiments to close gaps', 'Resolve low-quality regions to <1 error in 10,000 bases'],
-        outputs: ['Finished high-quality genome sequence', 'Documented remaining gaps (centromeres, heterochromatin)', 'Accuracy meeting quality standards'],
-        blockers: [
-          {
-            severity: 'moderate',
-            issue: 'Extremely high cost of skilled labor for manual curation; some regions intractable with short-read technology',
-            mitigation: 'Prioritize medically relevant regions. Accept permanent gaps in repetitive regions. Wait for long-read tech (PacBio/Nanopore).',
-            verificationStatus: 'verified'
-          }
-        ]
-      }
-    ],
-    evidenceBase: {
-      strongEvidence: [
-        {
-          claim: 'The vast majority of the genome (>98%) is non-protein-coding, with repetitive elements making up at least 50%.',
-          source: 'Main text, analysis of repeat content',
-          verificationStatus: 'verified',
-          notes: 'Fundamental observation about genome architecture. Repeatedly confirmed and cornerstone of genomics. T2T consortium refined this further.'
-        },
-        {
-          claim: 'A map of over 1.4 million Single Nucleotide Polymorphisms (SNPs) was created.',
-          source: 'Main text, SNP analysis section',
-          verificationStatus: 'verified',
-          notes: 'First genome-wide map of human variation. Catalyzed disease gene mapping. Vastly superseded by HapMap, 1000 Genomes, and modern GWAS.'
-        },
-        {
-          claim: 'The genome has a "patchwork" structure with significant regional variation in gene density, GC content, and recombination rates.',
-          source: 'Main text, Genomic Landscape section',
-          verificationStatus: 'verified',
-          notes: 'Description of genomic isochores robustly confirmed. Key feature of vertebrate genome organization.'
-        }
-      ],
-      gaps: [
-        {
-          concern: 'Gene count severely overestimated at 30,000-40,000 protein-coding genes (actual: ~20,500).',
-          impact: 'Skewed initial understanding of basis of human complexity. Correct number shifted focus to regulation and alternative splicing.',
-          severity: 'critical',
-          resolvableWithExpertAnalysis: true
-        },
-        {
-          concern: 'Horizontal gene transfer hypothesis claimed hundreds of genes transferred from bacteria to vertebrates.',
-          impact: 'Extraordinary evolutionary claim quickly shown to be incorrect. Differential gene loss was far more likely explanation.',
-          severity: 'critical',
-          resolvableWithExpertAnalysis: true
-        },
-        {
-          concern: '"Junk DNA" concept understated functional role of non-coding genome.',
-          impact: 'Framing as evolutionary debris missed vast regulatory networks. Subsequent ENCODE project revealed biochemical activity.',
-          severity: 'moderate',
-          resolvableWithExpertAnalysis: true
-        },
-        {
-          concern: 'Draft quality sequence contained ~150,000 gaps and regions of ambiguity.',
-          impact: 'Initial biological interpretations contained errors due to incomplete sequence. Required "finished" 2004 genome and T2T for correction.',
-          severity: 'moderate',
-          resolvableWithExpertAnalysis: true
-        }
-      ],
-      assumptions: [
-        'Hierarchical map-based sequencing was most reliable method for complex, repetitive genome (validated assumption)',
-        'Computational gene prediction on draft sequence could provide reasonable first estimate (partly incorrect - overestimated)',
-        'Pattern of gene presence/absence best explained by horizontal transfer (incorrect - gene loss explanation)',
-        'Finished 2004 genome and T2T complete sequence serve as more accurate ground truth for verification',
-        'Publicly reported NHGRI costs are accurate',
-        'Open-data policy (Bermuda Principles) was critical factor enabling long-term validation and self-correction'
-      ]
-    },
-    expertEnhancements: {
-      authorContacted: false,
-      datasetsVerified: ['All sequence data publicly available in GenBank with no access restrictions', 'BAC clone libraries made publicly available', 'Phred/Phrap/Consed software available via academic license'],
-      protocolClarifications: ['Day-to-day operational protocols of 20 centers not exhaustively documented', 'High-level hierarchical shotgun strategy well documented', 'Modern NGS renders 2001 methods obsolete'],
-      additionalResources: ['Modern alternative: Illumina NovaSeq ($1K, 24 hours)', 'Long-read alternative: PacBio HiFi + Oxford Nanopore', 'Finished reference: 2004 complete genome and 2022 T2T-CHM13'],
-      turnaround: 'Delivered within 12 business days'
-    }
-  }
-}
-
-const MOCK_REPRO_REPORT: MockReproReport = {
-  stage: 'ai_research',
-  lastUpdated: '2024-07-02',
-  reviewers: ['AI Research Desk'],
-  paper: {
-    title: 'Compounds activating VCP D1 ATPase enhance both autophagic and proteasomal neurotoxic protein clearance',
-    authors: 'Chen et al.',
-    venue: 'Cell Reports 2023',
-    doi: '10.1234/vcp.2023.001'
-  },
-  verdict: {
-    grade: 'A-',
-    confidence: 'Medium',
-    mainMessage: 'Viable for neurodegeneration labs with mature proteostasis assays.',
-    successProbability: 0.68,
-    timeToFirstResult: '5-7 weeks',
-    totalCost: '$35k - $55k',
-    skillCeiling: 'Neuro cell biologist + proteostasis specialist',
-    confidenceLevel: 'ai_inferred'
-  },
-  feasibilityQuestions: [
-    {
-      id: 'models',
-      question: 'Do you maintain human iPSC-derived neurons or comparable VCP disease models?',
-      weight: 3,
-      category: 'Model Systems',
-      helper: 'Authors relied on patient-derived cortical neurons; organoids are acceptable with baseline QC.'
-    },
-    {
-      id: 'imaging',
-      question: 'Can you run high-content imaging or time-lapse microscopy for autophagy flux?',
-      weight: 2,
-      category: 'Instrumentation',
-      helper: 'Needed to quantify LC3, SQSTM1, and aggregate clearance across dosing windows.'
-    },
-    {
-      id: 'assays',
-      question: 'Do you have validated autophagy and proteasome activity assays ready to deploy?',
-      weight: 2,
-      category: 'Assays',
-      helper: 'Study used paired LC3-II westerns, proteasome-Glo readouts, and ubiquitin clearance panels.'
-    },
-    {
-      id: 'compounds',
-      question: 'Can you source or synthesize the VCP activator compound panel described?',
-      weight: 2,
-      category: 'Materials',
-      helper: 'Lead molecules ship from two specialized vendors; analog synthesis support may be required.'
-    },
-    {
-      id: 'compliance',
-      question: 'Are your approvals for patient-derived cell handling current and traceable?',
-      weight: 1,
-      category: 'Operations',
-      helper: 'Requires IRB amendments plus cold-chain documentation for neuron stocks.'
-    }
-  ],
-  criticalPath: [
-    {
-      id: 'planning',
-      phase: 'Compound sourcing and quality control',
-      duration: '1 week',
-      cost: '$4k',
-      riskLevel: 'Medium',
-      dependencies: [],
-      requirements: ['Confirm vendor availability', 'Set up HPLC and mass spec QC workflow', 'Prepare storage and dosing stocks'],
-      outputs: ['Validated compound panel', 'Stability and solubility profiles'],
-      blockers: [
-        {
-          severity: 'moderate',
-          issue: 'Lead compounds currently on allocation with 6 week replenishment lead time',
-          mitigation: 'Engage alternate supplier identified in supplementary methods or pursue CRO synthesis slot.',
-          verificationStatus: 'inferred'
-        }
-      ]
-    },
-    {
-      id: 'models',
-      phase: 'Neuronal model setup and characterization',
-      duration: '2-3 weeks',
-      cost: '$12k',
-      riskLevel: 'Medium',
-      dependencies: ['planning'],
-      requirements: ['Differentiate iPSC neurons or thaw VCP mutant lines', 'Benchmark baseline autophagy and proteasome markers'],
-      outputs: ['QC validated neurons ready for dosing', 'Baseline proteostasis reference set'],
-      blockers: [
-        {
-          severity: 'critical',
-          issue: 'Differentiation batches show day-to-day variability that shifts proteostasis baseline',
-          mitigation: 'Adopt author SOP for maturation days and include internal healthy control lines.',
-          verificationStatus: 'inferred'
-        },
-        {
-          severity: 'moderate',
-          issue: 'Neurons require mycoplasma-negative confirmation before dosing window',
-          mitigation: 'Schedule third-party sterility panel in advance; include kill step in SOP.',
-          verificationStatus: 'inferred'
-        }
-      ]
-    },
-    {
-      id: 'assays',
-      phase: 'Autophagy and proteasome assays',
-      duration: '10 days',
-      cost: '$9k',
-      riskLevel: 'High',
-      dependencies: ['models'],
-      requirements: ['High-content imaging pipeline configured', 'Proteasome activity kit validated with controls'],
-      outputs: ['Flux curves across compound doses', 'Proteasome recovery metrics'],
-      blockers: [
-        {
-          severity: 'moderate',
-          issue: 'Compound cytotoxicity window is narrow beyond 48 hours',
-          mitigation: 'Adopt staggered dosing schedule and include viability gating described in supplement.',
-          verificationStatus: 'inferred'
-        }
-      ]
-    },
-    {
-      id: 'analysis',
-      phase: 'Data integration and reporting',
-      duration: '1 week',
-      cost: '$3k',
-      riskLevel: 'Low',
-      dependencies: ['assays'],
-      requirements: ['Analysis scripts for proteostasis metrics', 'Predefined QC gates for outlier exclusion'],
-      outputs: ['Integrated autophagy and proteasome report', 'Recommendations for in vivo follow-up'],
-      blockers: [
-        {
-          severity: 'minor',
-          issue: 'Normalization requires internal controls not included in public data dump',
-          mitigation: 'Recreate control curves using provided spreadsheets or request raw files via expert channel.',
-          verificationStatus: 'inferred'
-        }
-      ]
-    }
-  ],
-  evidenceBase: {
-    strongEvidence: [
-      {
-        claim: 'VCP-874 compound boosted autophagic flux by 45 percent in patient-derived neurons.',
-        source: 'Chen et al. Supplementary Figure 4',
-        verificationStatus: 'verified'
-      },
-      {
-        claim: 'Proteasome-Glo assays showed 1.6x activity recovery after 24 hour dosing.',
-        source: 'Main text Figure 3C + methods section',
-        verificationStatus: 'inferred',
-        notes: 'Authors provide raw luminescence tables with positive control alignment.'
-      },
-      {
-        claim: 'Co-treatment with NRF2 activator reduced aggregate burden without additional toxicity.',
-        source: 'Appendix synergy screen',
-        verificationStatus: 'inferred'
-      }
-    ],
-    gaps: [
-      {
-        concern: 'Exact supplier formulation for lead compound not disclosed.',
-        impact: 'Potency may drift if excipients differ.',
-        severity: 'critical',
-        resolvableWithExpertAnalysis: true
-      },
-      {
-        concern: 'Long-term toxicity data limited to 48 hour window.',
-        impact: 'Chronic dosing plans remain speculative.',
-        severity: 'moderate',
-        resolvableWithExpertAnalysis: true
-      },
-      {
-        concern: 'Proteasome assay instrumentation details are high level.',
-        impact: 'Labs may burn cycles troubleshooting calibration.',
-        severity: 'minor',
-        resolvableWithExpertAnalysis: false
-      }
-    ],
-    assumptions: [
-      'Lab can allocate uninterrupted incubator capacity for 3 week neuronal maturation.',
-      'Reproduction focuses on in vitro clearance outcomes; in vivo validation is out of scope.'
-    ]
-  },
-  expertEnhancements: {
-    authorContacted: false,
-    datasetsVerified: ['Vendor roster for VCP activators with batch QC sheets', 'Validated iPSC differentiation SOP with day-by-day milestones'],
-    protocolClarifications: ['Autophagy imaging acquisition settings', 'Proteasome activity normalization script'],
-    additionalResources: ['Chemistry CRO intro for analog synthesis', 'Template for IRB amendment covering VCP neuron work'],
-    turnaround: 'Delivered within 12 business days'
-  }
-}
-
-const EXPERT_UPGRADE_NOTES = [
-  'Secure compound supply details, batch QC, and alternate vendors.',
-  'Review the authors autophagy and proteasome assay playbooks with annotated settings.',
-  'Coordinate a live Q&A with the study team on dosing cadence and toxicity monitoring.'
-]
-
-function getFeasibilitySummary(score: number): string {
-  if (score >= 80) {
-    return 'Ready to execute'
-  }
-  if (score >= 55) {
-    return 'Needs targeted support'
-  }
-  return 'High risk - secure collaborators'
-}
-
-function getFeasibilityTone(score: number): string {
-  if (score >= 80) {
-    return 'text-emerald-600'
-  }
-  if (score >= 55) {
-    return 'text-amber-600'
-  }
-  return 'text-red-600'
-}
-
-function formatProbability(probability: number): string {
-  return `${Math.round(probability * 100)}%`
-}
-
-function ReproducibilityReportPreview({ paperId }: { paperId: string }) {
-  const report = VERIFICATION_DATA[paperId] || MOCK_REPRO_REPORT
-  const questions = report.feasibilityQuestions
-
-  const [answers, setAnswers] = useState<Record<string, 'yes' | 'no' | null>>(() => {
-    const initial: Record<string, 'yes' | 'no' | null> = {}
-    questions.forEach((question) => {
-      initial[question.id] = null
-    })
-    return initial
-  })
-
-  const totalWeight = useMemo(() => questions.reduce((sum, question) => sum + question.weight, 0), [questions])
-  const yesWeight = useMemo(
-    () => questions.reduce((sum, question) => sum + (answers[question.id] === 'yes' ? question.weight : 0), 0),
-    [answers, questions]
-  )
-  const answeredCount = useMemo(
-    () => questions.reduce((sum, question) => sum + (answers[question.id] ? 1 : 0), 0),
-    [answers, questions]
-  )
-
-  const feasibilityScore = totalWeight > 0 ? Math.round((yesWeight / totalWeight) * 100) : 0
-  const feasibilitySummary = getFeasibilitySummary(feasibilityScore)
-  const feasibilityTone = getFeasibilityTone(feasibilityScore)
-
-  const stageMeta = STAGE_META[report.stage]
-  const confidenceSource = report.verdict.confidenceLevel === 'ai_inferred' ? 'AI generated' : 'Expert verified'
-
-  function handleAnswer(questionId: string, response: 'yes' | 'no') {
-    setAnswers((prev) => ({
-      ...prev,
-      [questionId]: prev[questionId] === response ? null : response
-    }))
-  }
-
-  // Check if this is a placeholder (empty data)
-  const isPlaceholder = questions.length === 0 && report.criticalPath.length === 0;
-
-  if (isPlaceholder) {
-    return (
-      <div className="space-y-6">
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900">{report.verdict.mainMessage}</h3>
-            <p className="mt-1 text-sm text-slate-600">{report.paper.title}</p>
-            <p className="text-xs text-slate-500">{report.paper.authors} | {report.paper.venue}</p>
-          </div>
-        </section>
-        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
-          <p className="text-sm font-medium text-amber-900">
-            Detailed reproducibility analysis coming soon
-          </p>
-          <p className="mt-2 text-xs text-amber-700">
-            Feasibility questions, critical path analysis, and expert insights will be added for this paper.
-          </p>
-        </section>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div>
-          <h3 className="text-lg font-semibold text-slate-900">{report.verdict.mainMessage}</h3>
-          <p className="mt-1 text-sm text-slate-600">{report.paper.title}</p>
-          <p className="text-xs text-slate-500">{report.paper.authors} | {report.paper.venue}</p>
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h4 className="text-base font-semibold text-slate-900">Feasibility snapshot</h4>
-            <p className="mt-1 text-sm text-slate-600">Mark what your lab already has in place.</p>
-          </div>
-          <div className="text-right">
-            <p className={`text-3xl font-semibold ${feasibilityTone}`}>{feasibilityScore}<span className="ml-1 text-base text-slate-500">%</span></p>
-            <p className="text-xs text-slate-500">{feasibilitySummary}</p>
-            <p className="text-xs text-slate-400">{answeredCount} of {questions.length} answered</p>
-          </div>
-        </div>
-        <div className="mt-3 h-2 w-full rounded-full bg-slate-100">
-          <div
-            className={`h-2 rounded-full transition-all ${feasibilityScore >= 80 ? 'bg-emerald-500' : feasibilityScore >= 55 ? 'bg-amber-500' : 'bg-red-500'}`}
-            style={{ width: `${feasibilityScore}%` }}
-          />
-        </div>
-        <div className="mt-4 space-y-3">
-          {questions.map((question) => {
-            const currentAnswer = answers[question.id]
-            return (
-              <div key={question.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-900">{question.question}</p>
-                  <p className="mt-1 text-xs text-slate-500">{question.category} | Weight {question.weight}</p>
-                  {question.helper ? <p className="mt-1 text-xs text-slate-500">{question.helper}</p> : null}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleAnswer(question.id, 'yes')}
-                    className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${currentAnswer === 'yes' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:text-emerald-600'}`}
-                  >
-                    Yes
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleAnswer(question.id, 'no')}
-                    className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${currentAnswer === 'no' ? 'border-red-300 bg-red-50 text-red-700' : 'border-slate-200 bg-white text-slate-600 hover:border-red-200 hover:text-red-600'}`}
-                  >
-                    Not yet
-                  </button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h4 className="text-base font-semibold text-slate-900">Critical path</h4>
-        <p className="mt-1 text-sm text-slate-600">High-level phases with the main output and risk to watch.</p>
-        <div className="mt-4 space-y-3">
-          {report.criticalPath.map((phase) => {
-            const primaryOutput = phase.outputs[0] ?? 'Output captured during expert review'
-            const primaryBlocker = phase.blockers[0]
-            const dependenciesText = phase.dependencies.length ? `Depends on: ${phase.dependencies.join(', ')}` : null
-            return (
-              <div key={phase.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">{phase.phase}</p>
-                    <p className="text-xs text-slate-500">{phase.duration} | {phase.cost}</p>
-                    {dependenciesText ? <p className="text-xs text-slate-400">{dependenciesText}</p> : null}
-                  </div>
-                  <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${RISK_BADGES[phase.riskLevel]}`}>
-                    Risk {phase.riskLevel}
-                  </span>
-                </div>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Key output</p>
-                    <p className="mt-1 text-sm text-slate-700">{primaryOutput}</p>
-                  </div>
-                  {primaryBlocker ? (
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Watch out</p>
-                      <p className="mt-1 text-sm text-slate-700">{primaryBlocker.issue}</p>
-                      <p className="mt-1 text-xs text-slate-500">Mitigation: {primaryBlocker.mitigation}</p>
-                      <p className="mt-1 text-xs text-slate-400">Confidence: {primaryBlocker.verificationStatus}</p>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h4 className="text-base font-semibold text-slate-900">Need deeper support?</h4>
-        <p className="mt-1 text-sm text-slate-600">We will reach out and connect you with a subject matter expert to help you reproduce this.</p>
-        <div className="mt-4">
-          <button
-            type="button"
-            className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50"
-          >
-            Request expert analysis
-          </button>
-        </div>
-      </section>
-    </div>
-  )
-}
-
-function ClaimsVerificationPreview({ paperId }: { paperId: string }) {
-  const report = VERIFICATION_DATA[paperId] || MOCK_REPRO_REPORT
-  const stageMeta = STAGE_META[report.stage]
-  const topClaim = report.evidenceBase.strongEvidence[0]
-  const topGap = report.evidenceBase.gaps[0]
-
-  // Check if this is a placeholder (empty data)
-  const isPlaceholder = report.evidenceBase.strongEvidence.length === 0 && report.evidenceBase.gaps.length === 0;
-
-  if (isPlaceholder) {
-    return (
-      <div className="space-y-6">
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900">Claims Verification</h3>
-            <p className="mt-1 text-sm text-slate-600">{report.paper.title}</p>
-            <p className="text-xs text-slate-500">{report.paper.authors} | {report.paper.venue}</p>
-          </div>
-        </section>
-        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
-          <p className="text-sm font-medium text-amber-900">
-            Detailed claims analysis coming soon
-          </p>
-          <p className="mt-2 text-xs text-amber-700">
-            Strong evidence, gaps, and follow-up questions will be added for this paper.
-          </p>
-        </section>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        {topClaim ? (
-          <dl className="grid gap-4 text-sm text-slate-700 sm:grid-cols-2">
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-slate-500">Headline finding</dt>
-              <dd className="mt-1 font-semibold text-slate-900">{topClaim.claim}</dd>
-              <dd className="mt-1 text-xs text-slate-500">Source: {topClaim.source}</dd>
-            </div>
-            {topGap ? (
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-slate-500">Primary open question</dt>
-                <dd className="mt-1 font-semibold text-slate-900">{topGap.concern}</dd>
-                <dd className="mt-1 text-xs text-slate-500">Impact: {topGap.impact}</dd>
-              </div>
-            ) : null}
-          </dl>
-        ) : null}
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h4 className="text-base font-semibold text-slate-900">Evidence we stand behind</h4>
-        <p className="mt-1 text-sm text-slate-600">Claims with citations or data that held up under automated review.</p>
-        <ul className="mt-4 space-y-3 text-sm text-slate-700">
-          {report.evidenceBase.strongEvidence.map((item, idx) => (
-            <li key={`evidence-${idx}`} className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <CheckCircle2 className="mt-1 h-5 w-5 text-emerald-500" />
-              <div>
-                <p className="font-medium text-slate-900">{item.claim}</p>
-                <p className="text-xs text-slate-500">Source: {item.source}</p>
-                {item.notes ? <p className="mt-1 text-xs text-slate-500">{item.notes}</p> : null}
-                <p className="mt-1 text-xs text-slate-400">Confidence: {item.verificationStatus}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h4 className="text-base font-semibold text-slate-900">Gaps and follow-ups</h4>
-        <p className="mt-1 text-sm text-slate-600">Where uncertainty remains and what we would chase next.</p>
-        <ul className="mt-4 space-y-3 text-sm text-slate-700">
-          {report.evidenceBase.gaps.map((gap, idx) => (
-            <li key={`gap-${idx}`} className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <AlertTriangle className="mt-1 h-5 w-5 text-amber-500" />
-              <div>
-                <p className="font-medium text-slate-900">{gap.concern}</p>
-                <p className="text-xs text-slate-500">Impact: {gap.impact}</p>
-                <p className="text-xs text-slate-500">Severity: {gap.severity}</p>
-                <p className="mt-1 text-xs text-slate-400">{gap.resolvableWithExpertAnalysis ? 'Expert outreach planned.' : 'Track internally for now.'}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-        {report.evidenceBase.assumptions.length ? (
-          <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Assumptions we made</p>
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-500">
-              {report.evidenceBase.assumptions.map((assumption) => (
-                <li key={assumption}>{assumption}</li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h4 className="text-base font-semibold text-slate-900">Next claim checks (mock)</h4>
-        <p className="mt-1 text-sm text-slate-600">Outline of the manual follow-up the team would run if you request escalation.</p>
-        <ul className="mt-3 list-decimal space-y-2 pl-5 text-sm text-slate-600">
-          <li>Validate compound sourcing with authors and suppliers, collecting batch certificates.</li>
-          <li>Replicate proteasome assay calibration with vendor tech support on live call.</li>
-          <li>Expand toxicity window data to 7 days using controlled dosing schedule.</li>
-        </ul>
-      </section>
-    </div>
-  )
-}
-
 function formatAuthors(authors: string[]) {
   if (!authors.length) return 'Author information unavailable'
   if (authors.length <= 3) return authors.join(', ')
@@ -1831,6 +381,1371 @@ function filterByRecency(papers: ApiSearchResult[], days: number): ApiSearchResu
   return papers.filter(paper =>
     paper.publicationDate && new Date(paper.publicationDate) >= cutoff
   );
+}
+
+type VerificationStatus = 'verified' | 'inferred' | 'uncertain'
+type GapSeverity = 'critical' | 'moderate' | 'minor'
+type RiskLevel = 'Low' | 'Medium' | 'High'
+
+interface MockFeasibilityQuestion {
+  id: string
+  question: string
+  weight: number
+  category: string
+  helper?: string
+}
+
+interface MockBlocker {
+  severity: GapSeverity
+  issue: string
+  mitigation: string
+  verificationStatus: VerificationStatus
+}
+
+interface MockCriticalPhase {
+  id: string
+  phase: string
+  duration: string
+  cost: string
+  riskLevel: RiskLevel
+  dependencies: string[]
+  requirements: string[]
+  outputs: string[]
+  blockers: MockBlocker[]
+}
+
+interface MockEvidenceItem {
+  claim: string
+  source: string
+  verificationStatus: VerificationStatus
+  notes?: string
+}
+
+interface MockGap {
+  concern: string
+  impact: string
+  severity: GapSeverity
+  resolvableWithExpertAnalysis: boolean
+}
+
+interface MockReproReport {
+  stage: 'ai_research' | 'expert_verified'
+  lastUpdated: string
+  reviewers: string[]
+  paper: {
+    title: string
+    authors: string
+    venue: string
+    doi: string
+  }
+  verdict: {
+    grade: string
+    confidence: string
+    mainMessage: string
+    successProbability: number
+    timeToFirstResult: string
+    totalCost: string
+    skillCeiling: string
+    confidenceLevel: 'ai_inferred' | 'expert_verified'
+  }
+  criticalPath: MockCriticalPhase[]
+  evidenceBase: {
+    strongEvidence: MockEvidenceItem[]
+    gaps: MockGap[]
+    assumptions: string[]
+  }
+  feasibilityQuestions: MockFeasibilityQuestion[]
+  expertEnhancements: {
+    authorContacted: boolean
+    datasetsVerified: string[]
+    protocolClarifications: string[]
+    additionalResources: string[]
+    turnaround: string
+  }
+}
+
+const STAGE_META: Record<MockReproReport['stage'], { label: string; description: string; badgeClasses: string }> = {
+  ai_research: {
+    label: 'AI Deep Research',
+    description: 'Automated synthesis from public sources',
+    badgeClasses: 'bg-sky-100 text-sky-600 border border-sky-200'
+  },
+  expert_verified: {
+    label: 'Expert-Verified Analysis',
+    description: 'Humans validated sources, protocols, and access',
+    badgeClasses: 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+  }
+}
+
+const RISK_BADGES: Record<RiskLevel, string> = {
+  Low: 'border border-emerald-200 bg-emerald-50 text-emerald-700',
+  Medium: 'border border-amber-200 bg-amber-50 text-amber-700',
+  High: 'border border-red-200 bg-red-50 text-red-700'
+}
+
+const VERIFICATION_DATA: Record<string, MockReproReport> = {
+  '68d962effe5520777791bd6ec8ffa4b963ba4f38': {
+    stage: 'ai_research',
+    lastUpdated: '2025-02-10',
+    reviewers: ['AI Research Desk'],
+    paper: {
+      title: 'A Programmable Dual-RNA–Guided DNA Endonuclease in Adaptive Bacterial Immunity',
+      authors: 'Jinek et al.',
+      venue: 'Science 2012',
+      doi: '10.1126/science.1225829'
+    },
+    verdict: {
+      grade: 'A-',
+      confidence: 'High',
+      mainMessage: 'Highly reproducible for well-equipped molecular biology labs. Main challenge is capital investment and specialised expertise for multi-step Cas9 protein purification.',
+      successProbability: 0.85,
+      timeToFirstResult: '2-4 months',
+      totalCost: '$6,000-$10,000 (or $500-$2,000 using commercial Cas9)',
+      skillCeiling: 'Graduate-level molecular biologist with protein purification expertise',
+      confidenceLevel: 'ai_inferred'
+    },
+    feasibilityQuestions: [
+      {
+        id: 'plasmids',
+        question: 'Do you maintain human iPSC-derived neurons or comparable VCP disease models?',
+        weight: 3,
+        category: 'Model Systems',
+        helper: 'Authors relied on patient-derived cortical neurons; organoids are acceptable with baseline QC.'
+      },
+      {
+        id: 'imaging',
+        question: 'Can you run high-content imaging or time-lapse microscopy for autophagy flux?',
+        weight: 2,
+        category: 'Instrumentation',
+        helper: 'Needed to quantify LC3, SQSTM1, and aggregate clearance across dosing windows.'
+      },
+      {
+        id: 'assays',
+        question: 'Do you have validated autophagy and proteasome activity assays ready to deploy?',
+        weight: 2,
+        category: 'Assays',
+        helper: 'Study used paired LC3-II westerns, proteasome-Glo readouts, and ubiquitin clearance panels.'
+      },
+      {
+        id: 'compounds',
+        question: 'Can you source or synthesise the VCP activator compound panel described?',
+        weight: 2,
+        category: 'Materials',
+        helper: 'Lead molecules ship from two specialised vendors; analog synthesis support may be required.'
+      },
+      {
+        id: 'compliance',
+        question: 'Are your approvals for patient-derived cell handling current and traceable?',
+        weight: 1,
+        category: 'Operations',
+        helper: 'Requires IRB amendments plus cold-chain documentation for neuron stocks.'
+      }
+    ],
+    criticalPath: [
+      {
+        id: 'planning',
+        phase: 'Compound sourcing and quality control',
+        duration: '1 week',
+        cost: '$4k',
+        riskLevel: 'Medium',
+        dependencies: [],
+        requirements: ['Confirm vendor availability', 'Set up HPLC and mass spec QC workflow', 'Prepare storage and dosing stocks'],
+        outputs: ['Validated compound panel', 'Stability and solubility profiles'],
+        blockers: [
+          {
+            severity: 'moderate',
+            issue: 'Lead compounds currently on allocation with 6 week replenishment lead time',
+            mitigation: 'Engage alternate supplier identified in supplementary methods or pursue CRO synthesis slot.',
+            verificationStatus: 'inferred'
+          }
+        ]
+      },
+      {
+        id: 'models',
+        phase: 'Neuronal model setup and characterisation',
+        duration: '2-3 weeks',
+        cost: '$12k',
+        riskLevel: 'Medium',
+        dependencies: ['planning'],
+        requirements: ['Differentiate iPSC neurons or thaw VCP mutant lines', 'Benchmark baseline autophagy and proteasome markers'],
+        outputs: ['QC validated neurons ready for dosing', 'Baseline proteostasis reference set'],
+        blockers: [
+          {
+            severity: 'critical',
+            issue: 'Differentiation batches show day-to-day variability that shifts proteostasis baseline',
+            mitigation: 'Adopt author SOP for maturation days and include internal healthy control lines.',
+            verificationStatus: 'inferred'
+          },
+          {
+            severity: 'moderate',
+            issue: 'Neurons require mycoplasma-negative confirmation before dosing window',
+            mitigation: 'Schedule third-party sterility panel in advance; include kill step in SOP.',
+            verificationStatus: 'inferred'
+          }
+        ]
+      },
+      {
+        id: 'assays',
+        phase: 'Autophagy and proteasome assays',
+        duration: '10 days',
+        cost: '$9k',
+        riskLevel: 'High',
+        dependencies: ['models'],
+        requirements: ['High-content imaging pipeline configured', 'Proteasome activity kit validated with controls'],
+        outputs: ['Flux curves across compound doses', 'Proteasome recovery metrics'],
+        blockers: [
+          {
+            severity: 'moderate',
+            issue: 'Compound cytotoxicity window is narrow beyond 48 hours',
+            mitigation: 'Adopt staggered dosing schedule and include viability gating described in supplement.',
+            verificationStatus: 'inferred'
+          }
+        ]
+      },
+      {
+        id: 'analysis',
+        phase: 'Data integration and reporting',
+        duration: '1 week',
+        cost: '$3k',
+        riskLevel: 'Low',
+        dependencies: ['assays'],
+        requirements: ['Analysis scripts for proteostasis metrics', 'Predefined QC gates for outlier exclusion'],
+        outputs: ['Integrated autophagy and proteasome report', 'Recommendations for in vivo follow-up'],
+        blockers: [
+          {
+            severity: 'minor',
+            issue: 'Normalisation requires internal controls not included in public data dump',
+            mitigation: 'Recreate control curves using provided spreadsheets or request raw files via expert channel.',
+            verificationStatus: 'inferred'
+          }
+        ]
+      }
+    ],
+    evidenceBase: {
+      strongEvidence: [
+        {
+          claim: 'VCP-874 compound boosted autophagic flux by 45 percent in patient-derived neurons.',
+          source: 'Chen et al. Supplementary Figure 4',
+          verificationStatus: 'verified'
+        },
+        {
+          claim: 'Proteasome-Glo assays showed 1.6x activity recovery after 24 hour dosing.',
+          source: 'Main text Figure 3C + methods section',
+          verificationStatus: 'inferred',
+          notes: 'Authors provide raw luminescence tables with positive control alignment.'
+        },
+        {
+          claim: 'Co-treatment with NRF2 activator reduced aggregate burden without additional toxicity.',
+          source: 'Appendix synergy screen',
+          verificationStatus: 'inferred'
+        }
+      ],
+      gaps: [
+        {
+          concern: 'Exact supplier formulation for lead compound not disclosed.',
+          impact: 'Potency may drift if excipients differ.',
+          severity: 'critical',
+          resolvableWithExpertAnalysis: true
+        },
+        {
+          concern: 'Long-term toxicity data limited to 48 hour window.',
+          impact: 'Chronic dosing plans remain speculative.',
+          severity: 'moderate',
+          resolvableWithExpertAnalysis: true
+        },
+        {
+          concern: 'Proteasome assay instrumentation details are high level.',
+          impact: 'Labs may burn cycles troubleshooting calibration.',
+          severity: 'minor',
+          resolvableWithExpertAnalysis: false
+        }
+      ],
+      assumptions: [
+        'Lab can allocate uninterrupted incubator capacity for 3 week neuronal maturation.',
+        'Reproduction focuses on in vitro clearance outcomes; in vivo validation is out of scope.'
+      ]
+    },
+    expertEnhancements: {
+      authorContacted: false,
+      datasetsVerified: ['Vendor roster for VCP activators with batch QC sheets', 'Validated iPSC differentiation SOP with day-by-day milestones'],
+      protocolClarifications: ['Autophagy imaging acquisition settings', 'Proteasome activity normalisation script'],
+      additionalResources: ['Chemistry CRO intro for analog synthesis', 'Template for IRB amendment covering VCP neuron work'],
+      turnaround: 'Delivered within 12 business days'
+    }
+  },
+  abd1c342495432171beb7ca8fd9551ef13cbd0ff: {
+    stage: 'ai_research',
+    lastUpdated: '2025-02-05',
+    reviewers: ['AI Research Desk'],
+    paper: {
+      title: 'ImageNet Classification with Deep Convolutional Neural Networks',
+      authors: 'Krizhevsky et al.',
+      venue: 'NeurIPS 2012',
+      doi: '10.1145/3065386'
+    },
+    verdict: {
+      grade: 'B+',
+      confidence: 'Medium',
+      mainMessage: 'Reproducing AlexNet is feasible with modern tooling, but matching reported accuracy still requires meticulous hyperparameter control and careful data preprocessing.',
+      successProbability: 0.72,
+      timeToFirstResult: '3-5 weeks',
+      totalCost: '$12k-$18k (GPU time + engineering)',
+      skillCeiling: 'Applied ML engineer with CUDA familiarity',
+      confidenceLevel: 'ai_inferred'
+    },
+    feasibilityQuestions: [
+      {
+        id: 'gpu_fleet',
+        question: 'Do you have access to at least two 24GB GPUs or equivalent cloud instances for distributed training?',
+        weight: 3,
+        category: 'Compute',
+        helper: 'The original configuration used two GTX 580 cards; modern replications typically run on A6000 or H100 class hardware.'
+      },
+      {
+        id: 'dataset_ops',
+        question: 'Is your team comfortable managing the full ImageNet ingestion pipeline with deterministic preprocessing?',
+        weight: 2,
+        category: 'Data Engineering',
+        helper: 'Consistent crop, flip, and colour jitter policies are required to reproduce the headline accuracy.'
+      },
+      {
+        id: 'framework',
+        question: 'Can you maintain a custom CUDA/CuDNN environment or leverage a framework that hides the legacy kernels?',
+        weight: 2,
+        category: 'Tooling',
+        helper: 'Original code relies on bespoke kernels; contemporary PyTorch implementations close the gap but need precise cuDNN versions.'
+      }
+    ],
+    criticalPath: [
+      {
+        id: 'data-prep',
+        phase: 'Dataset normalisation and caching',
+        duration: '1 week',
+        cost: '$2k',
+        riskLevel: 'Medium',
+        dependencies: [],
+        requirements: ['Curate ImageNet train/val split', 'Generate deterministic shuffles', 'Provision fast NVMe cache'],
+        outputs: ['Verified TFRecords/LMDB shards', 'Augmentation checklist'],
+        blockers: [
+          {
+            severity: 'moderate',
+            issue: 'Checksum drift or missing images break reproducibility guarantees.',
+            mitigation: 'Reconcile with ImageNet 2012 metadata archive and store manifest diffs.',
+            verificationStatus: 'inferred'
+          }
+        ]
+      },
+      {
+        id: 'training',
+        phase: 'Baseline training run',
+        duration: '10-14 days',
+        cost: '$8k',
+        riskLevel: 'High',
+        dependencies: ['data-prep'],
+        requirements: ['Two high-memory GPUs', 'Mixed precision friendly kernels', 'Robust checkpointing'],
+        outputs: ['Top-1/Top-5 curves', 'Checkpoint artefacts'],
+        blockers: [
+          {
+            severity: 'critical',
+            issue: 'Learning rate schedule or weight decay misconfiguration collapses accuracy.',
+            mitigation: 'Adopt original step schedule and monitor validation every 20k iterations.',
+            verificationStatus: 'inferred'
+          }
+        ]
+      },
+      {
+        id: 'benchmarking',
+        phase: 'Evaluation and ablation runs',
+        duration: '1-2 weeks',
+        cost: '$4k',
+        riskLevel: 'Medium',
+        dependencies: ['training'],
+        requirements: ['Automated evaluation scripts', 'Telemetry for throughput'],
+        outputs: ['Reproduction metrics with confidence intervals', 'Throughput benchmarks'],
+        blockers: [
+          {
+            severity: 'moderate',
+            issue: 'Hardware variance makes throughput comparisons noisy.',
+            mitigation: 'Report normalised images/sec and include A/B with reference implementation.',
+            verificationStatus: 'inferred'
+          }
+        ]
+      }
+    ],
+    evidenceBase: {
+      strongEvidence: [
+        {
+          claim: 'Modern PyTorch reference implementations reach within 1% top-5 accuracy when original augmentation schedule is mirrored.',
+          source: 'PyTorch hub AlexNet reproduction [GitHub](https://github.com/pytorch/vision)',
+          verificationStatus: 'verified'
+        },
+        {
+          claim: 'Deterministic data loaders improve convergence stability across seeds.',
+          source: 'FastAI ImageNet replication notes [Fast.ai forums](https://forums.fast.ai)',
+          verificationStatus: 'inferred'
+        }
+      ],
+      gaps: [
+        {
+          concern: 'Exact random seed usage per GPU stream is undocumented.',
+          impact: 'Accuracy can fluctuate by >1% without aligned seeds.',
+          severity: 'moderate',
+          resolvableWithExpertAnalysis: true
+        },
+        {
+          concern: 'Legacy CUDA kernels referenced in the paper are not maintained.',
+          impact: 'Teams must port to modern frameworks or backport drivers.',
+          severity: 'critical',
+          resolvableWithExpertAnalysis: true
+        }
+      ],
+      assumptions: [
+        'Reproduction targets FP32 parity before experimenting with mixed precision.',
+        'Cloud spot interruptions are avoided by reserving dedicated GPU capacity.'
+      ]
+    },
+    expertEnhancements: {
+      authorContacted: false,
+      datasetsVerified: ['ImageNet 2012 manifest with checksum report'],
+      protocolClarifications: ['Learning rate and momentum schedule cross-check'],
+      additionalResources: ['Script for deterministic PyTorch data loaders', 'GPU scheduling template for Slurm'],
+      turnaround: 'Delivered within 9 business days'
+    }
+  },
+  c92bd747a97eeafdb164985b0d044caa1dc6e73e: {
+    stage: 'ai_research',
+    lastUpdated: '2024-11-18',
+    reviewers: ['Materials Repro Desk'],
+    paper: {
+      title: 'Electric Field Effect in Atomically Thin Carbon Films',
+      authors: 'Novoselov et al.',
+      venue: 'Science 2004',
+      doi: '10.1126/science.1102896'
+    },
+    verdict: {
+      grade: 'B',
+      confidence: 'Medium',
+      mainMessage: 'Graphene exfoliation and device fabrication remain craft-heavy; reproduced mobility numbers require disciplined cleanroom practice.',
+      successProbability: 0.62,
+      timeToFirstResult: '6-8 weeks',
+      totalCost: '$25k-$40k (consumables + device processing)',
+      skillCeiling: 'Cleanroom physicist with microfabrication portfolio',
+      confidenceLevel: 'ai_inferred'
+    },
+    feasibilityQuestions: [
+      {
+        id: 'cleanroom',
+        question: 'Do you have ISO-6 or better cleanroom access with electron-beam lithography?',
+        weight: 3,
+        category: 'Facilities',
+        helper: 'High-mobility graphene devices need low-particle environments for contacts and gates.'
+      },
+      {
+        id: 'metrology',
+        question: 'Is Raman spectroscopy and AFM characterisation available in-house?',
+        weight: 2,
+        category: 'Instrumentation',
+        helper: 'Layer verification and strain diagnostics depend on Raman signatures and thickness mapping.'
+      },
+      {
+        id: 'substrate',
+        question: 'Can you source high-quality Si/SiO₂ wafers with 300 nm oxide stack?',
+        weight: 1,
+        category: 'Materials',
+        helper: 'Optical identification of flakes assumes this stack; alternative thicknesses complicate QC.'
+      }
+    ],
+    criticalPath: [
+      {
+        id: 'exfoliation',
+        phase: 'Graphene exfoliation and transfer',
+        duration: '2 weeks',
+        cost: '$6k',
+        riskLevel: 'High',
+        dependencies: [],
+        requirements: ['Natural graphite source', 'Polymethyl methacrylate transfer pipeline', 'Optical inspection workflow'],
+        outputs: ['Catalogue of mono- and bilayer flakes', 'Transfer yield report'],
+        blockers: [
+          {
+            severity: 'critical',
+            issue: 'Flake contamination or wrinkling degrades mobility.',
+            mitigation: 'Adopt dry-transfer protocol and anneal under forming gas.',
+            verificationStatus: 'inferred'
+          }
+        ]
+      },
+      {
+        id: 'patterning',
+        phase: 'Device lithography and metallisation',
+        duration: '3 weeks',
+        cost: '$12k',
+        riskLevel: 'Medium',
+        dependencies: ['exfoliation'],
+        requirements: ['E-beam resist stack', 'Ti/Au evaporation', 'Lift-off controls'],
+        outputs: ['Hall-bar devices', 'Contact resistance measurements'],
+        blockers: [
+          {
+            severity: 'moderate',
+            issue: 'Contact resistance variance masks intrinsic mobility.',
+            mitigation: 'Perform four-probe calibration and anneal contacts at 200°C in forming gas.',
+            verificationStatus: 'inferred'
+          }
+        ]
+      },
+      {
+        id: 'measurement',
+        phase: 'Electrical testing and analysis',
+        duration: '1-2 weeks',
+        cost: '$7k',
+        riskLevel: 'Medium',
+        dependencies: ['patterning'],
+        requirements: ['Low-noise probe station', 'Gate bias sweeps', 'Carrier mobility extraction scripts'],
+        outputs: ['Mobility curves', 'Charge neutrality point analysis'],
+        blockers: [
+          {
+            severity: 'moderate',
+            issue: 'Water adsorption shifts Dirac point over measurement window.',
+            mitigation: 'Measure in vacuum and bake samples prior to testing.',
+            verificationStatus: 'inferred'
+          }
+        ]
+      }
+    ],
+    evidenceBase: {
+      strongEvidence: [
+        {
+          claim: 'Multiple groups have matched room-temperature mobility ~10,000 cm²/Vs with improved transfer protocols.',
+          source: 'Graphene replication survey [Nature Nanotechnology](https://www.nature.com/articles/nnano.2010.221)',
+          verificationStatus: 'verified'
+        },
+        {
+          claim: 'Dry-transfer techniques reduce polymer residue and raise yield.',
+          source: 'Graphene dry transfer comparison [ACS Nano](https://pubs.acs.org/doi/10.1021/nn201207c)',
+          verificationStatus: 'inferred'
+        }
+      ],
+      gaps: [
+        {
+          concern: 'Original substrate cleaning recipe not fully specified.',
+          impact: 'Residues alter device mobility and gating behaviour.',
+          severity: 'moderate',
+          resolvableWithExpertAnalysis: true
+        },
+        {
+          concern: 'Long-term stability of devices under ambient exposure unreported.',
+          impact: 'Field effect measurements drift after hours without encapsulation.',
+          severity: 'minor',
+          resolvableWithExpertAnalysis: false
+        }
+      ],
+      assumptions: [
+        'Hydrogen anneal capability is available for interface cleaning.',
+        'Reproduction focuses on back-gated devices; top-gated variants are out of scope.'
+      ]
+    },
+    expertEnhancements: {
+      authorContacted: false,
+      datasetsVerified: ['Transfer yield log template'],
+      protocolClarifications: ['Annealing schedule confirmation'],
+      additionalResources: ['Cleanroom traveller for graphene Hall bars'],
+      turnaround: 'Delivered within 3 weeks'
+    }
+  },
+  fc448a7db5a2fac242705bd8e37ae1fc4a858643: {
+    stage: 'ai_research',
+    lastUpdated: '2024-10-02',
+    reviewers: ['Genomics Repro Desk'],
+    paper: {
+      title: 'Initial sequencing and analysis of the human genome.',
+      authors: 'Lander et al.',
+      venue: 'Nature 2001',
+      doi: '10.1038/35057062'
+    },
+    verdict: {
+      grade: 'C',
+      confidence: 'Low',
+      mainMessage: 'Reproducing the full Human Genome Project workflow is impractical; focus on targeted re-analyses with contemporary reference datasets.',
+      successProbability: 0.32,
+      timeToFirstResult: '3-6 months',
+      totalCost: '$150k-$250k+',
+      skillCeiling: 'Computational genomics lead + wet-lab sequencing core',
+      confidenceLevel: 'ai_inferred'
+    },
+    feasibilityQuestions: [
+      {
+        id: 'sequencing-core',
+        question: 'Do you operate or collaborate with a high-throughput sequencing core capable of whole-genome runs?',
+        weight: 3,
+        category: 'Infrastructure',
+        helper: 'Replicating the full pipeline requires industrial-scale instruments; partial reproductions can leverage NovaSeq or PromethION systems.'
+      },
+      {
+        id: 'storage',
+        question: 'Can you store and process petabyte-scale intermediate datasets securely?',
+        weight: 2,
+        category: 'Data Management',
+        helper: 'Assembly and variant calling workflows generate large temporary artefacts that must be retained for audit.'
+      },
+      {
+        id: 'ethics',
+        question: 'Are ethics approvals and data governance frameworks in place for human genomic data?',
+        weight: 2,
+        category: 'Governance',
+        helper: 'Replication even with public datasets must comply with consent restrictions and jurisdictional privacy standards.'
+      }
+    ],
+    criticalPath: [
+      {
+        id: 'scope',
+        phase: 'Scope baseline and secure reference datasets',
+        duration: '4 weeks',
+        cost: '$15k',
+        riskLevel: 'Medium',
+        dependencies: [],
+        requirements: ['Access to public HGP releases', 'Alignment on evaluation metrics', 'Compliance review'],
+        outputs: ['Replication charter', 'Data governance checklist'],
+        blockers: [
+          {
+            severity: 'moderate',
+            issue: 'Data use agreements may restrict redistribution of derived artefacts.',
+            mitigation: 'Engage institutional review and adopt controlled-access workflows.',
+            verificationStatus: 'inferred'
+          }
+        ]
+      },
+      {
+        id: 'assembly',
+        phase: 'Computational assembly and annotation replay',
+        duration: '8-12 weeks',
+        cost: '$80k',
+        riskLevel: 'High',
+        dependencies: ['scope'],
+        requirements: ['High-memory compute cluster', 'Assembly pipelines (SOAPdenovo/ALLPATHS-LG equivalent)', 'Annotation tooling'],
+        outputs: ['Draft assemblies', 'Annotation comparison reports'],
+        blockers: [
+          {
+            severity: 'critical',
+            issue: 'Legacy pipeline components are unmaintained and require porting to modern environments.',
+            mitigation: 'Use contemporary assemblers with documented parameter translation to original methods.',
+            verificationStatus: 'inferred'
+          }
+        ]
+      },
+      {
+        id: 'analysis',
+        phase: 'Comparative analysis and validation',
+        duration: '6-8 weeks',
+        cost: '$60k',
+        riskLevel: 'Medium',
+        dependencies: ['assembly'],
+        requirements: ['Variant analysis toolchain', 'Cross-reference with GRCh38', 'Statistical validation scripts'],
+        outputs: ['Variant concordance tables', 'Functional annotation deltas'],
+        blockers: [
+          {
+            severity: 'moderate',
+            issue: 'Legacy reference builds complicate alignment and interpretation.',
+            mitigation: 'Normalise outputs against modern references and document coordinate lifts.',
+            verificationStatus: 'inferred'
+          }
+        ]
+      }
+    ],
+    evidenceBase: {
+      strongEvidence: [
+        {
+          claim: 'Public HGP assemblies and annotations are reproducible with current tooling when pipelines are translated carefully.',
+          source: 'Genome assembly replication study [Genome Research](https://genome.cshlp.org/content/25/10/1546)',
+          verificationStatus: 'inferred'
+        }
+      ],
+      gaps: [
+        {
+          concern: 'Experimental wet-lab protocols from 2001 are obsolete.',
+          impact: 'Full biological replication would require redesign using modern sequencing chemistry.',
+          severity: 'critical',
+          resolvableWithExpertAnalysis: true
+        },
+        {
+          concern: 'Cost estimates assume access to institutional compute subsidies.',
+          impact: 'Commercial cloud replication may exceed $400k.',
+          severity: 'moderate',
+          resolvableWithExpertAnalysis: false
+        }
+      ],
+      assumptions: [
+        'Replication focuses on computational replay with existing raw reads.',
+        'Wet-lab validation is limited to targeted re-sequencing using modern instruments.'
+      ]
+    },
+    expertEnhancements: {
+      authorContacted: false,
+      datasetsVerified: ['Ensembl/NCBI mirrored HGP releases'],
+      protocolClarifications: ['Parameter translation guide for assembly pipelines'],
+      additionalResources: ['Costing worksheet for hybrid cloud clusters'],
+      turnaround: 'Delivered within 8 weeks'
+    }
+  }
+}
+
+const EXPERT_UPGRADE_NOTES = [
+  'Secure compound supply details, batch QC, and alternate vendors.',
+  'Review the authors autophagy and proteasome assay playbooks with annotated settings.',
+  'Coordinate a live Q&A with the study team on dosing cadence and toxicity monitoring.'
+]
+
+function getFeasibilitySummary(score: number): string {
+  if (score >= 80) {
+    return 'Ready to execute'
+  }
+  if (score >= 55) {
+    return 'Needs targeted support'
+  }
+  return 'High risk - secure collaborators'
+}
+
+function getFeasibilityTone(score: number): string {
+  if (score >= 80) {
+    return 'text-emerald-600'
+  }
+  if (score >= 55) {
+    return 'text-amber-600'
+  }
+  return 'text-red-600'
+}
+
+function StaticReproReport({ report }: { report: MockReproReport }) {
+  const questions = report.feasibilityQuestions
+
+  const [answers, setAnswers] = useState<Record<string, 'yes' | 'no' | null>>(() => {
+    const initial: Record<string, 'yes' | 'no' | null> = {}
+    questions.forEach((question) => {
+      initial[question.id] = null
+    })
+    return initial
+  })
+
+  const totalWeight = useMemo(() => questions.reduce((sum, question) => sum + question.weight, 0), [questions])
+  const yesWeight = useMemo(
+    () => questions.reduce((sum, question) => sum + (answers[question.id] === 'yes' ? question.weight : 0), 0),
+    [answers, questions]
+  )
+  const answeredCount = useMemo(
+    () => questions.reduce((sum, question) => sum + (answers[question.id] ? 1 : 0), 0),
+    [answers, questions]
+  )
+
+  const feasibilityScore = totalWeight > 0 ? Math.round((yesWeight / totalWeight) * 100) : 0
+  const feasibilitySummary = getFeasibilitySummary(feasibilityScore)
+  const feasibilityTone = getFeasibilityTone(feasibilityScore)
+
+  const stageMeta = STAGE_META[report.stage]
+  const confidenceSource = report.verdict.confidenceLevel === 'ai_inferred' ? 'AI generated' : 'Expert verified'
+
+  function handleAnswer(questionId: string, response: 'yes' | 'no') {
+    setAnswers((prev) => ({
+      ...prev,
+      [questionId]: prev[questionId] === response ? null : response
+    }))
+  }
+
+  const isPlaceholder = questions.length === 0 && report.criticalPath.length === 0
+
+  if (isPlaceholder) {
+    return (
+      <div className="space-y-6">
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">{report.verdict.mainMessage}</h3>
+            <p className="mt-1 text-sm text-slate-600">{report.paper.title}</p>
+            <p className="text-xs text-slate-500">{report.paper.authors} | {report.paper.venue}</p>
+          </div>
+        </section>
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
+          <p className="text-sm font-medium text-amber-900">
+            Detailed reproducibility analysis coming soon
+          </p>
+          <p className="mt-2 text-xs text-amber-700">
+            Feasibility questions, critical path analysis, and expert insights will be added for this paper.
+          </p>
+        </section>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div>
+          <h3 className="text-lg font-semibold text-slate-900">{report.verdict.mainMessage}</h3>
+          <p className="mt-1 text-sm text-slate-600">{stageMeta.description}</p>
+          <p className="mt-1 text-xs text-slate-500">{confidenceSource}</p>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h4 className="text-base font-semibold text-slate-900">Feasibility snapshot</h4>
+            <p className="mt-1 text-sm text-slate-600">Mark what your lab already has in place.</p>
+          </div>
+          <div className="text-right">
+            <p className={`text-3xl font-semibold ${feasibilityTone}`}>{feasibilityScore}<span className="ml-1 text-base text-slate-500">%</span></p>
+            <p className="text-xs text-slate-500">{feasibilitySummary}</p>
+            <p className="text-xs text-slate-400">{answeredCount} of {questions.length} answered</p>
+          </div>
+        </div>
+        <div className="mt-3 h-2 w-full rounded-full bg-slate-100">
+          <div
+            className={`h-2 rounded-full transition-all ${feasibilityScore >= 80 ? 'bg-emerald-500' : feasibilityScore >= 55 ? 'bg-amber-500' : 'bg-red-500'}`}
+            style={{ width: `${feasibilityScore}%` }}
+          />
+        </div>
+        <div className="mt-4 space-y-3">
+          {questions.map((question) => {
+            const currentAnswer = answers[question.id]
+            return (
+              <div key={question.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-900">{question.question}</p>
+                  <p className="mt-1 text-xs text-slate-500">{question.category} | Weight {question.weight}</p>
+                  {question.helper ? <p className="mt-1 text-xs text-slate-500">{question.helper}</p> : null}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleAnswer(question.id, 'yes')}
+                    className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${currentAnswer === 'yes' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:text-emerald-600'}`}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAnswer(question.id, 'no')}
+                    className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${currentAnswer === 'no' ? 'border-red-300 bg-red-50 text-red-700' : 'border-slate-200 bg-white text-slate-600 hover:border-red-200 hover:text-red-600'}`}
+                  >
+                    Not yet
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h4 className="text-base font-semibold text-slate-900">Critical path</h4>
+        <p className="mt-1 text-sm text-slate-600">High-level phases with the main output and risk to watch.</p>
+        <div className="mt-4 space-y-3">
+          {report.criticalPath.map((phase) => {
+            const primaryOutput = phase.outputs[0] ?? 'Output captured during expert review'
+            const primaryBlocker = phase.blockers[0]
+            const dependenciesText = phase.dependencies.length ? `Depends on: ${phase.dependencies.join(', ')}` : null
+            return (
+              <div key={phase.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{phase.phase}</p>
+                    <p className="text-xs text-slate-500">{phase.duration} | {phase.cost}</p>
+                    {dependenciesText ? <p className="text-xs text-slate-400">{dependenciesText}</p> : null}
+                  </div>
+                  <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${RISK_BADGES[phase.riskLevel]}`}>
+                    Risk {phase.riskLevel}
+                  </span>
+                </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Key output</p>
+                    <p className="mt-1 text-sm text-slate-700">{primaryOutput}</p>
+                  </div>
+                  {primaryBlocker ? (
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Watch out</p>
+                      <p className="mt-1 text-sm text-slate-700">{primaryBlocker.issue}</p>
+                      <p className="mt-1 text-xs text-slate-500">Mitigation: {primaryBlocker.mitigation}</p>
+                      <p className="mt-1 text-xs text-slate-400">Confidence: {primaryBlocker.verificationStatus}</p>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h4 className="text-base font-semibold text-slate-900">Need deeper support?</h4>
+        <p className="mt-1 text-sm text-slate-600">We will reach out and connect you with a subject matter expert to help you reproduce this.</p>
+        <div className="mt-4">
+          <button
+            type="button"
+            className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50"
+          >
+            Request expert analysis
+          </button>
+        </div>
+        <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-slate-500">
+          {EXPERT_UPGRADE_NOTES.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      </section>
+    </div>
+  )
+}
+
+function StaticClaimsPreview({ report }: { report: MockReproReport }) {
+  const topClaim = report.evidenceBase.strongEvidence[0]
+  const topGap = report.evidenceBase.gaps[0]
+
+  const isPlaceholder = report.evidenceBase.strongEvidence.length === 0 && report.evidenceBase.gaps.length === 0
+
+  if (isPlaceholder) {
+    return (
+      <div className="space-y-6">
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Claims Verification</h3>
+            <p className="mt-1 text-sm text-slate-600">{report.paper.title}</p>
+            <p className="text-xs text-slate-500">{report.paper.authors} | {report.paper.venue}</p>
+          </div>
+        </section>
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
+          <p className="text-sm font-medium text-amber-900">
+            Detailed claims analysis coming soon
+          </p>
+          <p className="mt-2 text-xs text-amber-700">
+            Strong evidence, gaps, and follow-up questions will be added for this paper.
+          </p>
+        </section>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        {topClaim ? (
+          <dl className="grid gap-4 text-sm text-slate-700 sm:grid-cols-2">
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-slate-500">Headline finding</dt>
+              <dd className="mt-1 font-semibold text-slate-900">{topClaim.claim}</dd>
+              <dd className="mt-1 text-xs text-slate-500">Source: {topClaim.source}</dd>
+            </div>
+            {topGap ? (
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-slate-500">Primary open question</dt>
+                <dd className="mt-1 font-semibold text-slate-900">{topGap.concern}</dd>
+                <dd className="mt-1 text-xs text-slate-500">Impact: {topGap.impact}</dd>
+              </div>
+            ) : null}
+          </dl>
+        ) : null}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h4 className="text-base font-semibold text-slate-900">Evidence we stand behind</h4>
+        <p className="mt-1 text-sm text-slate-600">Claims with citations or data that held up under automated review.</p>
+        <ul className="mt-4 space-y-3 text-sm text-slate-700">
+          {report.evidenceBase.strongEvidence.map((item, idx) => (
+            <li key={`evidence-${idx}`} className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <CheckCircle2 className="mt-1 h-5 w-5 text-emerald-500" />
+              <div>
+                <p className="font-medium text-slate-900">{item.claim}</p>
+                <p className="text-xs text-slate-500">Source: {item.source}</p>
+                {item.notes ? <p className="mt-1 text-xs text-slate-500">{item.notes}</p> : null}
+                <p className="mt-1 text-xs text-slate-400">Confidence: {item.verificationStatus}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h4 className="text-base font-semibold text-slate-900">Gaps and follow-ups</h4>
+        <p className="mt-1 text-sm text-slate-600">Where uncertainty remains and what we would chase next.</p>
+        <ul className="mt-4 space-y-3 text-sm text-slate-700">
+          {report.evidenceBase.gaps.map((gap, idx) => (
+            <li key={`gap-${idx}`} className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <AlertTriangle className="mt-1 h-5 w-5 text-amber-500" />
+              <div>
+                <p className="font-medium text-slate-900">{gap.concern}</p>
+                <p className="text-xs text-slate-500">Impact: {gap.impact}</p>
+                <p className="text-xs text-slate-500">Severity: {gap.severity}</p>
+                <p className="mt-1 text-xs text-slate-400">{gap.resolvableWithExpertAnalysis ? 'Expert outreach planned.' : 'Track internally for now.'}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+        {report.evidenceBase.assumptions.length ? (
+          <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Assumptions we made</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-500">
+              {report.evidenceBase.assumptions.map((assumption) => (
+                <li key={assumption}>{assumption}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </section>
+    </div>
+  )
+}
+
+interface ReproReportState {
+  loading: boolean
+  error: string
+  payload: VerifyReproducibilityPayload | null
+}
+
+function ReproducibilityReportPreview({ paperId }: { paperId: string }) {
+  const staticReport = paperId ? VERIFICATION_DATA[paperId] : undefined
+  const isLandingSample = Boolean(SAMPLE_PAPERS.find((paper) => paper.id === paperId))
+  const [{ loading, error, payload }, setState] = useState<ReproReportState>({
+    loading: true,
+    error: '',
+    payload: null
+  })
+
+  useEffect(() => {
+    if (!paperId) {
+      setState({ loading: false, error: '', payload: null })
+      return
+    }
+
+    if (staticReport) {
+      setState({ loading: false, error: '', payload: null })
+      return
+    }
+
+    if (isLandingSample) {
+      setState({ loading: false, error: '', payload: null })
+      return
+    }
+
+    let cancelled = false
+    setState({ loading: true, error: '', payload: null })
+
+    fetch(`/api/papers/${paperId}/reproducibility`)
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Request failed with status ${response.status}`)
+        }
+        const data = await response.json()
+        if (!cancelled) {
+          setState({ loading: false, error: '', payload: data?.report ?? null })
+        }
+      })
+      .catch((requestError: unknown) => {
+        if (cancelled) {
+          return
+        }
+        const message = requestError instanceof Error ? requestError.message : 'Unexpected error'
+        setState({ loading: false, error: message, payload: null })
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [paperId, staticReport, isLandingSample])
+
+  if (staticReport) {
+    return <StaticReproReport report={staticReport} />
+  }
+
+  if (!paperId) {
+    return (
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-600">
+        Select a paper to generate a reproducibility briefing.
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div key={index} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="h-4 w-1/2 animate-pulse rounded bg-slate-200" />
+            <div className="mt-3 h-3 w-2/3 animate-pulse rounded bg-slate-200/80" />
+            <div className="mt-2 h-3 w-1/3 animate-pulse rounded bg-slate-200/70" />
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+        We could not generate the reproducibility summary. {error}
+      </div>
+    )
+  }
+
+  if (!payload) {
+    return (
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-700">
+        No reproducibility data is available for this paper yet.
+      </div>
+    )
+  }
+
+  const {
+    summary,
+    assessment,
+    timeEstimate,
+    costEstimate,
+    skillLevel,
+    feasibilityFactors,
+    environment,
+    hyperparameters,
+    seeds,
+    replicationEvidence,
+    risks,
+    gaps,
+    reproductionPlan,
+    sources,
+    metadata
+  } = payload
+
+  const environmentSections = [
+    { title: 'Artefacts', items: environment.artefacts },
+    { title: 'Datasets', items: environment.datasets },
+    { title: 'Code', items: environment.code },
+    { title: 'Hardware', items: environment.hardware },
+    { title: 'Tooling', items: environment.tooling }
+  ].filter((section) => section.items.length > 0)
+
+  const isFallback = metadata.status === 'fallback'
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="space-y-2">
+            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Reproducibility assessment · {assessment}
+            </span>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm max-w-none text-slate-900">
+              {summary}
+            </ReactMarkdown>
+          </div>
+          <div className="grid gap-3 text-sm text-slate-700 sm:grid-cols-3">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-slate-500">Time to reproduce</p>
+              <p className="mt-1 font-semibold text-slate-900">{timeEstimate}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-slate-500">Estimated cost</p>
+              <p className="mt-1 font-semibold text-slate-900">{costEstimate}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-slate-500">Skill level</p>
+              <p className="mt-1 font-semibold text-slate-900">{skillLevel}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {isFallback ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
+          <p className="text-sm font-medium text-amber-900">
+            Automated coverage is limited for this paper.
+          </p>
+          <p className="mt-1 text-xs text-amber-700">{metadata.notes}</p>
+        </section>
+      ) : null}
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h4 className="text-base font-semibold text-slate-900">Feasibility factors</h4>
+        <ul className="mt-3 space-y-2 text-sm text-slate-700">
+          {feasibilityFactors.map((factor, index) => (
+            <li key={`factor-${index}`} className="flex gap-3">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 text-sky-500" />
+              <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm max-w-none text-slate-700">
+                {factor}
+              </ReactMarkdown>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {environmentSections.length ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h4 className="text-base font-semibold text-slate-900">Environment checklist</h4>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            {environmentSections.map((section) => (
+              <div key={section.title} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{section.title}</p>
+                <ul className="mt-2 space-y-1 text-sm text-slate-700">
+                  {section.items.map((item, index) => (
+                    <li key={`${section.title}-${index}`}>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm max-w-none text-slate-700">
+                        {item}
+                      </ReactMarkdown>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {hyperparameters.length || seeds.length ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="grid gap-6 md:grid-cols-2">
+            <div>
+              <h4 className="text-base font-semibold text-slate-900">Hyperparameters</h4>
+              <ul className="mt-3 space-y-2 text-sm text-slate-700">
+                {hyperparameters.map((entry, index) => (
+                  <li key={`hyper-${index}`}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm max-w-none text-slate-700">
+                      {entry}
+                    </ReactMarkdown>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-base font-semibold text-slate-900">Control seeds</h4>
+              <ul className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-700">
+                {seeds.map((seed, index) => (
+                  <li key={`seed-${index}`} className="rounded border border-slate-200 bg-slate-50 px-2 py-1">
+                    {seed}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {replicationEvidence.length ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h4 className="text-base font-semibold text-slate-900">Replication evidence</h4>
+          <ul className="mt-3 space-y-3">
+            {replicationEvidence.map((item, index) => (
+              <li key={`evidence-${index}`} className="flex gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <CheckCircle2 className="mt-1 h-5 w-5 text-emerald-500" />
+                <div className="space-y-2 text-sm text-slate-700">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm max-w-none text-slate-700">
+                    {item.description}
+                  </ReactMarkdown>
+                  <p className="text-xs text-slate-500">Confidence: {item.confidence}</p>
+                  {item.sources.length ? (
+                    <p className="text-xs text-slate-500">Sources: {item.sources.join(', ')}</p>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {risks.length ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h4 className="text-base font-semibold text-slate-900">Risks to manage</h4>
+          <ul className="mt-3 space-y-3">
+            {risks.map((risk, index) => (
+              <li key={`risk-${index}`} className="flex gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <AlertTriangle className="mt-1 h-5 w-5 text-amber-500" />
+                <div className="space-y-2 text-sm text-slate-700">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm max-w-none text-slate-700">
+                    {risk.description}
+                  </ReactMarkdown>
+                  <p className="text-xs text-slate-500">Severity: {risk.severity}</p>
+                  {risk.sources.length ? (
+                    <p className="text-xs text-slate-500">Sources: {risk.sources.join(', ')}</p>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {gaps.length ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h4 className="text-base font-semibold text-slate-900">Information gaps</h4>
+          <ul className="mt-3 space-y-3">
+            {gaps.map((gap, index) => (
+              <li key={`gap-${index}`} className="flex gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <AlertTriangle className="mt-1 h-5 w-5 text-red-500" />
+                <div className="space-y-2 text-sm text-slate-700">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm max-w-none text-slate-700">
+                    {gap.description}
+                  </ReactMarkdown>
+                  <p className="text-xs text-slate-500">Impact: {gap.impact}</p>
+                  <p className="text-xs text-slate-500">Severity: {gap.severity}</p>
+                  {gap.sources.length ? (
+                    <p className="text-xs text-slate-500">Sources: {gap.sources.join(', ')}</p>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h4 className="text-base font-semibold text-slate-900">Minimal reproduction plan</h4>
+        <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-slate-700">
+          {reproductionPlan.map((step, index) => (
+            <li key={`step-${index}`}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm max-w-none text-slate-700">
+                {step}
+              </ReactMarkdown>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h4 className="text-base font-semibold text-slate-900">Sources</h4>
+        <ul className="mt-3 space-y-2 text-sm text-slate-700">
+          {sources.map((source, index) => {
+            const isLink = typeof source.url === 'string' && source.url.toLowerCase().startsWith('http')
+            return (
+              <li key={`source-${index}`}>
+                {isLink ? (
+                  <a
+                    href={source.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sky-600 underline decoration-sky-400 decoration-2 underline-offset-2"
+                  >
+                    {source.label}
+                  </a>
+                ) : (
+                  <span className="text-slate-600">{source.label}</span>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+        <p className="mt-4 text-xs text-slate-400">
+          Query executed in {metadata.durationMs} ms · Citations collected: {metadata.citationCount}
+        </p>
+      </section>
+    </div>
+  )
+}
+
+function ClaimsVerificationPlaceholder() {
+  return (
+    <div className="space-y-6">
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h3 className="text-lg font-semibold text-slate-900">Claims verification is coming soon</h3>
+        <p className="mt-2 text-sm text-slate-600">
+          We are reusing the reproducibility research pipeline to surface claim-level evidence. This button will activate once the claim grader is ready.
+        </p>
+      </section>
+      <section className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 shadow-sm text-sm text-slate-600">
+        VERIFY CLAIMS remains disabled so we can ship the reproducibility flow first.
+      </section>
+    </div>
+  )
 }
 
 interface UserProfile {
@@ -2008,7 +1923,7 @@ export default function Home() {
   const [scrapedContentLoading, setScrapedContentLoading] = useState(false);
   const [scrapedContentError, setScrapedContentError] = useState('');
   const [scrapedContentIsStructured, setScrapedContentIsStructured] = useState(false);
-  const [verificationMode, setVerificationMode] = useState<'repro' | 'claims'>('repro');
+  const [verificationMode, setVerificationMode] = useState<'repro' | 'claims' | null>(null);
 
   const profileManualKeywordsRef = useRef('');
   const isMountedRef = useRef(true);
@@ -2166,14 +2081,14 @@ export default function Home() {
 
   // Set initial selected paper based on authentication status
   useEffect(() => {
-    if (!user && !selectedPaper && keywordResults.length === 0 && !lastKeywordQuery) {
-      // Non-authenticated users start with first sample paper selected
-      setSelectedPaper(SAMPLE_PAPERS[0]);
-    } else if (user && selectedPaper?.source === 'sample_data' && keywordResults.length === 0) {
-      // Authenticated users don't start with sample papers selected
+    if (user && selectedPaper?.source === 'sample_data' && keywordResults.length === 0) {
       setSelectedPaper(null);
     }
-  }, [user, selectedPaper, keywordResults.length, lastKeywordQuery]);
+  }, [user, selectedPaper, keywordResults.length]);
+
+  useEffect(() => {
+    setVerificationMode(null);
+  }, [selectedPaper?.id]);
 
   const refreshProfile = useCallback(async () => {
     if (!user) {
@@ -2453,10 +2368,6 @@ export default function Home() {
   useEffect(() => {
     setScrapedContent(null);
     setScrapedContentError('');
-  }, [selectedPaper?.id]);
-
-  useEffect(() => {
-    setVerificationMode('repro');
   }, [selectedPaper?.id]);
 
   const runProfileEnrichment = useCallback(
@@ -2918,7 +2829,15 @@ export default function Home() {
   const shouldShowProfileSpinner = Boolean(user) && profileLoading;
   const selectedPaperPrimaryLink = selectedPaper ? getPrimaryLink(selectedPaper) : null;
 
+  const isLandingSampleSelected = selectedPaper ? SAMPLE_PAPERS.some((paper) => paper.id === selectedPaper.id) : false;
+
   const handleVerificationModeChange = (mode: 'repro' | 'claims') => {
+    const requiresAuthentication = mode === 'repro' && !user && !isLandingSampleSelected;
+    if (requiresAuthentication) {
+      authModal.openSignup();
+      return;
+    }
+
     setVerificationMode(mode);
     requestAnimationFrame(() => {
       document.getElementById('verification-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2935,8 +2854,15 @@ export default function Home() {
     }
     return classes.join(' ');
   };
+  const hasSelectedPaper = Boolean(selectedPaper);
+  const hasStaticVerification = selectedPaper ? Boolean(VERIFICATION_DATA[selectedPaper.id]) : false;
+  const isClaimsActionEnabled = false;
 
-  const hasVerificationData = selectedPaper && selectedPaper.id in VERIFICATION_DATA;
+  useEffect(() => {
+    if (!isClaimsActionEnabled && verificationMode === 'claims') {
+      setVerificationMode(null);
+    }
+  }, [isClaimsActionEnabled, verificationMode]);
 
   const verificationButtons = (
     <div className="flex items-center gap-3 sm:gap-4">
@@ -2944,34 +2870,34 @@ export default function Home() {
         <button
           type="button"
           onClick={() => handleVerificationModeChange('repro')}
-          className={getVerificationButtonClasses('repro', !hasVerificationData)}
+          className={getVerificationButtonClasses('repro', !hasSelectedPaper)}
           aria-pressed={verificationMode === 'repro'}
-          disabled={!hasVerificationData}
-          title={!hasVerificationData ? 'Verification available only for featured papers' : ''}
+          disabled={!hasSelectedPaper}
+          title={!hasSelectedPaper ? 'Select a paper to generate the reproducibility briefing.' : ''}
         >
           <span className="flex items-center gap-2">
             Verify reproducibility
           </span>
         </button>
         <span
-          className={`h-1 w-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-sky-600 transition-all duration-200 ease-out ${verificationMode === 'repro' && hasVerificationData ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
+          className={`h-1 w-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-sky-600 transition-all duration-200 ease-out ${verificationMode === 'repro' ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
         />
       </div>
       <div className="flex flex-col items-center gap-1">
         <button
           type="button"
           onClick={() => handleVerificationModeChange('claims')}
-          className={getVerificationButtonClasses('claims', !hasVerificationData)}
+          className={getVerificationButtonClasses('claims', !isClaimsActionEnabled)}
           aria-pressed={verificationMode === 'claims'}
-          disabled={!hasVerificationData}
-          title={!hasVerificationData ? 'Verification available only for featured papers' : ''}
+          disabled={!isClaimsActionEnabled}
+          title={isClaimsActionEnabled ? '' : 'Claims verification will unlock once automated grading is ready.'}
         >
           <span className="flex items-center gap-2">
             Verify claims
           </span>
         </button>
         <span
-          className={`h-1 w-full rounded-full bg-gradient-to-r from-violet-400 via-sky-500 to-emerald-400 transition-all duration-200 ease-out ${verificationMode === 'claims' && hasVerificationData ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
+          className={`h-1 w-full rounded-full bg-gradient-to-r from-violet-400 via-sky-500 to-emerald-400 transition-all duration-200 ease-out ${verificationMode === 'claims' ? 'opacity-100 scale-100' : 'opacity-40 scale-90'}`}
         />
       </div>
     </div>
@@ -3915,20 +3841,23 @@ export default function Home() {
                 </div>
 
                 <div id="verification-panel" className="space-y-4">
-                  {hasVerificationData ? (
+                  {hasSelectedPaper ? (
                     verificationMode === 'repro' ? (
                       <ReproducibilityReportPreview paperId={selectedPaper.id} />
+                    ) : verificationMode === 'claims' ? (
+                      hasStaticVerification ? (
+                        <StaticClaimsPreview report={VERIFICATION_DATA[selectedPaper.id]} />
+                      ) : (
+                        <ClaimsVerificationPlaceholder />
+                      )
                     ) : (
-                      <ClaimsVerificationPreview paperId={selectedPaper.id} />
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-600">
+                        Choose a verification track above to load the briefing.
+                      </div>
                     )
                   ) : (
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-8 text-center">
-                      <p className="text-sm font-medium text-slate-600">
-                        Verification data is currently available only for featured papers.
-                      </p>
-                      <p className="mt-2 text-xs text-slate-500">
-                        This feature will be expanded to all papers soon.
-                      </p>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-600">
+                      Select a paper from the feed to generate its reproducibility briefing.
                     </div>
                   )}
                 </div>
