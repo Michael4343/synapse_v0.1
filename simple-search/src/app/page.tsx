@@ -646,44 +646,11 @@ function ReproducibilityReportPreview() {
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="flex gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-sky-50 text-2xl font-semibold text-sky-600">
-              {report.verdict.grade}
-            </div>
-            <div>
-              <div className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${stageMeta.badgeClasses}`}>
-                {stageMeta.label}
-              </div>
-              <h3 className="mt-2 text-lg font-semibold text-slate-900">{report.verdict.mainMessage}</h3>
-              <p className="mt-1 text-sm text-slate-600">{report.paper.title}</p>
-              <p className="text-xs text-slate-500">{report.paper.authors} | {report.paper.venue}</p>
-            </div>
-          </div>
-          <div className="text-sm text-slate-500 md:text-right">
-            <p>Last updated {report.lastUpdated}</p>
-            <p>{stageMeta.description}</p>
-            <p className="mt-1 text-xs uppercase tracking-wide text-slate-400">Confidence: {report.verdict.confidence} ({confidenceSource})</p>
-          </div>
+        <div>
+          <h3 className="text-lg font-semibold text-slate-900">{report.verdict.mainMessage}</h3>
+          <p className="mt-1 text-sm text-slate-600">{report.paper.title}</p>
+          <p className="text-xs text-slate-500">{report.paper.authors} | {report.paper.venue}</p>
         </div>
-        <dl className="mt-6 grid gap-4 text-sm text-slate-700 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-slate-500">Success chance</dt>
-            <dd className="mt-1 font-semibold text-slate-900">{formatProbability(report.verdict.successProbability)}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-slate-500">Time to first result</dt>
-            <dd className="mt-1 font-semibold text-slate-900">{report.verdict.timeToFirstResult}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-slate-500">Estimated cost</dt>
-            <dd className="mt-1 font-semibold text-slate-900">{report.verdict.totalCost}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-slate-500">Skill required</dt>
-            <dd className="mt-1 font-semibold text-slate-900">{report.verdict.skillCeiling}</dd>
-          </div>
-        </dl>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -778,22 +745,13 @@ function ReproducibilityReportPreview() {
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h4 className="text-base font-semibold text-slate-900">Need deeper support?</h4>
-        <p className="mt-1 text-sm text-slate-600">Stage 2 is a paid engagement that closes the remaining gaps.</p>
-        <ul className="mt-3 space-y-2 text-sm text-slate-600">
-          {EXPERT_UPGRADE_NOTES.map((note) => (
-            <li key={note} className="flex items-start gap-2">
-              <span className="mt-2 h-2 w-2 rounded-full bg-slate-400" />
-              <span>{note}</span>
-            </li>
-          ))}
-        </ul>
-        <div className="mt-4 flex flex-col gap-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-          <p>Turnaround: {report.expertEnhancements.turnaround}</p>
+        <p className="mt-1 text-sm text-slate-600">We will reach out and connect you with a subject matter expert to help you reproduce this.</p>
+        <div className="mt-4">
           <button
             type="button"
-            className="w-full rounded-xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white shadow transition hover:bg-sky-500 sm:w-auto"
+            className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50"
           >
-            Request expert analysis (mock)
+            Request expert analysis
           </button>
         </div>
       </section>
@@ -810,27 +768,8 @@ function ClaimsVerificationPreview() {
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="flex gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-sky-50 text-sm font-semibold uppercase text-sky-600">
-              Claims
-            </div>
-            <div>
-              <div className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${stageMeta.badgeClasses}`}>
-                {stageMeta.label}
-              </div>
-              <h3 className="mt-2 text-lg font-semibold text-slate-900">Deep research snapshot</h3>
-              <p className="mt-1 text-sm text-slate-600">Literature, supplementary data, and community notes reviewed for this paper.</p>
-            </div>
-          </div>
-          <div className="text-sm text-slate-500 md:text-right">
-            <p>Last updated {report.lastUpdated}</p>
-            <p>Reviewers: {report.reviewers.join(', ')}</p>
-            <p className="mt-1 text-xs uppercase tracking-wide text-slate-400">Focus: Evidence confidence & open gaps</p>
-          </div>
-        </div>
         {topClaim ? (
-          <dl className="mt-6 grid gap-4 text-sm text-slate-700 sm:grid-cols-2">
+          <dl className="grid gap-4 text-sm text-slate-700 sm:grid-cols-2">
             <div>
               <dt className="text-xs uppercase tracking-wide text-slate-500">Headline finding</dt>
               <dd className="mt-1 font-semibold text-slate-900">{topClaim.claim}</dd>
