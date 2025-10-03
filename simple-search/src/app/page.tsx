@@ -238,8 +238,8 @@ function ProcessedPaperContent({ processedContent }: { processedContent: string 
 }
 
 const SHELL_CLASSES = 'min-h-screen bg-slate-50 text-slate-900 flex flex-col xl:h-screen xl:overflow-hidden';
-const FEED_CARD_CLASSES = 'flex h-full min-h-0 flex-col space-y-6 px-2 pt-4 pb-12 xl:px-6 xl:pb-16';
-const DETAIL_SHELL_CLASSES = 'flex h-full min-h-0 flex-col space-y-6 px-2 pt-4 pb-12 xl:px-6 xl:pb-16';
+const FEED_CARD_CLASSES = 'flex h-full min-h-0 flex-col space-y-6 px-2 pt-4 pb-12 xl:px-4 xl:pb-16';
+const DETAIL_SHELL_CLASSES = 'flex h-full min-h-0 flex-col space-y-6 px-2 pt-4 pb-12 xl:px-4 xl:pb-16';
 const DETAIL_HERO_CLASSES = 'rounded-3xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-4 shadow-inner';
 const TILE_BASE_CLASSES = 'group relative flex cursor-pointer flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 transition duration-150 hover:border-slate-300 hover:bg-slate-50 max-h-[400px] overflow-y-auto';
 const TILE_SELECTED_CLASSES = 'border-sky-400 bg-sky-50 ring-1 ring-sky-100';
@@ -258,7 +258,7 @@ const RESULT_SUMMARY_CLASSES = 'flex flex-wrap items-baseline gap-2 text-sm text
 const DETAIL_METADATA_CLASSES = 'space-y-3 text-sm text-slate-600';
 const DETAIL_LINK_CLASSES = 'text-lg font-semibold text-sky-600 underline decoration-sky-300 underline-offset-4 transition hover:text-sky-700';
 const TILE_LINK_CLASSES = 'inline-flex items-center text-xs font-semibold text-sky-600 underline decoration-sky-300 underline-offset-4 transition hover:text-sky-700';
-const SIDEBAR_CARD_CLASSES = 'flex flex-col gap-6 px-2 pt-4 pb-10 xl:px-4 xl:pt-6 xl:pb-12';
+const SIDEBAR_CARD_CLASSES = 'flex flex-col gap-6 px-2 pt-4 pb-10 xl:px-3 xl:pt-6 xl:pb-12';
 const SIDEBAR_PRIMARY_BUTTON_CLASSES = 'flex items-center justify-center rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(56,189,248,0.2)] transition hover:-translate-y-0.5 hover:bg-sky-400';
 const SIDEBAR_SECONDARY_BUTTON_CLASSES = 'flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900';
 const SEARCH_SPINNER_CLASSES = 'inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent';
@@ -3491,10 +3491,10 @@ export default function Home() {
 
   return (
     <div className={SHELL_CLASSES}>
-      <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-6 px-4 py-6 xl:px-8 min-h-0">
-        <div className="relative flex flex-1 flex-col gap-6 xl:flex-row xl:gap-8 min-h-0 xl:overflow-hidden">
+      <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-4 px-3 py-6 xl:px-6 min-h-0">
+        <div className="relative flex flex-1 flex-col gap-4 xl:flex-row xl:gap-5 min-h-0 xl:overflow-hidden">
           <aside
-            className="relative flex min-h-0 flex-col transition-all duration-300 ease-in-out xl:basis-[22%] xl:max-w-[22%] xl:h-full xl:overflow-y-auto xl:pr-4 xl:border-r xl:border-slate-200/70"
+            className="relative flex min-h-0 flex-col transition-all duration-300 ease-in-out xl:basis-[22%] xl:max-w-[22%] xl:h-full xl:overflow-y-auto xl:pr-2 xl:border-r xl:border-slate-200/70"
           >
             <div
               className={`${SIDEBAR_CARD_CLASSES} xl:transition-all xl:duration-300 xl:ease-out xl:translate-x-0 xl:opacity-100`}
@@ -3815,7 +3815,7 @@ export default function Home() {
           </section>
 
           <aside
-            className={`min-h-0 min-w-0 transition-all duration-300 ${DETAIL_SHELL_CLASSES} xl:basis-[38%] xl:h-full xl:overflow-y-auto xl:pl-4 xl:border-l xl:border-slate-200/70 2xl:basis-[40%]`}
+            className={`min-h-0 min-w-0 transition-all duration-300 ${DETAIL_SHELL_CLASSES} xl:basis-[38%] xl:h-full xl:overflow-y-auto xl:pl-2 xl:border-l xl:border-slate-200/70 2xl:basis-[40%]`}
           >
             {selectedPaper ? (
               <div className="flex h-full flex-col gap-4">
