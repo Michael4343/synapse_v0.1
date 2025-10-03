@@ -1526,9 +1526,11 @@ function ReproducibilityReportPreview({ paperId }: { paperId: string }) {
             <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
               Reproducibility assessment · {assessment}
             </span>
-            <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm max-w-none text-slate-900">
-              {summary}
-            </ReactMarkdown>
+            <div className="prose prose-sm max-w-none text-slate-900">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {summary}
+              </ReactMarkdown>
+            </div>
           </div>
           <div className="grid gap-3 text-sm text-slate-700 sm:grid-cols-3">
             <div>
@@ -1562,9 +1564,11 @@ function ReproducibilityReportPreview({ paperId }: { paperId: string }) {
           {feasibilityFactors.map((factor, index) => (
             <li key={`factor-${index}`} className="flex gap-3">
               <CheckCircle2 className="mt-0.5 h-4 w-4 text-sky-500" />
-              <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm max-w-none text-slate-700">
-                {factor}
-              </ReactMarkdown>
+              <div className="prose prose-sm max-w-none text-slate-700">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {factor}
+                </ReactMarkdown>
+              </div>
             </li>
           ))}
         </ul>
@@ -1580,9 +1584,11 @@ function ReproducibilityReportPreview({ paperId }: { paperId: string }) {
                 <ul className="mt-2 space-y-1 text-sm text-slate-700">
                   {section.items.map((item, index) => (
                     <li key={`${section.title}-${index}`}>
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm max-w-none text-slate-700">
-                        {item}
-                      </ReactMarkdown>
+                      <div className="prose prose-sm max-w-none text-slate-700">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {item}
+                        </ReactMarkdown>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -1600,9 +1606,11 @@ function ReproducibilityReportPreview({ paperId }: { paperId: string }) {
               <ul className="mt-3 space-y-2 text-sm text-slate-700">
                 {hyperparameters.map((entry, index) => (
                   <li key={`hyper-${index}`}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm max-w-none text-slate-700">
-                      {entry}
-                    </ReactMarkdown>
+                    <div className="prose prose-sm max-w-none text-slate-700">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {entry}
+                      </ReactMarkdown>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -1629,9 +1637,11 @@ function ReproducibilityReportPreview({ paperId }: { paperId: string }) {
               <li key={`evidence-${index}`} className="flex gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4">
                 <CheckCircle2 className="mt-1 h-5 w-5 text-emerald-500" />
                 <div className="space-y-2 text-sm text-slate-700">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm max-w-none text-slate-700">
-                    {item.description}
-                  </ReactMarkdown>
+                  <div className="prose prose-sm max-w-none text-slate-700">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {item.description}
+                    </ReactMarkdown>
+                  </div>
                   <p className="text-xs text-slate-500">Confidence: {item.confidence}</p>
                   {item.sources.length ? (
                     <p className="text-xs text-slate-500">Sources: {item.sources.join(', ')}</p>
@@ -1651,9 +1661,11 @@ function ReproducibilityReportPreview({ paperId }: { paperId: string }) {
               <li key={`risk-${index}`} className="flex gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4">
                 <AlertTriangle className="mt-1 h-5 w-5 text-amber-500" />
                 <div className="space-y-2 text-sm text-slate-700">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm max-w-none text-slate-700">
-                    {risk.description}
-                  </ReactMarkdown>
+                  <div className="prose prose-sm max-w-none text-slate-700">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {risk.description}
+                    </ReactMarkdown>
+                  </div>
                   <p className="text-xs text-slate-500">Severity: {risk.severity}</p>
                   {risk.sources.length ? (
                     <p className="text-xs text-slate-500">Sources: {risk.sources.join(', ')}</p>
@@ -1673,9 +1685,11 @@ function ReproducibilityReportPreview({ paperId }: { paperId: string }) {
               <li key={`gap-${index}`} className="flex gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4">
                 <AlertTriangle className="mt-1 h-5 w-5 text-red-500" />
                 <div className="space-y-2 text-sm text-slate-700">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm max-w-none text-slate-700">
-                    {gap.description}
-                  </ReactMarkdown>
+                  <div className="prose prose-sm max-w-none text-slate-700">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {gap.description}
+                    </ReactMarkdown>
+                  </div>
                   <p className="text-xs text-slate-500">Impact: {gap.impact}</p>
                   <p className="text-xs text-slate-500">Severity: {gap.severity}</p>
                   {gap.sources.length ? (
@@ -1693,9 +1707,11 @@ function ReproducibilityReportPreview({ paperId }: { paperId: string }) {
         <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-slate-700">
           {reproductionPlan.map((step, index) => (
             <li key={`step-${index}`}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm max-w-none text-slate-700">
-                {step}
-              </ReactMarkdown>
+              <div className="prose prose-sm max-w-none text-slate-700">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {step}
+                </ReactMarkdown>
+              </div>
             </li>
           ))}
         </ol>
