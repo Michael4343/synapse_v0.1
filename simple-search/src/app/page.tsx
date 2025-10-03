@@ -2567,6 +2567,18 @@ export default function Home() {
       user,
     ]);
 
+  const handleRefreshPersonalFeed = useCallback(() => {
+    setKeywordQuery('');
+    setYearQuery('');
+    setKeywordResults([]);
+    setKeywordError('');
+    setLastKeywordQuery('');
+    setLastYearQuery(null);
+    setSelectedListId(null);
+    setListItems([]);
+    loadPersonalFeed();
+  }, [loadPersonalFeed]);
+
   useEffect(() => {
     if (profile) {
       setProfileFormOrcid(formatOrcidId(profile.orcid_id ?? ''));
@@ -3537,19 +3549,6 @@ export default function Home() {
       setKeywordLoading(false);
     }
   };
-
-  const handleRefreshPersonalFeed = useCallback(() => {
-    setKeywordQuery('');
-    setYearQuery('');
-    setKeywordResults([]);
-    setKeywordError('');
-    setLastKeywordQuery('');
-    setLastYearQuery(null);
-    setSelectedListId(null);
-    setListItems([]);
-    loadPersonalFeed();
-  }, [loadPersonalFeed]);
-
 
   const handleAccountDropdownToggle = useCallback(() => {
     setAccountDropdownVisible((previous) => !previous);
