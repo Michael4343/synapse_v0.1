@@ -14,7 +14,7 @@ interface AuthModalProps {
 
 const MODAL_CONTAINER_CLASSES = 'fixed inset-0 z-50 flex items-center justify-center px-4 py-4 overflow-y-auto'
 const MODAL_BACKDROP_CLASSES = 'absolute inset-0 bg-slate-900/40 backdrop-blur-sm'
-const MODAL_PANEL_CLASSES = 'relative z-10 w-full max-w-2xl rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 shadow-[0_30px_80px_rgba(15,23,42,0.25)] my-4'
+const MODAL_PANEL_CLASSES = 'relative z-10 w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_30px_80px_rgba(15,23,42,0.25)] my-4 max-h-[90vh] overflow-y-auto'
 const MODAL_HEADER_CLASSES = 'text-center'
 const MODAL_TITLE_CLASSES = 'text-2xl font-semibold text-slate-900'
 const MODAL_SUBTITLE_CLASSES = 'mt-2 text-sm text-slate-600'

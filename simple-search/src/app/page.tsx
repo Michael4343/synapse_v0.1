@@ -250,9 +250,9 @@ const SEARCH_CONTAINER_CLASSES = 'relative flex items-center overflow-hidden rou
 const SEARCH_INPUT_CLASSES = 'w-full bg-transparent px-5 py-3.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none';
 const SEARCH_BUTTON_CLASSES = 'mr-2 inline-flex items-center rounded-xl bg-sky-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-sky-400';
 const FILTER_BAR_CLASSES = 'flex flex-wrap gap-2 pt-4';
-const FILTER_CHECKBOX_LABEL_CLASSES = 'inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 whitespace-nowrap';
-const FILTER_CHECKBOX_DISABLED_LABEL_CLASSES = 'inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-100 px-2.5 py-2 text-xs font-medium text-slate-400 opacity-80 cursor-not-allowed whitespace-nowrap';
-const FILTER_CHECKBOX_INPUT_CLASSES = 'h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500';
+const FILTER_CHECKBOX_LABEL_CLASSES = 'inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 whitespace-nowrap';
+const FILTER_CHECKBOX_DISABLED_LABEL_CLASSES = 'inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-100 px-2 py-1.5 text-xs font-medium text-slate-400 opacity-80 cursor-not-allowed whitespace-nowrap';
+const FILTER_CHECKBOX_INPUT_CLASSES = 'h-3.5 w-3.5 rounded border-slate-300 text-sky-600 focus:ring-sky-500';
 const FILTER_CHECKBOX_INPUT_DISABLED_CLASSES = 'text-slate-300 focus:ring-0';
 const RESULT_SUMMARY_CLASSES = 'flex flex-wrap items-baseline gap-2 text-sm text-slate-600';
 const DETAIL_METADATA_CLASSES = 'space-y-3 text-sm text-slate-600';
@@ -1113,7 +1113,7 @@ function getFeasibilityTone(score: number): string {
   return 'text-red-600'
 }
 
-function StaticReproReport({ report }: { report: MockReproReport }) {
+function StaticReproReport({ report, onRequestReview }: { report: MockReproReport; onRequestReview?: () => void }) {
   const questions = report.feasibilityQuestions
 
   const [answers, setAnswers] = useState<Record<string, 'yes' | 'no' | null>>(() => {
@@ -1332,6 +1332,7 @@ function StaticReproReport({ report }: { report: MockReproReport }) {
         <div className="flex items-start gap-4">
           <button
             type="button"
+            onClick={onRequestReview}
             className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 whitespace-nowrap"
           >
             Request Community Review
@@ -1343,7 +1344,7 @@ function StaticReproReport({ report }: { report: MockReproReport }) {
   )
 }
 
-function StaticClaimsPreview({ report }: { report: MockReproReport }) {
+function StaticClaimsPreview({ report, onRequestReview }: { report: MockReproReport; onRequestReview?: () => void }) {
   const topClaim = report.evidenceBase.strongEvidence[0]
   const topGap = report.evidenceBase.gaps[0]
 
@@ -1442,6 +1443,7 @@ function StaticClaimsPreview({ report }: { report: MockReproReport }) {
         <div className="flex items-start gap-4">
           <button
             type="button"
+            onClick={onRequestReview}
             className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 whitespace-nowrap"
           >
             Request Community Review
@@ -1459,7 +1461,7 @@ interface ReproReportState {
   payload: VerifyReproducibilityPayload | null
 }
 
-function ReproducibilityReportPreview({ paperId }: { paperId: string }) {
+function ReproducibilityReportPreview({ paperId, onRequestReview }: { paperId: string; onRequestReview?: () => void }) {
   const staticReport = paperId ? VERIFICATION_DATA[paperId] : undefined
   const isLandingSample = Boolean(SAMPLE_PAPERS.find((paper) => paper.id === paperId))
   const [{ loading, error, payload }, setState] = useState<ReproReportState>({
@@ -1511,7 +1513,7 @@ function ReproducibilityReportPreview({ paperId }: { paperId: string }) {
   }, [paperId, staticReport, isLandingSample])
 
   if (staticReport) {
-    return <StaticReproReport report={staticReport} />
+    return <StaticReproReport report={staticReport} onRequestReview={onRequestReview} />
   }
 
   if (!paperId) {
@@ -1810,7 +1812,7 @@ function ReproducibilityReportPreview({ paperId }: { paperId: string }) {
   )
 }
 
-function ClaimsVerificationPlaceholder() {
+function ClaimsVerificationPlaceholder({ onRequestReview }: { onRequestReview?: () => void }) {
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -1826,6 +1828,7 @@ function ClaimsVerificationPlaceholder() {
         <div className="flex items-start gap-4">
           <button
             type="button"
+            onClick={onRequestReview}
             className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 whitespace-nowrap"
           >
             Request Community Review
@@ -3577,7 +3580,7 @@ export default function Home() {
 
   return (
     <div className={SHELL_CLASSES}>
-      <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-4 px-3 py-6 xl:px-6 min-h-0">
+      <main className="mx-auto flex w-full flex-1 flex-col gap-4 px-3 py-6 xl:px-6 min-h-0">
         <div className="relative flex flex-1 flex-col gap-4 xl:flex-row xl:gap-5 min-h-0 xl:overflow-hidden">
           <aside
             className="relative flex min-h-0 flex-col transition-all duration-300 ease-in-out xl:basis-[22%] xl:max-w-[22%] xl:h-full xl:overflow-y-auto xl:pr-2 xl:border-r xl:border-slate-200/70"
@@ -3788,10 +3791,10 @@ export default function Home() {
                 {user && hasKeywords && (keywordResults.length > 0 || lastKeywordQuery) && (
                   <button
                     onClick={handleRefreshPersonalFeed}
-                    className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
+                    className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
                     title="Back to Personal Feed"
                   >
-                    <ArrowLeft className="h-4 w-4" />
+                    <ArrowLeft className="h-3.5 w-3.5" />
                   </button>
                 )}
                 <label className={FILTER_CHECKBOX_LABEL_CLASSES}>
@@ -3980,12 +3983,12 @@ export default function Home() {
                 <div id="verification-panel" className="space-y-4">
                   {hasSelectedPaper ? (
                     verificationMode === 'repro' ? (
-                      <ReproducibilityReportPreview paperId={selectedPaper.id} />
+                      <ReproducibilityReportPreview paperId={selectedPaper.id} onRequestReview={authModal.openSignup} />
                     ) : verificationMode === 'claims' ? (
                       hasStaticVerification ? (
-                        <StaticClaimsPreview report={VERIFICATION_DATA[selectedPaper.id]} />
+                        <StaticClaimsPreview report={VERIFICATION_DATA[selectedPaper.id]} onRequestReview={authModal.openSignup} />
                       ) : (
-                        <ClaimsVerificationPlaceholder />
+                        <ClaimsVerificationPlaceholder onRequestReview={authModal.openSignup} />
                       )
                     ) : (
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-600">
