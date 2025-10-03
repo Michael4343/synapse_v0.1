@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { ReactNode } from 'react';
-import { LogOut, Rss, User, UserCog, X, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { LogOut, Rss, User, UserCog, X, AlertTriangle, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../lib/auth-context';
 import { useAuthModal, getUserDisplayName } from '../lib/auth-hooks';
 import { createClient } from '../lib/supabase';
@@ -2857,6 +2857,15 @@ export default function Home() {
   } else if (keywordResults.length > 0) {
     mainFeedContent = (
       <>
+        {user && hasKeywords && (
+          <button
+            onClick={handleRefreshPersonalFeed}
+            className="mb-4 inline-flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-200 hover:text-slate-900"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Personal Feed
+          </button>
+        )}
         <div className={RESULT_SUMMARY_CLASSES}>
           <span>Showing</span>
           <span className="text-base font-semibold text-slate-900">{keywordResults.length}</span>
@@ -2873,9 +2882,20 @@ export default function Home() {
     );
   } else if (lastKeywordQuery && !keywordError) {
     mainFeedContent = (
-      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-100 px-6 py-10 text-center text-sm text-slate-600">
-        Nothing surfaced for this query yet. Try refining keywords or toggling a different source.
-      </div>
+      <>
+        {user && hasKeywords && (
+          <button
+            onClick={handleRefreshPersonalFeed}
+            className="mb-4 inline-flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-200 hover:text-slate-900"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Personal Feed
+          </button>
+        )}
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-100 px-6 py-10 text-center text-sm text-slate-600">
+          Nothing surfaced for this query yet. Try refining keywords or toggling a different source.
+        </div>
+      </>
     );
   } else if (shouldShowPersonalFeed) {
     if ((personalFeedLoading || profileSaveLoading) && personalFeedResults.length === 0) {

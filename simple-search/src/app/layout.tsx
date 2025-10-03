@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "../lib/auth-context";
@@ -36,11 +37,13 @@ export default function RootLayout({
         className={`${geistSans.className} ${geistSans.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning
       >
-        <PostHogProvider>
-          <AuthProvider>
-            {children}
-          </AuthProvider>
-        </PostHogProvider>
+        <Suspense fallback={null}>
+          <PostHogProvider>
+            <AuthProvider>
+              {children}
+            </AuthProvider>
+          </PostHogProvider>
+        </Suspense>
       </body>
     </html>
   );
