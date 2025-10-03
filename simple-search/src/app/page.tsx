@@ -1178,7 +1178,6 @@ function StaticReproReport({ report }: { report: MockReproReport }) {
         <div>
           <h3 className="text-lg font-semibold text-slate-900">{report.verdict.mainMessage}</h3>
           <p className="mt-1 text-sm text-slate-600">{stageMeta.description}</p>
-          <p className="mt-1 text-xs text-slate-500">{confidenceSource}</p>
         </div>
       </section>
 
@@ -1242,15 +1241,9 @@ function StaticReproReport({ report }: { report: MockReproReport }) {
             const dependenciesText = phase.dependencies.length ? `Depends on: ${phase.dependencies.join(', ')}` : null
             return (
               <div key={phase.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">{phase.phase}</p>
-                    <p className="text-xs text-slate-500">{phase.duration} | {phase.cost}</p>
-                    {dependenciesText ? <p className="text-xs text-slate-400">{dependenciesText}</p> : null}
-                  </div>
-                  <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${RISK_BADGES[phase.riskLevel]}`}>
-                    Risk {phase.riskLevel}
-                  </span>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">{phase.phase}</p>
+                  {dependenciesText ? <p className="text-xs text-slate-400">{dependenciesText}</p> : null}
                 </div>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <div>
@@ -1274,20 +1267,15 @@ function StaticReproReport({ report }: { report: MockReproReport }) {
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h4 className="text-base font-semibold text-slate-900">Need deeper support?</h4>
-        <p className="mt-1 text-sm text-slate-600">We will reach out and connect you with a subject matter expert to help you reproduce this.</p>
+        <p className="mt-1 text-sm text-slate-600">We'll compile support resources from patents, PhD theses, and facilitate contact with the original study authors.</p>
         <div className="mt-4">
           <button
             type="button"
             className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50"
           >
-            Request expert analysis
+            Request Community Review
           </button>
         </div>
-        <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-slate-500">
-          {EXPERT_UPGRADE_NOTES.map((note) => (
-            <li key={note}>{note}</li>
-          ))}
-        </ul>
       </section>
     </div>
   )
@@ -3877,6 +3865,22 @@ export default function Home() {
                   </p>
                 </div>
 
+                {/* DOI/External links for non-sample papers */}
+                {!selectedPaper.id.startsWith('sample-') && selectedPaperPrimaryLink && (
+                  <div className={DETAIL_METADATA_CLASSES}>
+                    <p>
+                      <a
+                        href={selectedPaperPrimaryLink.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={DETAIL_LINK_CLASSES}
+                      >
+                        {selectedPaperPrimaryLink.label}
+                      </a>
+                    </p>
+                  </div>
+                )}
+
                 <div id="verification-panel" className="space-y-4">
                   {hasSelectedPaper ? (
                     verificationMode === 'repro' ? (
@@ -3957,22 +3961,6 @@ export default function Home() {
                     <div className="mt-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-600">
                       {scrapedContentError}
                     </div>
-                  </div>
-                )}
-
-                {/* DOI/External links for non-sample papers */}
-                {!selectedPaper.id.startsWith('sample-') && selectedPaperPrimaryLink && (
-                  <div className={DETAIL_METADATA_CLASSES}>
-                    <p>
-                      <a
-                        href={selectedPaperPrimaryLink.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={DETAIL_LINK_CLASSES}
-                      >
-                        {selectedPaperPrimaryLink.label}
-                      </a>
-                    </p>
                   </div>
                 )}
               </section>
