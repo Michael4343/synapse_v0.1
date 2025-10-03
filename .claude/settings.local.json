@@ -24,7 +24,10 @@
       "Bash(if [ -n \"$SEMANTIC_SCHOLAR_API_KEY\" ])",
       "Bash(then echo \"API key is set\")",
       "Bash(else echo \"No API key found\")",
-      "Bash(fi)"
+      "Bash(fi)",
+      "Bash(npx next lint:*)",
+      "Bash(sed:*)",
+      "Bash(npm run build:*)"
     ],
     "deny": [],
     "ask": []

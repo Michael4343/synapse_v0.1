@@ -1150,6 +1150,24 @@ function StaticReproReport({ report }: { report: MockReproReport }) {
 
   const isPlaceholder = questions.length === 0 && report.criticalPath.length === 0
 
+  const riskToneStyles: Record<string, string> = {
+    High: 'border border-red-200 bg-red-50 text-red-600',
+    Medium: 'border border-amber-200 bg-amber-50 text-amber-600',
+    Low: 'border border-emerald-200 bg-emerald-50 text-emerald-600'
+  }
+
+  const blockerSeverityTone: Record<string, string> = {
+    critical: 'border border-red-200 bg-red-50 text-red-600',
+    moderate: 'border border-amber-200 bg-amber-50 text-amber-600',
+    minor: 'border border-sky-200 bg-sky-50 text-sky-600'
+  }
+
+  const blockerPanelTone: Record<string, string> = {
+    critical: 'border border-red-200 bg-red-50/70',
+    moderate: 'border border-amber-200 bg-amber-50/70',
+    minor: 'border border-sky-200 bg-sky-50/70'
+  }
+
   if (isPlaceholder) {
     return (
       <div className="space-y-6">
@@ -1229,32 +1247,82 @@ function StaticReproReport({ report }: { report: MockReproReport }) {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h4 className="text-base font-semibold text-slate-900">Critical path</h4>
-        <p className="mt-1 text-sm text-slate-600">High-level phases with the main output and risk to watch.</p>
-        <div className="mt-4 space-y-3">
-          {report.criticalPath.map((phase) => {
+        <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h4 className="text-base font-semibold text-slate-900">Critical path</h4>
+            <p className="mt-1 text-sm text-slate-600">High-level phases with the main output and risk to watch.</p>
+          </div>
+        </div>
+        <div className="mt-6 space-y-5">
+          {report.criticalPath.map((phase, index) => {
             const primaryOutput = phase.outputs[0] ?? 'Output captured during expert review'
             const primaryBlocker = phase.blockers[0]
             const dependenciesText = phase.dependencies.length ? `Depends on: ${phase.dependencies.join(', ')}` : null
+            const riskBadge = riskToneStyles[phase.riskLevel] ?? 'border border-slate-200 bg-slate-50 text-slate-600'
+            const severityLabel = primaryBlocker
+              ? primaryBlocker.severity.charAt(0).toUpperCase() + primaryBlocker.severity.slice(1)
+              : 'No major risk'
+            const totalRequirements = phase.requirements?.length ?? 0
+            const checklist = phase.requirements?.slice(0, 3) ?? []
+
             return (
-              <div key={phase.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">{phase.phase}</p>
-                </div>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <article key={phase.id} className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                <header className="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Key output</p>
-                    <p className="mt-1 text-sm text-slate-700">{primaryOutput}</p>
+                    <p className="mt-1 text-base font-semibold text-slate-900">{phase.phase}</p>
                   </div>
-                  {primaryBlocker ? (
+                </header>
+
+                <div className="mt-5 grid gap-5 md:grid-cols-2">
+                  <div className="space-y-5">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Watch out</p>
-                      <p className="mt-1 text-sm text-slate-700">{primaryBlocker.issue}</p>
-                      <p className="mt-1 text-xs text-slate-500">Mitigation: {primaryBlocker.mitigation}</p>
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Key deliverable</p>
+                      <p className="mt-2 text-sm text-slate-700">{primaryOutput}</p>
                     </div>
-                  ) : null}
+                    {checklist.length ? (
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Checklist</p>
+                        <ul className="mt-2 space-y-2 text-sm text-slate-700">
+                          {checklist.map((item) => (
+                            <li key={item} className="flex items-start gap-2">
+                              <span className="mt-1 h-1.5 w-1.5 rounded-full bg-slate-400" />
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        {totalRequirements > checklist.length ? (
+                          <p className="mt-3 text-xs text-slate-400">+{totalRequirements - checklist.length} more</p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Primary risk</p>
+                    {primaryBlocker ? (
+                      <div className="mt-2 rounded-lg border border-slate-200 bg-white p-4">
+                        <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-600">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 ${
+                              blockerSeverityTone[primaryBlocker.severity] ?? 'border border-slate-200 bg-white text-slate-600'
+                            }`}
+                          >
+                            {severityLabel}
+                          </span>
+                        </div>
+                        <p className="mt-3 text-sm font-semibold text-slate-900">{primaryBlocker.issue}</p>
+                        <div className="mt-3 rounded-md bg-slate-50 p-3 text-sm text-slate-700">
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Mitigation</p>
+                          <p className="mt-1 leading-relaxed">{primaryBlocker.mitigation}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-2 rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-600">
+                        No major blockers captured yet.
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              </article>
             )
           })}
         </div>
@@ -1368,6 +1436,18 @@ function StaticClaimsPreview({ report }: { report: MockReproReport }) {
             </ul>
           </div>
         ) : null}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-start gap-4">
+          <button
+            type="button"
+            className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 whitespace-nowrap"
+          >
+            Request Community Review
+          </button>
+          <p className="text-sm text-slate-600">We&apos;ll compile patents, PhD theses, and contact the original study authors.</p>
+        </div>
       </section>
     </div>
   )
@@ -1743,10 +1823,15 @@ function ClaimsVerificationPlaceholder() {
         VERIFY CLAIMS remains disabled so we can ship the reproducibility flow first.
       </section>
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-slate-900">Request Community Review</h3>
-        <p className="mt-2 text-sm text-slate-600">
-          We'll compile support resources from patents, PhD theses, and facilitate community expert review.
-        </p>
+        <div className="flex items-start gap-4">
+          <button
+            type="button"
+            className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 whitespace-nowrap"
+          >
+            Request Community Review
+          </button>
+          <p className="text-sm text-slate-600">We&apos;ll compile patents, PhD theses, and contact the original study authors.</p>
+        </div>
       </section>
     </div>
   )
