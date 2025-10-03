@@ -1,18 +1,22 @@
 TODO
 FIX POSTHOG TRACKING!!!
 
-DEEP RESEARCH AGENTS FOR METHODS
-IMPORT PAPERS WITH PLUGIN
+PERSONAL FEED
 Email daily update (opt out to weekly or no update) - check this works at 9am email
+Focus words - drone words most results are fix keywords address 
+graphical abstract - more or less imaes 
 
 improve personal speed load - WAITING FOR API KEY
 refactor code - GPT codex
 
+
+SEARCH
 only 12 paper tiles want more add button to load more 
 back button to personal feed 
-Focus words - drone words most results are fix keywords address 
-Update weekly or diay with email 
-graphical abstract - more or less imaes 
+
+
+DEEP RESEARCH AGENTS FOR METHODS
+IMPORT PAPERS WITH PLUGIN
 
 setup new subdomain
 │ │ 1. Vercel Configuration (you'll do this in Vercel dashboard):                                                                                                                                                                          │ │
