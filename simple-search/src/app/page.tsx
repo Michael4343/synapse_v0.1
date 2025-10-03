@@ -1965,7 +1965,6 @@ export default function Home() {
   const [keywordQuery, setKeywordQuery] = useState('');
   const [yearQuery, setYearQuery] = useState('');
   const [researchChecked, setResearchChecked] = useState(true);
-  const [grantsChecked, setGrantsChecked] = useState(false);
   const [patentsChecked, setPatentsChecked] = useState(false);
   const [newsChecked, setNewsChecked] = useState(false);
   const [communityChecked, setCommunityChecked] = useState(false);
@@ -2869,15 +2868,6 @@ export default function Home() {
   } else if (keywordResults.length > 0) {
     mainFeedContent = (
       <>
-        {user && hasKeywords && (
-          <button
-            onClick={handleRefreshPersonalFeed}
-            className="mb-4 inline-flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-200 hover:text-slate-900"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Personal Feed
-          </button>
-        )}
         <div className={RESULT_SUMMARY_CLASSES}>
           <span>Showing</span>
           <span className="text-base font-semibold text-slate-900">{keywordResults.length}</span>
@@ -2894,20 +2884,9 @@ export default function Home() {
     );
   } else if (lastKeywordQuery && !keywordError) {
     mainFeedContent = (
-      <>
-        {user && hasKeywords && (
-          <button
-            onClick={handleRefreshPersonalFeed}
-            className="mb-4 inline-flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-200 hover:text-slate-900"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Personal Feed
-          </button>
-        )}
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-100 px-6 py-10 text-center text-sm text-slate-600">
-          Nothing surfaced for this query yet. Try refining keywords or toggling a different source.
-        </div>
-      </>
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-100 px-6 py-10 text-center text-sm text-slate-600">
+        Nothing surfaced for this query yet. Try refining keywords or toggling a different source.
+      </div>
     );
   } else if (shouldShowPersonalFeed) {
     if ((personalFeedLoading || profileSaveLoading) && personalFeedResults.length === 0) {
@@ -3475,7 +3454,7 @@ export default function Home() {
     const trimmedYear = yearQuery.trim();
     const parsedYear = trimmedYear ? parseInt(trimmedYear, 10) : null;
     const validYear = parsedYear && parsedYear >= 1900 && parsedYear <= new Date().getFullYear() + 2 ? parsedYear : null;
-    const atLeastOneFilter = researchChecked || grantsChecked || patentsChecked;
+    const atLeastOneFilter = researchChecked || patentsChecked;
 
     // Clear list selection when searching
     setSelectedListId(null);
@@ -3501,7 +3480,6 @@ export default function Home() {
 
     const filterLabels: string[] = [];
     if (researchChecked) filterLabels.push('research');
-    if (grantsChecked) filterLabels.push('funding');
     if (patentsChecked) filterLabels.push('patents');
 
     const queryWithFilters = filterLabels.length
@@ -3807,6 +3785,15 @@ export default function Home() {
               </form>
 
               <div className={FILTER_BAR_CLASSES}>
+                {user && hasKeywords && (keywordResults.length > 0 || lastKeywordQuery) && (
+                  <button
+                    onClick={handleRefreshPersonalFeed}
+                    className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
+                    title="Back to Personal Feed"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </button>
+                )}
                 <label className={FILTER_CHECKBOX_LABEL_CLASSES}>
                   <input
                     type="checkbox"
@@ -3815,17 +3802,6 @@ export default function Home() {
                     className={FILTER_CHECKBOX_INPUT_CLASSES}
                   />
                   <span>Research</span>
-                </label>
-                <label className={FILTER_CHECKBOX_DISABLED_LABEL_CLASSES} title="Coming soon">
-                  <input
-                    type="checkbox"
-                    checked={grantsChecked}
-                    onChange={() => setGrantsChecked((prev) => !prev)}
-                    disabled
-                    aria-disabled
-                    className={`${FILTER_CHECKBOX_INPUT_CLASSES} ${FILTER_CHECKBOX_INPUT_DISABLED_CLASSES}`}
-                  />
-                  <span>Grants</span>
                 </label>
                 <label className={FILTER_CHECKBOX_DISABLED_LABEL_CLASSES} title="Coming soon">
                   <input
