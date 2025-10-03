@@ -1,6 +1,38 @@
 TODO
+FIX POSTHOG TRACKING!!!
+
+DEEP RESEARCH AGENTS FOR METHODS
+IMPORT PAPERS WITH PLUGIN
 Email daily update (opt out to weekly or no update) - check this works at 9am email
 
 improve personal speed load - WAITING FOR API KEY
 refactor code - GPT codex
 
+only 12 paper tiles want more add button to load more 
+back button to personal feed 
+Focus words - drone words most results are fix keywords address 
+Update weekly or diay with email 
+graphical abstract - more or less imaes 
+
+setup new subdomain
+│ │ 1. Vercel Configuration (you'll do this in Vercel dashboard):                                                                                                                                                                          │ │
+│ │ - Go to your Vercel project settings → Domains                                                                                                                                                                                         │ │
+│ │ - Add custom domain: research.evidentia.bio                                                                                                                                                                                            │ │
+│ │ - Vercel will show you the required DNS records (likely a CNAME)                                                                                                                                                                       │ │
+│ │                                                                                                                                                                                                                                        │ │
+│ │ 2. Porkbun DNS Configuration (you'll do this in Porkbun):                                                                                                                                                                              │ │
+│ │ - Log into Porkbun domain manager for evidentia.bio                                                                                                                                                                                    │ │
+│ │ - Add a new DNS record:                                                                                                                                                                                                                │ │
+│ │   - Type: CNAME                                                                                                                                                                                                                        │ │
+│ │   - Host: research                                                                                                                                                                                                                     │ │
+│ │   - Answer: cname.vercel-dns.com (or whatever Vercel provides)                                                                                                                                                                         │ │
+│ │   - TTL: 600 (default)                                                                                                                                                                                                                 │ │
+│ │                                                                                                                                                                                                                                        │ │
+│ │ 3. Verification:                                                                                                                                                                                                                       │ │
+│ │ - Wait 5-30 minutes for DNS propagation                                                                                                                                                                                                │ │
+│ │ - Vercel will automatically verify and issue SSL certificate                                                                                                                                                                           │ │
+│ │ - Test https://research.evidentia.bio                                                                                                                                                                                                  │ │
+│ │                                                                                                                                                                                                                                        │ │
+│ │ 4. Optional Cleanup:                                                                                                                                                                                                                   │ │
+│ │ - Remove old domain from Vercel once confirmed working                                                                                                                                                                                 │ │
+│ │ - Update any hardcoded URLs in environment variables if needed  

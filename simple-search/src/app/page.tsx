@@ -1100,7 +1100,7 @@ function getFeasibilitySummary(score: number): string {
   if (score >= 55) {
     return 'Needs targeted support'
   }
-  return 'High risk - secure collaborators'
+  return 'High risk'
 }
 
 function getFeasibilityTone(score: number): string {
@@ -1177,7 +1177,6 @@ function StaticReproReport({ report }: { report: MockReproReport }) {
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div>
           <h3 className="text-lg font-semibold text-slate-900">{report.verdict.mainMessage}</h3>
-          <p className="mt-1 text-sm text-slate-600">{stageMeta.description}</p>
         </div>
       </section>
 
@@ -1190,7 +1189,6 @@ function StaticReproReport({ report }: { report: MockReproReport }) {
           <div className="text-right">
             <p className={`text-3xl font-semibold ${feasibilityTone}`}>{feasibilityScore}<span className="ml-1 text-base text-slate-500">%</span></p>
             <p className="text-xs text-slate-500">{feasibilitySummary}</p>
-            <p className="text-xs text-slate-400">{answeredCount} of {questions.length} answered</p>
           </div>
         </div>
         <div className="mt-3 h-2 w-full rounded-full bg-slate-100">
@@ -1206,7 +1204,6 @@ function StaticReproReport({ report }: { report: MockReproReport }) {
               <div key={question.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm font-medium text-slate-900">{question.question}</p>
-                  <p className="mt-1 text-xs text-slate-500">{question.category} | Weight {question.weight}</p>
                   {question.helper ? <p className="mt-1 text-xs text-slate-500">{question.helper}</p> : null}
                 </div>
                 <div className="flex gap-2">
@@ -1243,7 +1240,6 @@ function StaticReproReport({ report }: { report: MockReproReport }) {
               <div key={phase.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div>
                   <p className="text-sm font-semibold text-slate-900">{phase.phase}</p>
-                  {dependenciesText ? <p className="text-xs text-slate-400">{dependenciesText}</p> : null}
                 </div>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <div>
@@ -1255,7 +1251,6 @@ function StaticReproReport({ report }: { report: MockReproReport }) {
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Watch out</p>
                       <p className="mt-1 text-sm text-slate-700">{primaryBlocker.issue}</p>
                       <p className="mt-1 text-xs text-slate-500">Mitigation: {primaryBlocker.mitigation}</p>
-                      <p className="mt-1 text-xs text-slate-400">Confidence: {primaryBlocker.verificationStatus}</p>
                     </div>
                   ) : null}
                 </div>
@@ -1266,15 +1261,14 @@ function StaticReproReport({ report }: { report: MockReproReport }) {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h4 className="text-base font-semibold text-slate-900">Need deeper support?</h4>
-        <p className="mt-1 text-sm text-slate-600">We&apos;ll compile support resources from patents, PhD theses, and facilitate contact with the original study authors.</p>
-        <div className="mt-4">
+        <div className="flex items-start gap-4">
           <button
             type="button"
-            className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50"
+            className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 whitespace-nowrap"
           >
             Request Community Review
           </button>
+          <p className="text-sm text-slate-600">We&apos;ll compile patents, PhD theses, and contact the original study authors.</p>
         </div>
       </section>
     </div>
@@ -1747,6 +1741,12 @@ function ClaimsVerificationPlaceholder() {
       </section>
       <section className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 shadow-sm text-sm text-slate-600">
         VERIFY CLAIMS remains disabled so we can ship the reproducibility flow first.
+      </section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h3 className="text-lg font-semibold text-slate-900">Request Community Review</h3>
+        <p className="mt-2 text-sm text-slate-600">
+          We'll compile support resources from patents, PhD theses, and facilitate community expert review.
+        </p>
       </section>
     </div>
   )
