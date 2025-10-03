@@ -3483,7 +3483,7 @@ export default function Home() {
       <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-4 px-3 py-6 xl:px-6 min-h-0">
         <div className="relative flex flex-1 flex-col gap-4 xl:flex-row xl:gap-5 min-h-0 xl:overflow-hidden">
           <aside
-            className="relative flex min-h-0 flex-col transition-all duration-300 ease-in-out xl:basis-[22%] xl:max-w-[22%] xl:h-full xl:overflow-y-auto xl:pr-2 xl:border-r xl:border-slate-200/70"
+            className="relative flex min-h-0 flex-col transition-all duration-300 ease-in-out xl:basis-[20%] xl:max-w-[20%] xl:h-full xl:overflow-y-auto xl:pr-2 xl:border-r xl:border-slate-200/70"
           >
             <div
               className={`${SIDEBAR_CARD_CLASSES} xl:transition-all xl:duration-300 xl:ease-out xl:translate-x-0 xl:opacity-100`}
@@ -3629,7 +3629,7 @@ export default function Home() {
           </aside>
 
           <section
-            className={`min-h-0 min-w-0 transition-all duration-300 ${FEED_CARD_CLASSES} xl:basis-[40%] xl:h-full xl:overflow-y-auto 2xl:basis-[38%]`}
+            className={`min-h-0 min-w-0 transition-all duration-300 ${FEED_CARD_CLASSES} xl:basis-[35%] xl:h-full xl:overflow-y-auto`}
           >
 
             <header className="flex flex-col gap-0">
@@ -3804,7 +3804,7 @@ export default function Home() {
           </section>
 
           <aside
-            className={`min-h-0 min-w-0 transition-all duration-300 ${DETAIL_SHELL_CLASSES} xl:basis-[38%] xl:h-full xl:overflow-y-auto xl:pl-2 xl:border-l xl:border-slate-200/70 2xl:basis-[40%]`}
+            className={`min-h-0 min-w-0 transition-all duration-300 ${DETAIL_SHELL_CLASSES} xl:basis-[45%] xl:h-full xl:overflow-y-auto xl:pl-2 xl:border-l xl:border-slate-200/70`}
           >
             {selectedPaper ? (
               <div className="flex h-full flex-col gap-4">
