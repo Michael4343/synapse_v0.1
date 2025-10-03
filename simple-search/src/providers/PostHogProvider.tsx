@@ -13,8 +13,10 @@ import type { PostHog } from 'posthog-js'
 
 type PostHogWithSessionRecording = PostHog & {
   startSessionRecording?: () => void
+  shutdown?: () => void
   sessionRecording?: {
     startRecording?: () => void
+    stopRecording?: () => void
   }
 }
 
@@ -41,7 +43,7 @@ export function PostHogProvider({ children }: PostHogProviderProps) {
     return search ? `${pathname}?${search}` : pathname
   }, [pathname, search])
 
-  const [posthogInstance, setPosthogInstance] = useState<PostHog | null>(null)
+  const [posthogInstance, setPosthogInstance] = useState<PostHogWithSessionRecording | null>(null)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -62,7 +64,7 @@ export function PostHogProvider({ children }: PostHogProviderProps) {
     }
 
     let isCancelled = false
-    let loadedInstance: PostHog | null = null
+    let loadedInstance: PostHogWithSessionRecording | null = null
 
     const initPostHog = async () => {
       const { default: posthog } = await import('posthog-js')
@@ -99,7 +101,7 @@ export function PostHogProvider({ children }: PostHogProviderProps) {
 
     return () => {
       isCancelled = true
-      if (loadedInstance) {
+      if (loadedInstance?.shutdown) {
         loadedInstance.shutdown()
       }
     }
