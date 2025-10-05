@@ -2,6 +2,7 @@
 
 import fs from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
+import { Resend } from 'resend'
 
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) {
@@ -39,6 +40,15 @@ loadEnvFile('.env')
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
 const SCRAPERAPI_KEY = process.env.SCRAPERAPI_KEY
+const RESEND_API_KEY = process.env.RESEND_API_KEY
+const RESEND_FROM_EMAIL = process.env.RESEND_FROM_EMAIL
+const FEED_URL =
+  process.env.RESEARCH_FEED_URL ||
+  process.env.PLATFORM_FEED_URL ||
+  process.env.APP_FEED_URL ||
+  null
+
+const resendClient = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.error('[scholar-feed] Missing Supabase credentials. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local.')
@@ -49,6 +59,14 @@ if (!SCRAPERAPI_KEY) {
   console.error('[scholar-feed] Missing SCRAPERAPI_KEY in .env.local')
   console.error('[scholar-feed] Get a free key at https://www.scraperapi.com/')
   process.exit(1)
+}
+
+if (!RESEND_API_KEY) {
+  console.error('[scholar-feed] RESEND_API_KEY not set. Email notifications will be skipped.')
+}
+
+if (RESEND_API_KEY && !RESEND_FROM_EMAIL) {
+  console.error('[scholar-feed] RESEND_FROM_EMAIL not set. Email notifications will be skipped.')
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -126,6 +144,101 @@ function uniqueKeywords(keywords) {
     result.push(keyword)
   }
   return result
+}
+
+function escapeHtml(value) {
+  if (value === null || value === undefined) {
+    return ''
+  }
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+async function sendEmailSummary(researcher, queryCounts) {
+  if (!resendClient || !RESEND_FROM_EMAIL) {
+    return
+  }
+
+  const recipient = (researcher.contact_email || '').trim()
+  if (!recipient) {
+    return
+  }
+
+  const entries = Array.from(queryCounts.entries())
+  if (entries.length === 0) {
+    return
+  }
+
+  const totalNew = entries.reduce((sum, [, count]) => sum + (count || 0), 0)
+  if (totalNew === 0) {
+    return
+  }
+
+  const displayName = (researcher.display_name || '').trim()
+  const firstName = displayName ? displayName.split(' ')[0] : 'there'
+
+  const listItemsHtml = entries
+    .map(([query, count]) => `<li><strong>${escapeHtml(query)}</strong>: ${count} new paper${count === 1 ? '' : 's'}</li>`)
+    .join('\n')
+
+  const listItemsText = entries
+    .map(([query, count]) => `- ${query}: ${count} new paper${count === 1 ? '' : 's'}`)
+    .join('\n')
+
+  const subject = `${totalNew} new paper${totalNew === 1 ? '' : 's'} in your research feed`
+
+  const htmlParts = [
+    `<p>Hi ${escapeHtml(firstName)},</p>`,
+    `<p>We just found ${totalNew} new paper${totalNew === 1 ? '' : 's'} across your search queries:</p>`,
+    `<ul>${listItemsHtml}</ul>`
+  ]
+
+  if (FEED_URL) {
+    htmlParts.push(`<p><a href="${escapeHtml(FEED_URL)}">Open your research feed</a> to read the details.</p>`)
+  } else {
+    htmlParts.push('<p>Sign in to your research feed to read the details.</p>')
+  }
+
+  htmlParts.push('<p>— Evidentia</p>')
+
+  const textParts = [
+    `Hi ${firstName},`,
+    '',
+    `We just found ${totalNew} new paper${totalNew === 1 ? '' : 's'} across your search queries:`,
+    listItemsText,
+    '',
+    FEED_URL ? `Open your research feed: ${FEED_URL}` : 'Sign in to your research feed to read the details.',
+    '',
+    '— Evidentia'
+  ]
+
+  try {
+    const { data, error } = await resendClient.emails.send({
+      from: RESEND_FROM_EMAIL,
+      to: recipient,
+      subject,
+      html: htmlParts.join('\n'),
+      text: textParts.join('\n')
+    })
+
+    if (error) {
+      console.error(
+        `[scholar-feed] Failed to send email to ${recipient}: ${error.message}`
+      )
+      return
+    }
+
+    const id = data?.id ? ` (id: ${data.id})` : ''
+    console.error(`[scholar-feed] Sent email notification to ${recipient} (${totalNew} new)${id}`)
+  } catch (error) {
+    console.error(
+      `[scholar-feed] Failed to send email to ${recipient}: ${error.message}`
+    )
+  }
 }
 
 function parseScholarDate(raw) {
@@ -381,6 +494,7 @@ async function main() {
     const keywords = uniqueKeywords(researcher.research_interests)
     const fallbackQuery = researcher.display_name || 'research'
     const queries = keywords.length > 0 ? keywords : [fallbackQuery]
+    const queryCounts = new Map(queries.map((query) => [query, 0]))
 
     console.error(
       `[scholar-feed] Running ${queries.length} query variant(s) for researcher ${researcher.display_name}.`
@@ -412,7 +526,8 @@ async function main() {
             authors: rawResult.authors || '',
             source: rawResult.source || null,
             publication_date: rawResult.publication_date ? rawResult.publication_date.toISOString() : null,
-            raw_publication_date: rawResult.raw_publication_date
+            raw_publication_date: rawResult.raw_publication_date,
+            source_query: queryVariant
           })
         }
 
@@ -477,16 +592,19 @@ async function main() {
 
         // Insert new papers
         if (limited.length > 0) {
-          const papersToInsert = limited.map((paper, index) => ({
-            user_id: researcher.id,
-            paper_title: paper.title,
-            paper_url: paper.url,
-            paper_snippet: paper.snippet,
-            paper_authors: paper.authors,
-            publication_date: paper.publication_date,
-            raw_publication_date: paper.raw_publication_date,
-            query_keyword: keywords[index % keywords.length] || 'unknown' // Track which keyword found this paper
-          }))
+          const papersToInsert = limited.map((paper) => {
+            const querySource = paper.source_query || (queries.length > 0 ? queries[0] : 'unknown')
+            return {
+              user_id: researcher.id,
+              paper_title: paper.title,
+              paper_url: paper.url,
+              paper_snippet: paper.snippet,
+              paper_authors: paper.authors,
+              publication_date: paper.publication_date,
+              raw_publication_date: paper.raw_publication_date,
+              query_keyword: querySource // Track which keyword found this paper
+            }
+          })
 
           const { error: insertError } = await supabase
             .from('personal_feed_papers')
@@ -496,11 +614,20 @@ async function main() {
             console.error(`[scholar-feed] Failed to insert papers for ${researcher.display_name}: ${insertError.message}`)
           } else {
             console.error(`[scholar-feed] Stored ${papersToInsert.length} papers in database for ${researcher.display_name}`)
+            for (const paper of limited) {
+              const querySource = paper.source_query || (queries.length > 0 ? queries[0] : 'unknown')
+              if (!queryCounts.has(querySource)) {
+                queryCounts.set(querySource, 0)
+              }
+              queryCounts.set(querySource, (queryCounts.get(querySource) || 0) + 1)
+            }
           }
         }
       } catch (dbError) {
         console.error(`[scholar-feed] Database error for ${researcher.display_name}:`, dbError)
       }
+
+      await sendEmailSummary(researcher, queryCounts)
 
       combined.push({
         researcher_id: researcher.id,
@@ -508,6 +635,7 @@ async function main() {
         contact_email: researcher.contact_email,
         query: queries.join(' | '),
         keywords,
+        query_counts: Object.fromEntries(queryCounts),
         results: limited
       })
 
@@ -522,6 +650,7 @@ async function main() {
         contact_email: researcher.contact_email,
         query: queries.join(' | '),
         keywords,
+        query_counts: Object.fromEntries(queryCounts),
         error: error.message,
         results: []
       })
