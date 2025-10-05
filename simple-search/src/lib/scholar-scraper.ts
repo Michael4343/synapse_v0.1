@@ -211,7 +211,20 @@ export async function scrapeGoogleScholar(query: string, scraperApiKey: string, 
   scraperApiUrl.searchParams.set('ultra_premium', 'true') // Use ultra premium proxies for Google Scholar
   scraperApiUrl.searchParams.set('country_code', 'us')
 
-  const response = await fetch(scraperApiUrl.toString())
+  let response: Response
+  try {
+    response = await fetch(scraperApiUrl.toString())
+  } catch (error) {
+    if (attempt <= 3) {
+      const waitMs = 5000 * attempt
+      console.error(`[scholar-scraper] Fetch failed (attempt ${attempt}/3). Retrying in ${waitMs}ms.`, error)
+      await new Promise((resolve) => setTimeout(resolve, waitMs))
+      return scrapeGoogleScholar(query, scraperApiKey, attempt + 1)
+    }
+
+    const message = error instanceof Error ? error.message : 'Unknown fetch error'
+    throw new Error(`ScraperAPI fetch failed: ${message}`)
+  }
 
   if (!response.ok) {
     if (response.status === 429 && attempt <= 3) {

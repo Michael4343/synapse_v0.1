@@ -8,6 +8,8 @@ interface PopulateRequestBody {
   keywords?: string[]
 }
 
+const normalizeKeyword = (keyword: string) => keyword.trim().toLowerCase()
+
 export async function POST(request: NextRequest) {
   // Auth check
   const supabase = await createClient()
@@ -46,9 +48,53 @@ export async function POST(request: NextRequest) {
     }, { status: 500 })
   }
 
-  console.log(`[populate] Starting feed population for user ${user.id} with ${keywords.length} keywords`)
-
   try {
+    let skippedKeywords: string[] = []
+    let keywordsToProcess = keywords
+
+    if (keywords.length > 0) {
+      const { data: existingKeywordsData, error: existingKeywordsError } = await supabaseAdmin
+        .from('personal_feed_papers')
+        .select('query_keyword')
+        .eq('user_id', user.id)
+        .in('query_keyword', keywords)
+
+      if (existingKeywordsError) {
+        console.error('[populate] Failed to fetch existing keywords:', existingKeywordsError)
+      } else if (existingKeywordsData && existingKeywordsData.length > 0) {
+        const existingKeywordSet = new Set(
+          existingKeywordsData
+            .map(row => row.query_keyword)
+            .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+            .map(normalizeKeyword)
+        )
+
+        keywordsToProcess = keywords.filter(keyword => {
+          const shouldSkip = existingKeywordSet.has(normalizeKeyword(keyword))
+          if (shouldSkip) {
+            skippedKeywords.push(keyword)
+          }
+          return !shouldSkip
+        })
+
+        if (skippedKeywords.length > 0) {
+          console.log(`[populate] Skipping previously scraped keywords for user ${user.id}: ${skippedKeywords.join(', ')}`)
+        }
+      }
+    }
+
+    if (keywordsToProcess.length === 0) {
+      console.log(`[populate] No new keywords to process for user ${user.id}. Requested keywords: ${keywords.join(', ')}`)
+      return NextResponse.json({
+        processed: 0,
+        papers_found: 0,
+        skipped_keywords: skippedKeywords,
+        message: 'All provided keywords already have cached results'
+      })
+    }
+
+    console.log(`[populate] Starting feed population for user ${user.id} with ${keywordsToProcess.length} new keywords (requested ${keywords.length})`)
+
     // Delete old papers (older than 30 days) for this user
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
     const { error: deleteError } = await supabaseAdmin
@@ -66,9 +112,9 @@ export async function POST(request: NextRequest) {
     let totalPapersFound = 0
     const seenUrls = new Set<string>()
 
-    for (let i = 0; i < keywords.length; i++) {
-      const keyword = keywords[i]
-      console.log(`[populate] Processing keyword ${i + 1}/${keywords.length}: "${keyword}"`)
+    for (let i = 0; i < keywordsToProcess.length; i++) {
+      const keyword = keywordsToProcess[i]
+      console.log(`[populate] Processing keyword ${i + 1}/${keywordsToProcess.length}: "${keyword}"`)
 
       try {
         // Fetch papers for this keyword
@@ -112,7 +158,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Delay before next keyword (except after last one)
-        if (i < keywords.length - 1) {
+        if (i < keywordsToProcess.length - 1) {
           console.log(`[populate] Waiting ${SCRAPER_DELAY_MS}ms before next keyword...`)
           await delay(SCRAPER_DELAY_MS)
         }
@@ -122,17 +168,18 @@ export async function POST(request: NextRequest) {
         // Continue to next keyword even if one fails
 
         // Still delay before next keyword to avoid rate limiting
-        if (i < keywords.length - 1) {
+        if (i < keywordsToProcess.length - 1) {
           await delay(SCRAPER_DELAY_MS)
         }
       }
     }
 
-    console.log(`[populate] Completed. Processed ${keywords.length} keywords, found ${totalPapersFound} papers`)
+    console.log(`[populate] Completed. Processed ${keywordsToProcess.length} keywords, found ${totalPapersFound} papers`)
 
     return NextResponse.json({
-      processed: keywords.length,
+      processed: keywordsToProcess.length,
       papers_found: totalPapersFound,
+      skipped_keywords: skippedKeywords,
       message: `Successfully populated feed with ${totalPapersFound} papers`
     })
 

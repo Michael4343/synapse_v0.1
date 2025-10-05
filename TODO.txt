@@ -1,6 +1,11 @@
 TODO
-Improve keyword system
-scrape google scholar with PLUGIN
+fix scholar rerun bug
+make script email updated feed
+fix build bugs
+
+make verify buttons work as request
+email me the user and paper details
+
 deep research papers that are scraped
 add to feed
 

@@ -1970,6 +1970,11 @@ export default function Home() {
   const feedPollCountRef = useRef(0);
   const feedLastResultCountRef = useRef(0);
   const feedStableCountRef = useRef(0);
+  const hasSetFirstPaperRef = useRef(false);
+  const feedObservedChangeRef = useRef(false);
+  const feedLastUpdatedRef = useRef<string | null>(null);
+  const feedBaselineRecordedRef = useRef(false);
+  const personalFeedInitializedRef = useRef(false);
 
   useEffect(() => {
     if (!accountDropdownVisible) {
@@ -2360,6 +2365,19 @@ export default function Home() {
     }
   }, [profile]);
 
+  // Stop polling personal feed
+  const stopFeedPolling = useCallback(() => {
+    if (feedPollingIntervalRef.current) {
+      clearInterval(feedPollingIntervalRef.current);
+      feedPollingIntervalRef.current = null;
+    }
+    setFeedPopulating(false);
+    setKeywordLoading(false);
+    feedObservedChangeRef.current = false;
+    feedLastUpdatedRef.current = null;
+    feedBaselineRecordedRef.current = false;
+  }, []);
+
   // Start polling personal feed for progressive updates
   const startFeedPolling = useCallback(() => {
     // Clear any existing polling
@@ -2371,7 +2389,12 @@ export default function Home() {
     feedPollCountRef.current = 0;
     feedLastResultCountRef.current = 0;
     feedStableCountRef.current = 0;
+    hasSetFirstPaperRef.current = false;
+    feedObservedChangeRef.current = false;
+    feedLastUpdatedRef.current = null;
+    feedBaselineRecordedRef.current = false;
     setFeedPopulating(true);
+    setKeywordLoading(true);
 
     const maxPolls = 40; // 40 * 3s = 2 minutes max
     const stableThreshold = 2; // Stop if results unchanged for 2 polls
@@ -2387,22 +2410,49 @@ export default function Home() {
 
           // Update results as they come in
           setKeywordResults(results);
-          if (results.length > 0 && !selectedPaper) {
+
+          // Set first paper only once using ref
+          if (results.length > 0 && !hasSetFirstPaperRef.current) {
             setSelectedPaper(results[0]);
+            hasSetFirstPaperRef.current = true;
           }
 
           // Detect if results have stabilized
-          if (results.length === feedLastResultCountRef.current) {
-            feedStableCountRef.current++;
-          } else {
-            feedStableCountRef.current = 0;
-            feedLastResultCountRef.current = results.length;
-          }
+          const lastUpdated = typeof data.lastUpdated === 'string' ? data.lastUpdated : null;
 
-          // Stop polling if results are stable or max attempts reached
-          if (feedStableCountRef.current >= stableThreshold || feedPollCountRef.current >= maxPolls) {
-            console.log(`[polling] Stopping - stable: ${feedStableCountRef.current >= stableThreshold}, max: ${feedPollCountRef.current >= maxPolls}`);
-            stopFeedPolling();
+          if (!feedBaselineRecordedRef.current) {
+            feedBaselineRecordedRef.current = true;
+            feedLastResultCountRef.current = results.length;
+            feedLastUpdatedRef.current = lastUpdated ?? null;
+            feedStableCountRef.current = 0;
+          } else {
+            const previousCount = feedLastResultCountRef.current;
+            const previousUpdated = feedLastUpdatedRef.current;
+
+            if (lastUpdated && lastUpdated !== previousUpdated) {
+              feedObservedChangeRef.current = true;
+              feedStableCountRef.current = 0;
+            }
+
+            if (results.length !== previousCount) {
+              if (results.length > previousCount) {
+                feedObservedChangeRef.current = true;
+              }
+              feedStableCountRef.current = 0;
+            } else if (results.length > 0) {
+              feedStableCountRef.current++;
+            }
+
+            feedLastResultCountRef.current = results.length;
+            feedLastUpdatedRef.current = lastUpdated ?? feedLastUpdatedRef.current;
+
+            const hasStableResults = feedObservedChangeRef.current && results.length > 0 && feedStableCountRef.current >= stableThreshold;
+
+            // Stop polling if results are stable or max attempts reached
+            if (hasStableResults || feedPollCountRef.current >= maxPolls) {
+              console.log(`[polling] Stopping - stable: ${feedStableCountRef.current >= stableThreshold}, max: ${feedPollCountRef.current >= maxPolls}`);
+              stopFeedPolling();
+            }
           }
         }
       } catch (error) {
@@ -2417,16 +2467,7 @@ export default function Home() {
     // Poll immediately, then every 3 seconds
     pollFeed();
     feedPollingIntervalRef.current = setInterval(pollFeed, 3000);
-  }, [selectedPaper]);
-
-  // Stop polling personal feed
-  const stopFeedPolling = useCallback(() => {
-    if (feedPollingIntervalRef.current) {
-      clearInterval(feedPollingIntervalRef.current);
-      feedPollingIntervalRef.current = null;
-    }
-    setFeedPopulating(false);
-  }, []);
+  }, [stopFeedPolling]);
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -2486,6 +2527,42 @@ export default function Home() {
   const isSearchContext = (keywordLoading && !isPersonalFeedActive) || hasActiveSearchResults || hasActiveSearchQuery || hasSearchError;
   const isListViewActive = Boolean(selectedListId);
   const shouldShowPersonalFeed = Boolean(user && hasKeywords && !profileNeedsSetup && !isListViewActive && (!isSearchContext || isPersonalFeedActive));
+
+  useEffect(() => {
+    if (!user) {
+      personalFeedInitializedRef.current = false;
+      return;
+    }
+
+    if (
+      personalFeedInitializedRef.current ||
+      profileLoading ||
+      profileError ||
+      profileNeedsSetup ||
+      !hasKeywords ||
+      keywordLoading ||
+      feedPopulating ||
+      keywordResults.length > 0 ||
+      lastKeywordQuery === PERSONAL_FEED_LABEL
+    ) {
+      return;
+    }
+
+    personalFeedInitializedRef.current = true;
+    handleRefreshPersonalFeed();
+  }, [
+    user,
+    hasKeywords,
+    profileNeedsSetup,
+    profileLoading,
+    profileError,
+    keywordLoading,
+    feedPopulating,
+    keywordResults.length,
+    lastKeywordQuery,
+    handleRefreshPersonalFeed,
+  ]);
+
   const personalizationInputs = (includeAction: boolean) => {
     const keywordsId = includeAction ? 'profile-keywords-editor' : 'profile-keywords';
     const resumeId = includeAction ? 'profile-resume-editor' : 'profile-resume';
@@ -2657,7 +2734,7 @@ export default function Home() {
   };
   let mainFeedContent: ReactNode = null;
 
-  if (keywordLoading) {
+  if (keywordLoading && keywordResults.length === 0) {
     mainFeedContent = (
       <div className={FEED_LOADING_WRAPPER_CLASSES}>
         <span className={FEED_LOADING_PILL_CLASSES}>
@@ -2713,7 +2790,7 @@ export default function Home() {
         {feedPopulating && (
           <span className={FEED_LOADING_PILL_CLASSES}>
             <span className={FEED_SPINNER_CLASSES} aria-hidden="true" />
-            <span>Populating your feed… ({keywordResults.length} papers found)</span>
+            <span>Populating your feed…</span>
           </span>
         )}
         <div className={RESULT_SUMMARY_CLASSES}>
@@ -3187,9 +3264,14 @@ export default function Home() {
     // Smart keyword change detection (normalized comparison)
     const normalizeKeywordsForComparison = (keywords: string[]) =>
       keywords.map(k => k.toLowerCase().trim()).sort().join('|');
+    const normalizeKeyword = (keyword: string) => keyword.trim().toLowerCase();
 
     const oldKeywords = profile?.profile_personalization?.manual_keywords || [];
     const keywordsChanged = normalizeKeywordsForComparison(oldKeywords) !== normalizeKeywordsForComparison(parsedManualKeywords);
+    const oldKeywordSet = new Set(oldKeywords.map(normalizeKeyword).filter(Boolean));
+    const newlyAddedKeywords = keywordsChanged
+      ? parsedManualKeywords.filter(keyword => !oldKeywordSet.has(normalizeKeyword(keyword)))
+      : [];
 
     // Debug logging for keyword comparison
     console.log('[profile-save] Keyword comparison:');
@@ -3198,6 +3280,9 @@ export default function Home() {
     console.log('  Old normalized:', normalizeKeywordsForComparison(oldKeywords));
     console.log('  New normalized:', normalizeKeywordsForComparison(parsedManualKeywords));
     console.log('  Keywords changed:', keywordsChanged);
+    if (keywordsChanged) {
+      console.log('  Newly added keywords:', newlyAddedKeywords);
+    }
 
     const orcidChanged = (profile?.orcid_id || null) !== normalizedOrcid;
     const websiteChanged = (profile?.academic_website || null) !== (normalizedWebsite || null);
@@ -3294,31 +3379,39 @@ export default function Home() {
 
       // Only run feed population if keywords actually changed
       if (keywordsChanged && parsedManualKeywords.length > 0) {
-        console.log('[profile-save] Keywords changed - triggering feed population');
+        if (newlyAddedKeywords.length > 0) {
+          const keywordsForPopulation = newlyAddedKeywords.slice(0, 5);
+          console.log('[profile-save] Keywords changed - triggering feed population for new keywords:', keywordsForPopulation);
 
-        // Set up personal feed view
-        setSelectedListId(null);
-        setListItems([]);
-        setYearQuery('');
-        setKeywordQuery('');
-        setLastKeywordQuery(PERSONAL_FEED_LABEL);
-        setLastYearQuery(null);
-        setKeywordResults([]); // Clear existing results
-        setSelectedPaper(null);
+          // Set up personal feed view for incoming results
+          setSelectedListId(null);
+          setListItems([]);
+          setYearQuery('');
+          setKeywordQuery('');
+          setLastKeywordQuery(PERSONAL_FEED_LABEL);
+          setLastYearQuery(null);
+          setKeywordResults([]); // Clear existing results
+          setSelectedPaper(null);
 
-        // Trigger populate endpoint (fire and forget - don't block profile save)
-        fetch('/api/personal-feed/populate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ keywords: parsedManualKeywords.slice(0, 5) })
-        }).catch(err => {
-          console.error('[profile-save] Background population failed:', err);
-        });
+          // Trigger populate endpoint (fire and forget - don't block profile save)
+          fetch('/api/personal-feed/populate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ keywords: keywordsForPopulation })
+          }).catch(err => {
+            console.error('[profile-save] Background population failed:', err);
+          });
 
-        // Start polling to show progressive results
-        setTimeout(() => {
-          startFeedPolling();
-        }, 500); // Small delay to let populate endpoint start
+          // Start polling to show progressive results
+          setTimeout(() => {
+            startFeedPolling();
+          }, 500); // Small delay to let populate endpoint start
+        } else {
+          console.log('[profile-save] Keywords changed but no new keywords detected - refreshing existing feed');
+          setTimeout(() => {
+            handleRefreshPersonalFeed();
+          }, 300);
+        }
       } else if (parsedManualKeywords.length > 0) {
         // Keywords didn't change, just show existing feed
         console.log('[profile-save] Keywords unchanged - showing existing feed');
@@ -3462,6 +3555,7 @@ export default function Home() {
   const closeProfileEditor = useCallback(() => {
     setProfileEnrichmentError('');
     setProfileManualKeywords(''); // Clear keywords so they re-seed from profile on next open
+    setManualKeywordsSeededVersion(null);
     setProfileEditorVisible(false);
   }, []);
 
