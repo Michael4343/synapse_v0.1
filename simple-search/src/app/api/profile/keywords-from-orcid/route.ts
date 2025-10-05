@@ -46,79 +46,42 @@ async function extractKeywordsWithLLM(works: OrcidWork[]): Promise<string[]> {
     }
   })
 
-  // Build focused prompt with few-shot examples
-  const systemPrompt = `You are an expert at extracting precise technical keywords from academic publication histories. You understand field-specific terminology and prioritize searchable, specific terms over generic academic language.`
+  // Build focused prompt without examples to avoid bias
+  const systemPrompt = `You are an expert at creating field-focused academic search queries from publication histories. Your goal is to identify the researcher's field and generate search terms that capture their research area without being overly specific to individual molecules, proteins, or compounds.`
 
-  const userPrompt = `Extract 5-8 precise academic keywords from these publications for use in research paper search.
+  const userPrompt = `Generate 5-8 field-focused search queries from these publications for discovering relevant academic papers.
 
 ANALYSIS STEPS:
 1. Identify the primary research field(s) and subfields
-2. Note key methodologies, techniques, and technologies used
-3. Identify application domains and specific problem areas
+2. Note general methodologies, techniques, and approaches
+3. Identify application domains and broad problem areas
 4. Weight RECENT publications 2x more heavily than older ones
-5. Extract technical terms that researchers actually search for
+5. Combine concepts into realistic search strings
 
-QUALITY RULES:
-✅ Use field-specific technical terminology
-✅ Be specific: "graph neural networks" not just "neural networks"
-✅ Include methodologies: "meta-learning", "randomized controlled trials"
-✅ Multi-word phrases when more specific: "CRISPR-Cas9 gene editing"
-✅ Keywords should be 1-4 words, searchable in academic databases
+QUALITY RULES - FIELD-LEVEL QUERIES:
+✅ Combine 2-4 words focusing on field-level concepts
+✅ Mix general methodology + application area
+✅ Mix broad technique + domain
+✅ Mix biological/scientific processes + field
+✅ Capture the research FIELD not specific entities
+✅ Focus on processes, mechanisms, and general approaches
 
-❌ Avoid generic terms: "research", "analysis", "study", "approach", "method", "novel", "efficient", "improved"
-❌ Avoid field names alone: "biology", "computer science" (too broad)
-❌ Avoid verb phrases: "studying the effects of", "analyzing data from"
+❌ AVOID single-word queries - too generic
+❌ AVOID specific protein/gene/molecule names - too narrow
+❌ AVOID specific compound names or receptor subtypes - too specific
+❌ AVOID model organism names alone - need context
+❌ Avoid generic academic terms like "research", "study", "novel", "improved"
+❌ Don't use verb phrases like "studying the effects of"
+❌ Focus on GENERAL PROCESSES and FIELD-LEVEL concepts, not molecular entities
 
-FEW-SHOT EXAMPLES:
-
-Example 1 - Machine Learning Researcher:
-Publications (RECENT):
-- "Constitutional AI: Harmlessness from AI Feedback" (2024)
-- "Training Language Models with RLHF" (2023)
-- "Scaling Laws for Reward Models" (2023)
-Publications (OLD):
-- "Deep Reinforcement Learning for Robotics" (2019)
-
-Output: {
-  "keywords": [
-    "reinforcement learning from human feedback",
-    "AI alignment",
-    "constitutional AI",
-    "reward modeling",
-    "large language models"
-  ],
-  "primary_field": "AI Safety & Machine Learning",
-  "reasoning": "Researcher has pivoted from robotics RL to AI safety. Recent work focuses on RLHF and alignment techniques. Weighted recent publications (2023-2024) heavily."
-}
-
-Example 2 - Computational Biology Researcher:
-Publications (RECENT):
-- "AlphaFold-Multimer for Protein Complex Prediction" (2024)
-- "Deep Learning for Protein Structure Prediction" (2023)
-Publications (MEDIUM):
-- "Molecular Dynamics Simulations of Membrane Proteins" (2020)
-- "GPCR Binding Site Analysis Using Docking" (2019)
-
-Output: {
-  "keywords": [
-    "protein structure prediction",
-    "AlphaFold",
-    "molecular dynamics simulations",
-    "GPCR drug targets",
-    "protein-ligand docking"
-  ],
-  "primary_field": "Computational Structural Biology",
-  "reasoning": "Focus on computational protein analysis with shift toward deep learning methods. Combined recent AI approaches with established computational biology techniques."
-}
-
-NOW ANALYZE THESE PUBLICATIONS:
+ANALYZE THESE PUBLICATIONS:
 
 ${JSON.stringify(worksSummary, null, 2)}
 
 Total publications: ${works.length}
 Recent publications (last 3 years): ${worksSummary.filter(w => w.recency === 'RECENT').length}
 
-Respond with JSON only following the format above. Focus on extracting the most distinctive and searchable keywords.`
+Respond with JSON only following the format above. Generate distinctive multi-word search queries that combine concepts.`
 
   try {
     const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
@@ -142,7 +105,7 @@ Respond with JSON only following the format above. Focus on extracting the most 
                   items: { type: 'string' },
                   minItems: 5,
                   maxItems: 8,
-                  description: 'Array of specific, searchable academic keywords'
+                  description: 'Array of 2-4 word field-focused search queries combining general concepts and processes'
                 },
                 primary_field: {
                   type: 'string',
@@ -190,7 +153,18 @@ Respond with JSON only following the format above. Focus on extracting the most 
       console.log('Keyword extraction reasoning:', result.reasoning)
     }
 
-    return result.keywords.slice(0, 8) // Ensure max 8 keywords
+    // Filter out single-word queries (enforce 2+ words)
+    const filteredKeywords = result.keywords.filter(keyword => {
+      const wordCount = keyword.trim().split(/\s+/).length
+      return wordCount >= 2
+    })
+
+    if (filteredKeywords.length === 0) {
+      console.error('All LLM keywords were too generic (< 2 words)')
+      return extractKeywordsFallback(works)
+    }
+
+    return filteredKeywords.slice(0, 8) // Ensure max 8 keywords
 
   } catch (error) {
     console.error('LLM keyword extraction failed:', error)
@@ -199,7 +173,7 @@ Respond with JSON only following the format above. Focus on extracting the most 
 }
 
 /**
- * Fallback extraction using improved frequency analysis
+ * Fallback extraction using improved frequency analysis to generate multi-word queries
  */
 function extractKeywordsFallback(works: OrcidWork[]): string[] {
   const keywordCounts = new Map<string, number>()
@@ -231,12 +205,32 @@ function extractKeywordsFallback(works: OrcidWork[]): string[] {
     'international', 'national', 'annual', 'workshop', 'symposium'
   ]
 
-  return Array.from(keywordCounts.entries())
+  // Get top keywords
+  const topKeywords = Array.from(keywordCounts.entries())
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 12)
+    .slice(0, 20)
     .map(([keyword]) => keyword)
     .filter(keyword => !commonWords.includes(keyword))
-    .slice(0, 5)
+    .slice(0, 10)
+
+  // Generate multi-word combinations
+  const queries: string[] = []
+
+  // Create 2-3 word combinations from top keywords
+  for (let i = 0; i < Math.min(topKeywords.length, 5); i++) {
+    const parts: string[] = [topKeywords[i]]
+
+    // Add 1-2 more related keywords
+    for (let j = i + 1; j < Math.min(topKeywords.length, i + 3) && parts.length < 3; j++) {
+      parts.push(topKeywords[j])
+    }
+
+    if (parts.length >= 2) {
+      queries.push(parts.join(' '))
+    }
+  }
+
+  return queries.length > 0 ? queries : topKeywords.slice(0, 5)
 }
 
 export async function POST(request: NextRequest) {

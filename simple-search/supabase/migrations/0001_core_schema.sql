@@ -111,7 +111,15 @@ CREATE TABLE public.search_results (
   processing_status TEXT DEFAULT NULL,
   -- Content quality tracking
   content_quality TEXT DEFAULT NULL,
-  content_type TEXT DEFAULT NULL
+  content_type TEXT DEFAULT NULL,
+  -- Reproducibility analysis fields (for future implementation)
+  reproducibility_score REAL DEFAULT NULL,
+  reproducibility_status TEXT DEFAULT NULL,
+  reproducibility_notes TEXT DEFAULT NULL,
+  reproducibility_data JSONB DEFAULT NULL,
+  -- Claims verification fields (for future implementation)
+  claims_verified JSONB DEFAULT NULL,
+  claims_status TEXT DEFAULT NULL
 );
 
 COMMENT ON COLUMN public.search_results.publication_date IS 'Publication date in string format from source API';
@@ -124,6 +132,12 @@ COMMENT ON COLUMN public.search_results.processed_at IS 'Timestamp when content 
 COMMENT ON COLUMN public.search_results.processing_status IS 'Status of LLM processing: success, failed, timeout, pending';
 COMMENT ON COLUMN public.search_results.content_quality IS 'Quality assessment of scraped content: full_paper, abstract_only, insufficient';
 COMMENT ON COLUMN public.search_results.content_type IS 'Type of source content: html, pdf, abstract, other';
+COMMENT ON COLUMN public.search_results.reproducibility_score IS 'Reproducibility score (0-100) from automated analysis - for future implementation';
+COMMENT ON COLUMN public.search_results.reproducibility_status IS 'Status of reproducibility analysis: verified, unverified, flagged, in_progress - for future implementation';
+COMMENT ON COLUMN public.search_results.reproducibility_notes IS 'Human-readable notes about reproducibility concerns - for future implementation';
+COMMENT ON COLUMN public.search_results.reproducibility_data IS 'Full reproducibility analysis data in JSON format - for future implementation';
+COMMENT ON COLUMN public.search_results.claims_verified IS 'Array of verified claims with evidence links - for future implementation';
+COMMENT ON COLUMN public.search_results.claims_status IS 'Status of claims verification: verified, unverified, in_progress - for future implementation';
 
 -- Search query-result relationship
 CREATE TABLE public.search_result_queries (

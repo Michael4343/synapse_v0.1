@@ -24,38 +24,43 @@ async function extractKeywordsFromWebsite(text: string, title?: string): Promise
     return extractKeywordsFallback(text)
   }
 
-  // Build focused prompt for academic website analysis
-  const systemPrompt = `You are an expert at extracting precise academic keywords from researcher profile pages. You understand field-specific terminology and prioritize searchable, specific terms that would help find relevant research papers.`
+  // Build focused prompt for academic website analysis - conceptual guidance only
+  const systemPrompt = `You are an expert at creating field-focused academic search queries from researcher profile pages. Your goal is to identify the researcher's field and generate search terms that capture their research area without being overly specific to individual molecules, proteins, or compounds.`
 
-  const userPrompt = `Extract 5-8 precise academic keywords from this researcher's profile page for use in research paper search.
+  const userPrompt = `Generate 5-8 field-focused search queries from this researcher's profile page for discovering relevant academic papers.
 
 ANALYSIS STEPS:
 1. Identify the researcher's primary field(s) and subfields
-2. Note key research areas, methodologies, and techniques mentioned
-3. Identify specific topics, applications, and technologies
+2. Note general research areas, methodologies, and approaches mentioned
+3. Identify broad topics, application domains, and general techniques
 4. Look for research interests, publication topics, and project descriptions
-5. Extract technical terms that researchers actually search for
+5. Combine concepts into realistic search strings
 
-QUALITY RULES:
-✅ Use field-specific technical terminology
-✅ Be specific: "computational neuroscience" not just "neuroscience"
-✅ Include methodologies: "machine learning", "clinical trials", "CRISPR gene editing"
-✅ Multi-word phrases when more specific: "natural language processing"
-✅ Keywords should be 1-4 words, searchable in academic databases
+QUALITY RULES - FIELD-LEVEL QUERIES:
+✅ Combine 2-4 words focusing on field-level concepts
+✅ Mix general methodology + application area
+✅ Mix broad technique + domain
+✅ Mix biological/scientific processes + field
+✅ Capture the research FIELD not specific entities
+✅ Focus on processes, mechanisms, and general approaches
 
-❌ Avoid generic terms: "research", "teaching", "publications", "contact", "cv", "bio"
-❌ Avoid institutional terms: "department", "university", "professor", "faculty"
-❌ Avoid personal info: names, emails, addresses
-❌ Avoid navigation terms: "home", "about", "publications", "news"
+❌ AVOID single-word queries - too generic
+❌ AVOID specific protein/gene/molecule names - too narrow
+❌ AVOID specific compound names or receptor subtypes - too specific
+❌ AVOID model organism names alone - need context
+❌ Avoid generic academic terms like "research", "teaching", "publications", "novel", "improved"
+❌ Avoid institutional terms like "department", "university", "professor", "faculty"
+❌ Don't use verb phrases like "studying the effects of"
+❌ Focus on GENERAL PROCESSES and FIELD-LEVEL concepts, not molecular entities
 
 WEBSITE CONTENT:
 ${title ? `Page title: ${title}\n\n` : ''}${text.substring(0, 10000)}
 
-Extract the most distinctive and searchable academic keywords. Respond with JSON only following this format:
+Generate distinctive multi-word search queries that combine concepts from this researcher's work. Respond with JSON only following this format:
 {
-  "keywords": ["keyword1", "keyword2", ...],
+  "keywords": ["query1", "query2", ...],
   "primary_field": "Primary research field identified",
-  "reasoning": "Brief explanation of keyword selection"
+  "reasoning": "Brief explanation of query generation"
 }`
 
   try {
@@ -80,7 +85,7 @@ Extract the most distinctive and searchable academic keywords. Respond with JSON
                   items: { type: 'string' },
                   minItems: 5,
                   maxItems: 8,
-                  description: 'Array of specific, searchable academic keywords'
+                  description: 'Array of 2-4 word field-focused search queries combining general concepts and processes'
                 },
                 primary_field: {
                   type: 'string',
@@ -128,7 +133,18 @@ Extract the most distinctive and searchable academic keywords. Respond with JSON
       console.log('Keyword extraction reasoning:', result.reasoning)
     }
 
-    return result.keywords.slice(0, 8)
+    // Filter out single-word queries (enforce 2+ words)
+    const filteredKeywords = result.keywords.filter(keyword => {
+      const wordCount = keyword.trim().split(/\s+/).length
+      return wordCount >= 2
+    })
+
+    if (filteredKeywords.length === 0) {
+      console.error('All LLM keywords were too generic (< 2 words)')
+      return extractKeywordsFallback(text)
+    }
+
+    return filteredKeywords.slice(0, 8)
 
   } catch (error) {
     console.error('LLM keyword extraction failed:', error)
@@ -137,7 +153,7 @@ Extract the most distinctive and searchable academic keywords. Respond with JSON
 }
 
 /**
- * Fallback keyword extraction using frequency analysis
+ * Fallback keyword extraction using frequency analysis to generate multi-word queries
  */
 function extractKeywordsFallback(text: string): string[] {
   const keywordCounts = new Map<string, number>()
@@ -164,12 +180,31 @@ function extractKeywordsFallback(text: string): string[] {
   ]
 
   // Get top keywords excluding common words
-  return Array.from(keywordCounts.entries())
+  const topKeywords = Array.from(keywordCounts.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, 20)
     .map(([keyword]) => keyword)
     .filter(keyword => !commonWords.includes(keyword))
-    .slice(0, 5)
+    .slice(0, 10)
+
+  // Generate multi-word combinations
+  const queries: string[] = []
+
+  // Create 2-3 word combinations from top keywords
+  for (let i = 0; i < Math.min(topKeywords.length, 5); i++) {
+    const parts: string[] = [topKeywords[i]]
+
+    // Add 1-2 more related keywords
+    for (let j = i + 1; j < Math.min(topKeywords.length, i + 3) && parts.length < 3; j++) {
+      parts.push(topKeywords[j])
+    }
+
+    if (parts.length >= 2) {
+      queries.push(parts.join(' '))
+    }
+  }
+
+  return queries.length > 0 ? queries : topKeywords.slice(0, 5)
 }
 
 export async function POST(request: NextRequest) {

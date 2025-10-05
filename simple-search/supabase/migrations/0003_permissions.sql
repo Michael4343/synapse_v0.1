@@ -68,18 +68,36 @@ CREATE POLICY "Users can manage their lists" ON public.user_lists
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
--- Note: List items policies will be optimized in 0005_rls_performance_fix.sql
+-- Optimized list items policies using EXISTS for better performance
 CREATE POLICY "Users can read list items" ON public.list_items
   FOR SELECT
-  USING (auth.uid() = (SELECT user_id FROM public.user_lists WHERE id = list_id));
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.user_lists ul
+      WHERE ul.id = list_items.list_id
+      AND ul.user_id = auth.uid()
+    )
+  );
 
 CREATE POLICY "Users can insert list items" ON public.list_items
   FOR INSERT
-  WITH CHECK (auth.uid() = (SELECT user_id FROM public.user_lists WHERE id = list_id));
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.user_lists ul
+      WHERE ul.id = list_items.list_id
+      AND ul.user_id = auth.uid()
+    )
+  );
 
 CREATE POLICY "Users can delete list items" ON public.list_items
   FOR DELETE
-  USING (auth.uid() = (SELECT user_id FROM public.user_lists WHERE id = list_id));
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.user_lists ul
+      WHERE ul.id = list_items.list_id
+      AND ul.user_id = auth.uid()
+    )
+  );
 
 -- =============================================================================
 -- ROLE GRANTS - AUTHENTICATED USERS

@@ -138,6 +138,33 @@ npm run lint     # Check code quality
 Building a Next.js + Supabase academic research aggregation platform that allows researchers to search across multiple academic repositories and view results in a unified feed.
 
 **✅ Recent Updates:**
+- **Personal Feed Integration Fix (v0.3.1)**: Fixed critical bug where personal feed wasn't displaying database-populated papers:
+  - **Root cause**: Frontend `handleRefreshPersonalFeed` was calling `/api/search` with keyword instead of `/api/personal-feed` endpoint
+  - **API integration**: Now properly fetches papers from `personal_feed_papers` table populated by `scholar-feed.mjs` script
+  - **Removed misleading banner**: Eliminated "Your personalized feed is being generated...email notification" message
+  - **Instant display**: Personal feed now shows pre-populated papers immediately from database (no live API calls)
+  - **Error handling**: Shows clear message "No recent papers found in your personal feed. Papers are updated daily." when database is empty
+  - **Feed label**: Changed display from keyword to "Personal Feed" for clarity
+- **Complete Database & App Cleanup (v0.3.0)**: Major cleanup removing unused features and preparing for production:
+  - **Removed email digest feature**: Deleted cron job, API routes (`/api/cron/daily-digest`, `/api/test-digest`, `/api/test-email`), email templates, and profile fields (`email_digest_enabled`, `last_digest_sent_at`)
+  - **Removed admin feature**: Eliminated all `is_admin` references from frontend (field never existed in database)
+  - **Deleted test scripts**: Removed 7 experimental scripts, keeping only `scholar-feed.mjs` and `recent-scholar.mjs` for production use
+  - **Added reproducibility fields**: Prepared `search_results` table with `reproducibility_score`, `reproducibility_status`, `reproducibility_notes`, `reproducibility_data`, `claims_verified`, and `claims_status` for future implementation
+  - **Personal feed optimization**: Confirmed script-based approach - `scholar-feed.mjs` populates database, UI reads instantly (no live API calls)
+  - **Migration consolidation**: Merged duplicate migration 0006 into 0005, added `created_at` field to `personal_feed_papers`, improved composite indexes
+  - **Clean deployment**: 5 lean migrations (was 6 with duplicate), vercel.json cleaned up, schema.sql updated as reference
+  - **Reproducibility demo**: Hardcoded demo data on landing page preserved, `/api/papers/[id]/reproducibility` endpoint kept for future use
+- **Final Migration Cleanup (v0.2.4)**: Simplified migrations to only essential files for easy deployment:
+  - **Deleted unused migrations**: Removed 0005 (placeholder), 0006 (cleanup for non-existent table), 0008 (unused reproducibility reports)
+  - **Renumbered for clarity**: Research feed migration moved from 0009 → 0005 for sequential ordering
+  - **Final migration count**: 5 migrations total (was 9) - only what's actively used by the application
+  - **Clean deployment**: Easy to update and maintain with clear, sequential migration files
+  - **Migration list**: 0001 (core), 0002 (auth), 0003 (permissions), 0004 (indexes), 0005 (research feed)
+- **Database Migration Consolidation (v0.2.3)**: Cleaned up and optimized database migrations for better maintainability and performance:
+  - **Email digest fields**: Moved from separate migration (0007) into core schema (0001) for better organization
+  - **Optimized RLS policies**: List items policies now use efficient EXISTS pattern from the start (0003) instead of slow subqueries
+  - **Optimized indexes**: Only create composite indexes needed for performance (0004), removed redundant single-column indexes
+  - **Updated reference schema**: database/schema.sql now matches final consolidated state with all optimizations
 - **Rebrand Complete (v0.1.1)**: Successfully rebranded from "Synapse" to "Evidentia" across all frontend UI, API user agents, configuration files, and documentation. All references have been updated to maintain consistent branding throughout the application.
 - **Personal Feed UX Improvement (v0.1.2)**: Enhanced the personal feed button in the sidebar with an RSS icon and improved text hierarchy. Changed from user-name-focused display to "Your Personal Feed" with clear actionable text, making the feature more discoverable and intuitive for users.
 - **Rate Limiting & API Stability (v0.1.3)**: Resolved 429 rate limit errors by implementing comprehensive rate limiting controls:
@@ -308,17 +335,15 @@ Building a Next.js + Supabase academic research aggregation platform that allows
 │   └── acceptance-criteria.md    # Testing requirements
 └── /simple-search/               # Next.js + Supabase application
     ├── package.json              # App dependencies and scripts
-    ├── vercel.json               # Vercel configuration (includes cron jobs)
+    ├── vercel.json               # Vercel configuration (cleaned - no cron jobs)
     ├── database/
-    │   └── schema.sql                     # Complete consolidated schema reference (v0.2.0 - for reference only)
-    ├── supabase/migrations/       # Database schema migrations (apply in order)
-    │   ├── 0001_core_schema.sql           # All essential tables (profiles, search cache, lists)
-    │   ├── 0002_auth_functions.sql        # Auth triggers and helper functions
-    │   ├── 0003_permissions.sql           # RLS policies and role permissions
-    │   ├── 0004_indexes.sql               # Performance indexes organized by table
-    │   ├── 0005_rls_performance_fix.sql   # Critical RLS optimization for list performance
-    │   ├── 0006_remove_paper_ratings.sql  # Cleanup migration (removes unused ratings table)
-    │   └── 0007_email_digest.sql          # Email digest fields (email_digest_enabled, last_digest_sent_at)
+    │   └── schema.sql                     # Complete consolidated schema reference (v0.3.0 - for reference only)
+    ├── supabase/migrations/       # Database schema migrations (apply in order - 5 total)
+    │   ├── 0001_core_schema.sql           # Core tables, functions, triggers, reproducibility fields
+    │   ├── 0002_auth_functions.sql        # Auth triggers for auto-profile creation
+    │   ├── 0003_permissions.sql           # RLS policies (optimized with EXISTS) and role grants
+    │   ├── 0004_indexes.sql               # Performance indexes (optimized composite indexes)
+    │   └── 0005_personal_feed_infrastructure.sql  # Personal feed system (researchers, personal_feed_papers)
     └── src/
         ├── app/
         │   ├── api/
@@ -326,12 +351,10 @@ Building a Next.js + Supabase academic research aggregation platform that allows
         │   │   ├── lists/                   # List management API
         │   │   │   ├── route.ts             # Create/fetch user lists
         │   │   │   └── [id]/items/route.ts  # Add/remove papers from lists
-        │   │   ├── profile/                 # Profile personalization API
-        │   │   │   ├── keywords-from-orcid/route.ts   # Extract keywords from ORCID publications
-        │   │   │   └── keywords-from-website/route.ts # Extract keywords from academic websites
-        │   │   ├── cron/
-        │   │   │   └── daily-digest/route.ts # Daily digest cron job (protected by CRON_SECRET)
-        │   │   └── test-digest/route.ts     # Test digest endpoint for development
+        │   │   ├── personal-feed/route.ts   # Personal feed API (reads from pre-populated database)
+        │   │   └── profile/                 # Profile personalization API
+        │   │       ├── keywords-from-orcid/route.ts   # Extract keywords from ORCID publications
+        │   │       └── keywords-from-website/route.ts # Extract keywords from academic websites
         │   ├── search/page.tsx              # Keyword search UI with live tiles
         │   ├── page.tsx                     # Main dashboard with auth & lists
         │   └── layout.tsx                   # Root layout with auth provider
@@ -348,10 +371,11 @@ Building a Next.js + Supabase academic research aggregation platform that allows
             ├── cache-utils.ts               # Enhanced caching with TTL and background refresh
             ├── website-scraper.ts           # Website content scraping utility for keyword extraction
             ├── profile-enrichment.ts        # Profile personalization generation with Gemini LLM
-            ├── email-templates/
-            │   └── daily-digest.ts          # Daily digest email HTML template generator
             ├── supabase.ts                  # Browser client
             └── supabase-server.ts           # Service-role client for server routes
+    └── scripts/                      # Backend scripts for feed population
+        ├── scholar-feed.mjs          # Main script: populates personal_feed_papers via Google Scholar
+        └── recent-scholar.mjs        # Alternative script for feed population
 ```
 
 ### Development Approach

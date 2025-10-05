@@ -31,5 +31,9 @@ export interface SearchQuery {
 export const TABLES = {
   SEARCH_RESULTS: 'search_results',
   SEARCH_QUERIES: 'search_queries',
-  SEARCH_RESULT_QUERIES: 'search_result_queries'
+  SEARCH_RESULT_QUERIES: 'search_result_queries',
+  RESEARCHERS: 'researchers',
+  PAPER_ANALYSES: 'paper_analyses',
+  EMAIL_LOGS: 'email_logs',
+  PAPER_FEEDBACK: 'paper_feedback'
 } as const

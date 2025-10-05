@@ -50,15 +50,16 @@ CREATE INDEX idx_search_result_queries_result_id ON public.search_result_queries
 -- =============================================================================
 -- USER LISTS INDEXES
 -- =============================================================================
-CREATE INDEX idx_user_lists_user_id ON public.user_lists(user_id);
-CREATE INDEX idx_user_lists_created_at ON public.user_lists(created_at DESC);
+-- Critical composite index for RLS policy performance
+CREATE INDEX idx_user_lists_id_user_id ON public.user_lists(id, user_id);
+
+-- Composite index for list queries and sorting
 CREATE INDEX idx_user_lists_user_id_created_at ON public.user_lists(user_id, created_at DESC);
 
 -- =============================================================================
 -- LIST ITEMS INDEXES
 -- =============================================================================
-CREATE INDEX idx_list_items_list_id ON public.list_items(list_id);
-CREATE INDEX idx_list_items_created_at ON public.list_items(created_at DESC);
+-- Composite index for list item queries and sorting
 CREATE INDEX idx_list_items_list_id_created_at ON public.list_items(list_id, created_at DESC);
 
 -- Paper deduplication index (btree for JSON text extraction)

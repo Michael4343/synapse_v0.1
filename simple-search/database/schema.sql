@@ -6,7 +6,14 @@
 --
 -- IMPORTANT: This file is for reference only. Do not run directly.
 -- Use: supabase db push (to apply migrations)
--- Or run migrations individually in order: 0001, 0002, 0003, 0004, 0005, 0006
+-- Or run migrations individually in order: 0001, 0002, 0003, 0004, 0005
+--
+-- Migration files (5 total):
+--   0001_core_schema.sql - Core tables, functions, triggers, reproducibility fields
+--   0002_auth_functions.sql - Auth triggers for auto-profile creation
+--   0003_permissions.sql - RLS policies (optimized with EXISTS) and role grants
+--   0004_indexes.sql - Performance indexes (optimized composite indexes)
+--   0005_personal_feed_infrastructure.sql - Personal feed tables (researchers, personal_feed_papers with created_at)
 -- =============================================================================
 
 -- =============================================================================
@@ -152,7 +159,15 @@ CREATE TABLE public.search_results (
   processing_status TEXT DEFAULT NULL,
   -- Content quality tracking
   content_quality TEXT DEFAULT NULL,
-  content_type TEXT DEFAULT NULL
+  content_type TEXT DEFAULT NULL,
+  -- Reproducibility analysis fields (for future implementation)
+  reproducibility_score REAL DEFAULT NULL,
+  reproducibility_status TEXT DEFAULT NULL,
+  reproducibility_notes TEXT DEFAULT NULL,
+  reproducibility_data JSONB DEFAULT NULL,
+  -- Claims verification fields (for future implementation)
+  claims_verified JSONB DEFAULT NULL,
+  claims_status TEXT DEFAULT NULL
 );
 
 COMMENT ON COLUMN public.search_results.publication_date IS 'Publication date in string format from source API';
@@ -165,6 +180,12 @@ COMMENT ON COLUMN public.search_results.processed_at IS 'Timestamp when content 
 COMMENT ON COLUMN public.search_results.processing_status IS 'Status of LLM processing: success, failed, timeout, pending';
 COMMENT ON COLUMN public.search_results.content_quality IS 'Quality assessment of scraped content: full_paper, abstract_only, insufficient';
 COMMENT ON COLUMN public.search_results.content_type IS 'Type of source content: html, pdf, abstract, other';
+COMMENT ON COLUMN public.search_results.reproducibility_score IS 'Reproducibility score (0-100) from automated analysis - for future implementation';
+COMMENT ON COLUMN public.search_results.reproducibility_status IS 'Status of reproducibility analysis: verified, unverified, flagged, in_progress - for future implementation';
+COMMENT ON COLUMN public.search_results.reproducibility_notes IS 'Human-readable notes about reproducibility concerns - for future implementation';
+COMMENT ON COLUMN public.search_results.reproducibility_data IS 'Full reproducibility analysis data in JSON format - for future implementation';
+COMMENT ON COLUMN public.search_results.claims_verified IS 'Array of verified claims with evidence links - for future implementation';
+COMMENT ON COLUMN public.search_results.claims_status IS 'Status of claims verification: verified, unverified, in_progress - for future implementation';
 
 -- Indexes for search results
 CREATE INDEX idx_search_results_semantic_scholar_id ON public.search_results(semantic_scholar_id);
@@ -214,7 +235,9 @@ CREATE TABLE public.user_lists (
 );
 
 -- Indexes for user lists (optimized for RLS performance)
+-- Critical composite index for RLS policy performance
 CREATE INDEX idx_user_lists_id_user_id ON public.user_lists(id, user_id);
+-- Composite index for list queries and sorting
 CREATE INDEX idx_user_lists_user_id_created_at ON public.user_lists(user_id, created_at DESC);
 
 -- Papers saved to lists (stores paper data as JSONB)
@@ -228,6 +251,60 @@ CREATE TABLE public.list_items (
 -- Indexes for list items
 CREATE INDEX idx_list_items_list_id_created_at ON public.list_items(list_id, created_at DESC);
 CREATE INDEX idx_list_items_paper_id ON public.list_items ((paper_data->>'id'));
+
+-- =============================================================================
+-- PERSONAL FEED INFRASTRUCTURE
+-- =============================================================================
+
+-- Researchers table for recent-scholar script
+CREATE TABLE public.researchers (
+  id UUID PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE,
+  display_name TEXT NOT NULL,
+  contact_email TEXT NOT NULL,
+  research_interests TEXT[] DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON TABLE public.researchers IS 'Researchers who receive pre-fetched paper feeds via recent-scholar script.';
+COMMENT ON COLUMN public.researchers.research_interests IS 'Keywords used by recent-scholar to query Google Scholar API.';
+COMMENT ON COLUMN public.researchers.status IS 'active researchers get papers fetched, paused researchers are skipped.';
+
+-- Trigger for auto-updating timestamps
+CREATE TRIGGER trig_researchers_updated_at
+  BEFORE UPDATE ON public.researchers
+  FOR EACH ROW
+  EXECUTE FUNCTION public.touch_updated_at();
+
+-- Index for efficient active researcher queries
+CREATE INDEX idx_researchers_status ON public.researchers(status);
+
+-- Personal feed papers table (populated by recent-scholar script)
+CREATE TABLE public.personal_feed_papers (
+  id BIGSERIAL PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  paper_title TEXT NOT NULL,
+  paper_url TEXT,
+  paper_snippet TEXT,
+  paper_authors TEXT,
+  publication_date TIMESTAMPTZ,
+  raw_publication_date TEXT,
+  query_keyword TEXT NOT NULL,
+  scraped_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON TABLE public.personal_feed_papers IS 'Pre-fetched papers for personal feed, populated by recent-scholar script.';
+COMMENT ON COLUMN public.personal_feed_papers.query_keyword IS 'Keyword that matched this paper from researcher interests.';
+COMMENT ON COLUMN public.personal_feed_papers.scraped_at IS 'When the recent-scholar script fetched this paper.';
+
+-- Indexes for efficient personal feed queries
+-- Composite index for user-specific feed queries (most common query pattern)
+CREATE INDEX idx_personal_feed_user_scraped ON public.personal_feed_papers(user_id, scraped_at DESC);
+-- Standalone indexes for global queries and sorting
+CREATE INDEX idx_personal_feed_scraped_at ON public.personal_feed_papers(scraped_at DESC);
+CREATE INDEX idx_personal_feed_publication_date ON public.personal_feed_papers(publication_date DESC);
 
 -- =============================================================================
 -- TRIGGERS
@@ -252,6 +329,8 @@ ALTER TABLE public.search_results ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.search_result_queries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_lists ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.list_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.researchers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.personal_feed_papers ENABLE ROW LEVEL SECURITY;
 
 -- Profiles RLS policies
 CREATE POLICY "Users can view their own profile" ON public.profiles
@@ -331,6 +410,32 @@ CREATE POLICY "Users can delete list items" ON public.list_items
     )
   );
 
+-- Researchers RLS policies
+CREATE POLICY "Researchers can view own profile" ON public.researchers
+  FOR SELECT USING (id = auth.uid());
+
+CREATE POLICY "Researchers can insert own profile" ON public.researchers
+  FOR INSERT WITH CHECK (id = auth.uid());
+
+CREATE POLICY "Researchers can update own profile" ON public.researchers
+  FOR UPDATE USING (id = auth.uid()) WITH CHECK (id = auth.uid());
+
+CREATE POLICY "Service role manages researchers" ON public.researchers
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+-- Personal feed papers RLS policies
+CREATE POLICY "Users can view own feed papers" ON public.personal_feed_papers
+  FOR SELECT USING (user_id = auth.uid());
+
+CREATE POLICY "Service role manages feed papers" ON public.personal_feed_papers
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
 -- =============================================================================
 -- ROLE GRANTS - AUTHENTICATED USERS
 -- =============================================================================
@@ -349,6 +454,10 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.user_lists TO authenticated
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.list_items TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.profile_enrichment_jobs TO authenticated;
 
+-- Personal feed permissions
+GRANT SELECT, INSERT, UPDATE ON TABLE public.researchers TO authenticated;
+GRANT SELECT ON TABLE public.personal_feed_papers TO authenticated;
+
 -- =============================================================================
 -- ROLE GRANTS - SERVICE ROLE
 -- =============================================================================
@@ -363,28 +472,36 @@ GRANT ALL PRIVILEGES ON TABLE public.search_results TO service_role;
 GRANT ALL PRIVILEGES ON TABLE public.search_result_queries TO service_role;
 GRANT ALL PRIVILEGES ON TABLE public.user_lists TO service_role;
 GRANT ALL PRIVILEGES ON TABLE public.list_items TO service_role;
+GRANT ALL PRIVILEGES ON TABLE public.researchers TO service_role;
+GRANT ALL PRIVILEGES ON TABLE public.personal_feed_papers TO service_role;
 
 -- Full access to all sequences for service role
 GRANT ALL PRIVILEGES ON SEQUENCE public.user_lists_id_seq TO service_role;
 GRANT ALL PRIVILEGES ON SEQUENCE public.list_items_id_seq TO service_role;
 GRANT ALL PRIVILEGES ON SEQUENCE public.profile_enrichment_jobs_id_seq TO service_role;
+GRANT ALL PRIVILEGES ON SEQUENCE public.personal_feed_papers_id_seq TO service_role;
 
 -- =============================================================================
 -- SCHEMA SUMMARY
 -- =============================================================================
--- Tables: 7
---   1. profiles - User profiles with ORCID and personalization
+-- Tables: 9
+--   1. profiles - User profiles with ORCID and personalization (email digest removed)
 --   2. profile_enrichment_jobs - Queue for profile enrichment tasks
 --   3. search_queries - Cached search queries
---   4. search_results - Cached paper results with scraping/processing fields
+--   4. search_results - Cached paper results with scraping/processing/reproducibility fields
 --   5. search_result_queries - Junction table linking queries to results
 --   6. user_lists - User-created reading lists
 --   7. list_items - Papers saved to lists
+--   8. researchers - Researchers linked to profiles for script-based feed population
+--   9. personal_feed_papers - Pre-fetched papers for instant personal feed loading
 --
 -- Features:
 --   - Full RLS security on all tables
---   - Optimized indexes for performance
+--   - Optimized indexes for performance (composite indexes for RLS)
 --   - Auto-profile creation on user signup
 --   - Content scraping and LLM processing support
 --   - ORCID integration for academic identity
+--   - Personal feed populated by scholar-feed.mjs script (not live API calls)
+--   - Optimized RLS policies using EXISTS for sub-second performance
+--   - Reproducibility/claims fields prepared for future implementation
 -- =============================================================================

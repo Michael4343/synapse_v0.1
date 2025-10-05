@@ -36,3 +36,13 @@ This document bootstraps shared conventions for any agent working in the `eviden
 - Keep sensitive data in environment variables and observe security best practices
 
 _Working code shipped with clear intent is the goal—optimize for collaboration and maintainability._
+
+## Research Feed Prototype Notes
+- Researchers become “active” automatically the first time they save profile keywords; we mirror their name/email in `public.researchers`.
+- CLI workflow is split into dedicated scripts:
+  0. `npm run semantic-recent` – uses the Semantic Scholar API (set `SEMANTIC_SCHOLAR_API_KEY` in `.env.local`) to fetch the past-24h papers for each researcher and prints JSON you can feed into later steps.
+  1. `npm run recent-prompts` – loops through active researchers, copies the 24-hour search prompt to your clipboard so you can run Gemini Deep Research.
+  2. `npm run deep-prompts` – select a researcher, paste the JSON list of recent papers, and get the tailored deep-research prompt for each paper (copied to clipboard one by one).
+  3. `npm run ingest-analyses` – select the researcher again, paste the deep-research JSON payload (END to finish), and the script stores the analyses as `paper_analyses` rows with status `approved`.
+- Researchers view their analyses at `/feed` and submit feedback, stored in `paper_feedback`.
+- Daily digests still use `/api/cron/daily-digest` and track sends in `email_logs`; the Resend webhook lives at `/api/resend/webhook`.

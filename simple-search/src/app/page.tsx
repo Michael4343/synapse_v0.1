@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { ReactNode } from 'react';
+import Link from 'next/link';
 import { LogOut, Rss, User, UserCog, X, AlertTriangle, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../lib/auth-context';
 import { useAuthModal, getUserDisplayName } from '../lib/auth-hooks';
@@ -12,12 +13,11 @@ import { SaveToListModal } from '../components/save-to-list-modal';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { VerifyReproducibilityPayload } from '../lib/reproducibility-report';
+import type { ResearchPaperAnalysis, RiskLevel, Stage } from '../lib/reproducibility-types';
 import {
   getCachedData,
   setCachedData,
   clearCachedData,
-  PERSONAL_FEED_CACHE_KEY,
-  PERSONAL_FEED_TTL_MS,
   LIST_METADATA_CACHE_KEY,
   LIST_ITEMS_CACHE_KEY
 } from '../lib/cache-utils';
@@ -383,88 +383,7 @@ function filterByRecency(papers: ApiSearchResult[], days: number): ApiSearchResu
   );
 }
 
-type VerificationStatus = 'verified' | 'inferred' | 'uncertain'
-type GapSeverity = 'critical' | 'moderate' | 'minor'
-type RiskLevel = 'Low' | 'Medium' | 'High'
-
-interface MockFeasibilityQuestion {
-  id: string
-  question: string
-  weight: number
-  category: string
-  helper?: string
-}
-
-interface MockBlocker {
-  severity: GapSeverity
-  issue: string
-  mitigation: string
-  verificationStatus: VerificationStatus
-}
-
-interface MockCriticalPhase {
-  id: string
-  phase: string
-  duration: string
-  cost: string
-  riskLevel: RiskLevel
-  dependencies: string[]
-  requirements: string[]
-  outputs: string[]
-  blockers: MockBlocker[]
-}
-
-interface MockEvidenceItem {
-  claim: string
-  source: string
-  verificationStatus: VerificationStatus
-  notes?: string
-}
-
-interface MockGap {
-  concern: string
-  impact: string
-  severity: GapSeverity
-  resolvableWithExpertAnalysis: boolean
-}
-
-interface MockReproReport {
-  stage: 'ai_research' | 'expert_verified'
-  lastUpdated: string
-  reviewers: string[]
-  paper: {
-    title: string
-    authors: string
-    venue: string
-    doi: string
-  }
-  verdict: {
-    grade: string
-    confidence: string
-    mainMessage: string
-    successProbability: number
-    timeToFirstResult: string
-    totalCost: string
-    skillCeiling: string
-    confidenceLevel: 'ai_inferred' | 'expert_verified'
-  }
-  criticalPath: MockCriticalPhase[]
-  evidenceBase: {
-    strongEvidence: MockEvidenceItem[]
-    gaps: MockGap[]
-    assumptions: string[]
-  }
-  feasibilityQuestions: MockFeasibilityQuestion[]
-  expertEnhancements: {
-    authorContacted: boolean
-    datasetsVerified: string[]
-    protocolClarifications: string[]
-    additionalResources: string[]
-    turnaround: string
-  }
-}
-
-const STAGE_META: Record<MockReproReport['stage'], { label: string; description: string; badgeClasses: string }> = {
+const STAGE_META: Record<Stage, { label: string; description: string; badgeClasses: string }> = {
   ai_research: {
     label: 'AI Deep Research',
     description: 'Automated synthesis from public sources',
@@ -483,7 +402,7 @@ const RISK_BADGES: Record<RiskLevel, string> = {
   High: 'border border-red-200 bg-red-50 text-red-700'
 }
 
-const VERIFICATION_DATA: Record<string, MockReproReport> = {
+const VERIFICATION_DATA: Record<string, ResearchPaperAnalysis> = {
   '68d962effe5520777791bd6ec8ffa4b963ba4f38': {
     stage: 'ai_research',
     lastUpdated: '2025-02-10',
@@ -1113,7 +1032,7 @@ function getFeasibilityTone(score: number): string {
   return 'text-red-600'
 }
 
-function StaticReproReport({ report, onRequestReview }: { report: MockReproReport; onRequestReview?: () => void }) {
+function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperAnalysis; onRequestReview?: () => void }) {
   const questions = report.feasibilityQuestions
 
   const [answers, setAnswers] = useState<Record<string, 'yes' | 'no' | null>>(() => {
@@ -1344,7 +1263,7 @@ function StaticReproReport({ report, onRequestReview }: { report: MockReproRepor
   )
 }
 
-function StaticClaimsPreview({ report, onRequestReview }: { report: MockReproReport; onRequestReview?: () => void }) {
+function StaticClaimsPreview({ report, onRequestReview }: { report: ResearchPaperAnalysis; onRequestReview?: () => void }) {
   const topClaim = report.evidenceBase.strongEvidence[0]
   const topGap = report.evidenceBase.gaps[0]
 
@@ -1846,8 +1765,6 @@ interface UserProfile {
   profile_personalization: ProfilePersonalization | null
   last_profile_enriched_at: string | null
   profile_enrichment_version: string | null
-  email_digest_enabled: boolean
-  last_digest_sent_at: string | null
 }
 
 function formatRelativeTime(timestamp: string | null | undefined) {
@@ -1992,7 +1909,6 @@ export default function Home() {
   const [profileEnrichmentLoading, setProfileEnrichmentLoading] = useState(false);
   const [profileEnrichmentError, setProfileEnrichmentError] = useState('');
   const [websiteScrapingLoading, setWebsiteScrapingLoading] = useState(false);
-  const [emailDigestEnabled, setEmailDigestEnabled] = useState(false);
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [paperToSave, setPaperToSave] = useState<ApiSearchResult | null>(null);
   const [userLists, setUserLists] = useState<UserListSummary[]>([]);
@@ -2003,10 +1919,6 @@ export default function Home() {
   const [listItemsLoading, setListItemsLoading] = useState(false);
   const [listItemsLoadingMessage, setListItemsLoadingMessage] = useState('');
   const [cachedListItems, setCachedListItems] = useState<Map<number, ApiSearchResult[]>>(new Map());
-  const [personalFeedResults, setPersonalFeedResults] = useState<ApiSearchResult[]>([]);
-  const [personalFeedLoading, setPersonalFeedLoading] = useState(false);
-  const [personalFeedError, setPersonalFeedError] = useState('');
-  const [personalFeedLastUpdated, setPersonalFeedLastUpdated] = useState<string | null>(null);
   const [profileEditorVisible, setProfileEditorVisible] = useState(false);
   const [profileSaveLoading, setProfileSaveLoading] = useState(false);
   const [accountDropdownVisible, setAccountDropdownVisible] = useState(false);
@@ -2193,7 +2105,7 @@ export default function Home() {
       const supabase = createClient();
       const { data, error } = await supabase
         .from('profiles')
-        .select('orcid_id, academic_website, profile_personalization, last_profile_enriched_at, profile_enrichment_version, email_digest_enabled, last_digest_sent_at')
+        .select('orcid_id, academic_website, profile_personalization, last_profile_enriched_at, profile_enrichment_version')
         .eq('id', user.id)
         .single();
 
@@ -2212,10 +2124,7 @@ export default function Home() {
           profile_personalization: data?.profile_personalization ?? null,
           last_profile_enriched_at: data?.last_profile_enriched_at ?? null,
           profile_enrichment_version: data?.profile_enrichment_version ?? null,
-          email_digest_enabled: data?.email_digest_enabled ?? false,
-          last_digest_sent_at: data?.last_digest_sent_at ?? null,
         });
-        setEmailDigestEnabled(data?.email_digest_enabled ?? false);
       }
     } catch (error) {
       if (isMountedRef.current) {
@@ -2234,200 +2143,6 @@ export default function Home() {
   const profileTopicClusters = profilePersonalization?.topic_clusters ?? [];
 
 
-  const loadPersonalFeed = useCallback(
-    async (force = false, keywordsOverride?: string[]) => {
-      if (!user) {
-        return;
-      }
-
-      const manualKeywordsArray = keywordsOverride || profile?.profile_personalization?.manual_keywords || [];
-      if (manualKeywordsArray.length === 0) {
-        setPersonalFeedResults([]);
-        setPersonalFeedError('Add keywords to your profile to generate your personal feed.');
-        return;
-      }
-
-      const cacheKey = `${PERSONAL_FEED_CACHE_KEY}-${user.id}-${JSON.stringify(manualKeywordsArray)}`;
-      const cached = getCachedData<{ results: ApiSearchResult[]; lastUpdated: string }>(cacheKey, PERSONAL_FEED_TTL_MS) || null;
-
-      if (cached) {
-        setPersonalFeedResults(cached.results);
-        setPersonalFeedError('');
-        setPersonalFeedLastUpdated(cached.lastUpdated);
-      }
-
-      const lastKnownUpdateIso = cached?.lastUpdated ?? personalFeedLastUpdated ?? null;
-      const shouldRunSearch = force || !lastKnownUpdateIso || shouldRunScheduledPersonalFeed(lastKnownUpdateIso);
-
-      if (!shouldRunSearch) {
-        return;
-      }
-
-      if (personalFeedLoading) {
-        return;
-      }
-
-      const keywords = manualKeywordsArray.slice(0, 4);
-
-      setPersonalFeedLoading(true);
-      setPersonalFeedError('');
-
-      try {
-        const allResults: ApiSearchResult[] = [];
-        const seenIds = new Set<string>();
-
-        for (let i = 0; i < keywords.length; i++) {
-          const keyword = keywords[i];
-
-          try {
-            const currentYear = new Date().getFullYear();
-            const response = await fetch('/api/search', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ query: keyword, year: currentYear })
-            });
-
-            let results: ApiSearchResult[] = [];
-            if (response.ok) {
-              const data = await response.json();
-              results = Array.isArray(data.results) ? data.results : [];
-            }
-
-            if (results.length < 3) {
-              try {
-                const previousYear = currentYear - 1;
-                const fallbackResponse = await fetch('/api/search', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ query: keyword, year: previousYear })
-                });
-
-                if (fallbackResponse.ok) {
-                  const fallbackData = await fallbackResponse.json();
-                  const fallbackResults = Array.isArray(fallbackData.results) ? fallbackData.results : [];
-                  results = [...results, ...fallbackResults];
-                }
-              } catch (fallbackError) {
-                console.log(`Previous year fallback failed for keyword "${keyword}":`, fallbackError);
-              }
-            }
-
-            let filteredResults = filterByRecency(results, 7);
-            if (filteredResults.length < 3) {
-              filteredResults = filterByRecency(results, 14);
-            }
-            if (filteredResults.length < 3) {
-              filteredResults = filterByRecency(results, 30);
-            }
-            if (filteredResults.length < 3) {
-              filteredResults = results;
-            }
-
-            for (const result of filteredResults) {
-              if (!seenIds.has(result.id) && allResults.length < 12) {
-                allResults.push(result);
-                seenIds.add(result.id);
-              }
-            }
-
-            if (allResults.length > 0) {
-              const sorted = [...allResults].sort((a, b) => {
-                if (!a.publicationDate && !b.publicationDate) return 0;
-                if (!a.publicationDate) return 1;
-                if (!b.publicationDate) return -1;
-                return new Date(b.publicationDate).getTime() - new Date(a.publicationDate).getTime();
-              });
-              setPersonalFeedResults(sorted);
-              setPersonalFeedError('');
-            }
-          } catch (error) {
-            console.warn(`Query ${i + 1} failed:`, error);
-          }
-        }
-
-        if (allResults.length === 0) {
-          setPersonalFeedError('No papers found for your keywords. Try different or broader terms.');
-        } else {
-          const sorted = allResults.sort((a, b) => {
-            if (!a.publicationDate && !b.publicationDate) return 0;
-            if (!a.publicationDate) return 1;
-            if (!b.publicationDate) return -1;
-            return new Date(b.publicationDate).getTime() - new Date(a.publicationDate).getTime();
-          });
-
-          const lastUpdated = new Date().toISOString();
-          setPersonalFeedResults(sorted);
-          setPersonalFeedLastUpdated(lastUpdated);
-
-          setCachedData(cacheKey, { results: sorted, lastUpdated });
-        }
-      } catch (error) {
-        console.error('Personal feed error:', error);
-        setPersonalFeedError('Failed to load personal feed. Please try again.');
-      } finally {
-        setPersonalFeedLoading(false);
-      }
-    },
-    [
-      user,
-      profile?.profile_personalization?.manual_keywords,
-      personalFeedLoading,
-      personalFeedLastUpdated,
-    ]
-  );
-
-  useEffect(() => {
-    if (!user) {
-      setPersonalFeedResults([]);
-      setPersonalFeedError('');
-      setPersonalFeedLastUpdated(null);
-      return;
-    }
-
-    // Wait for profile to load before attempting personal feed
-    if (profileLoading) {
-      return;
-    }
-
-    // Only auto-load personal feed once per user, after profile is loaded
-    if (personalFeedResults.length === 0) {
-      if (profile?.profile_personalization?.manual_keywords?.length > 0) {
-        console.log('Auto-loading personal feed after profile loaded');
-        loadPersonalFeed();
-      } else {
-        // Show helpful message for users without keywords
-        setPersonalFeedError('Add keywords to your profile to generate your personal feed.');
-        console.log('Profile loaded but no keywords found - prompting user to add keywords');
-      }
-    }
-  }, [user, profileLoading, profile?.profile_personalization?.manual_keywords, personalFeedResults.length, loadPersonalFeed]);
-
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
-
-    if (keywordLoading || keywordResults.length > 0 || lastKeywordQuery || selectedListId) {
-      return;
-    }
-
-    if (personalFeedResults.length > 0) {
-      setSelectedPaper((prev) => {
-        if (prev && personalFeedResults.find((result) => result.id === prev.id)) {
-          return prev;
-        }
-        return personalFeedResults[0];
-      });
-    }
-  }, [
-    keywordLoading,
-    keywordResults,
-    lastKeywordQuery,
-    personalFeedResults,
-    selectedListId,
-    user,
-  ]);
-
   useEffect(() => {
     if (!user) {
       // Reset profile states
@@ -2441,9 +2156,6 @@ export default function Home() {
       setProfileSaveError('');
       setProfileEnrichmentError('');
       setProfileEnrichmentLoading(false);
-      setPersonalFeedResults([]);
-      setPersonalFeedError('');
-      setPersonalFeedLastUpdated(null);
       setProfileEditorVisible(false);
 
       // Reset feed and panel states to return to landing page
@@ -2538,8 +2250,6 @@ export default function Home() {
               profile_personalization: result.personalization,
               last_profile_enriched_at: result.last_profile_enriched_at,
               profile_enrichment_version: result.profile_enrichment_version,
-              email_digest_enabled: false,
-              last_digest_sent_at: null,
             };
           }
 
@@ -2551,9 +2261,6 @@ export default function Home() {
           };
         });
 
-        // Reload the personal feed
-        await loadPersonalFeed(true);
-
       } catch (error) {
         console.error('Profile enrichment request failed', error);
         setProfileEnrichmentError(error instanceof Error ? error.message : 'We could not refresh your personalization. Please try again.');
@@ -2562,30 +2269,62 @@ export default function Home() {
       }
     }, [
       authModal,
-      loadPersonalFeed,
       profile?.orcid_id,
       profileEnrichmentLoading,
       profileManualKeywords,
       user,
     ]);
 
-  const handleRefreshPersonalFeed = useCallback(() => {
-    setKeywordQuery('');
-    setYearQuery('');
-    setKeywordResults([]);
-    setKeywordError('');
-    setLastKeywordQuery('');
-    setLastYearQuery(null);
+  const handleRefreshPersonalFeed = useCallback(async () => {
+    const hasKeywords = profile?.profile_personalization?.manual_keywords?.length > 0;
+
+    if (!hasKeywords) {
+      // If no keywords, open profile editor
+      setProfileEditorVisible(true);
+      return;
+    }
+
+    // Clear current state
     setSelectedListId(null);
     setListItems([]);
-    loadPersonalFeed();
-  }, [loadPersonalFeed]);
+    setYearQuery('');
+    setKeywordQuery('');
+
+    // Fetch from personal feed API
+    setKeywordLoading(true);
+    setKeywordError('');
+    setLastKeywordQuery('Personal Feed');
+    setLastYearQuery(null);
+
+    try {
+      const response = await fetch('/api/personal-feed');
+
+      if (!response.ok) {
+        throw new Error(`Personal feed failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      const results = Array.isArray(data.results) ? data.results : [];
+
+      setKeywordResults(results);
+
+      if (results.length > 0) {
+        setSelectedPaper(results[0]);
+      } else {
+        setKeywordError('No recent papers found in your personal feed. Papers are updated daily.');
+      }
+    } catch (error) {
+      console.error('Personal feed error:', error);
+      setKeywordError('Could not load your personal feed. Please try again.');
+    } finally {
+      setKeywordLoading(false);
+    }
+  }, [profile]);
 
   useEffect(() => {
     if (profile) {
       setProfileFormOrcid(formatOrcidId(profile.orcid_id ?? ''));
       setProfileFormWebsite(profile.academic_website ?? '');
-      setEmailDigestEnabled(profile.email_digest_enabled ?? false);
       setOrcidEditingMode(false);
       setWebsiteEditingMode(false);
 
@@ -2597,7 +2336,7 @@ export default function Home() {
             .filter((value): value is string => Boolean(value))
             .slice(0, 5);
           if (seedKeywords.length) {
-            setProfileManualKeywords(seedKeywords.join(', '));
+            setProfileManualKeywords(seedKeywords.join('\n'));
           }
         }
         setManualKeywordsSeededVersion(currentVersion);
@@ -2606,7 +2345,6 @@ export default function Home() {
       setProfileFormOrcid('');
       setProfileFormWebsite('');
       setProfileManualKeywords('');
-      setEmailDigestEnabled(false);
       setManualKeywordsSeededVersion(null);
     }
   }, [profile, manualKeywordsSeededVersion]);
@@ -2636,35 +2374,16 @@ export default function Home() {
       <div className="space-y-5">
         <div className="space-y-2">
           <label htmlFor={keywordsId} className={PROFILE_LABEL_CLASSES}>
-            Focus keywords <span className="text-xs font-normal text-slate-500">(separate with commas, e.g. &quot;AI, machine learning, neural networks&quot;)</span>
+            Search queries <span className="text-xs font-normal text-slate-500">(one per line, 3+ words each)</span>
           </label>
           <textarea
             id={keywordsId}
-            rows={4}
+            rows={6}
             value={profileManualKeywords}
             onChange={(event) => setProfileManualKeywords(event.target.value)}
-            placeholder="machine learning, neural networks, computer vision, AI, deep learning"
+            placeholder="Carbon capture food production"
             className={PROFILE_INPUT_CLASSES}
           />
-        </div>
-
-        <div className="space-y-2">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={emailDigestEnabled}
-              onChange={(e) => setEmailDigestEnabled(e.target.checked)}
-              className="w-4 h-4 text-sky-600 border-slate-300 rounded focus:ring-sky-500 focus:ring-2 cursor-pointer"
-            />
-            <span className="text-sm font-medium text-slate-700">
-              Send me daily research updates
-            </span>
-          </label>
-          {profile?.last_digest_sent_at && (
-            <p className="text-xs text-slate-500 ml-7">
-              Last sent: {formatRelativeTime(profile.last_digest_sent_at)}
-            </p>
-          )}
         </div>
       </div>
     );
@@ -2891,50 +2610,6 @@ export default function Home() {
         Nothing surfaced for this query yet. Try refining keywords or toggling a different source.
       </div>
     );
-  } else if (shouldShowPersonalFeed) {
-    if ((personalFeedLoading || profileSaveLoading) && personalFeedResults.length === 0) {
-      // Show loading state only if we have no results yet
-      mainFeedContent = (
-        <div className={FEED_LOADING_WRAPPER_CLASSES}>
-          <span className={FEED_LOADING_PILL_CLASSES}>
-            <span className={FEED_SPINNER_CLASSES} aria-hidden="true" />
-            <span>Loading your personal feed…</span>
-          </span>
-          {FEED_SKELETON_ITEMS.slice(0, 3).map((_, index) => (
-            <div key={index} className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white">
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-slate-200/60 to-transparent animate-[shimmer_1.6s_infinite]" />
-              <div className="px-6 py-8">
-                <div className="h-5 w-1/3 rounded-full bg-slate-200/80" />
-                <div className="mt-4 h-4 w-2/3 rounded-full bg-slate-200/60" />
-                <div className="mt-3 h-3 w-1/2 rounded-full bg-slate-200/50" />
-              </div>
-            </div>
-          ))}
-        </div>
-      );
-    } else if (personalFeedResults.length > 0) {
-      // Show loading indicator at top if reloading with existing results
-      const feedContent = renderResultList(personalFeedResults, 'Personal recommendation (recent)');
-      if (personalFeedLoading || profileSaveLoading) {
-        mainFeedContent = (
-          <div className={FEED_LOADING_WRAPPER_CLASSES}>
-            <span className={FEED_LOADING_PILL_CLASSES}>
-              <span className={FEED_SPINNER_CLASSES} aria-hidden="true" />
-              <span>Updating your personal feed…</span>
-            </span>
-            {feedContent}
-          </div>
-        );
-      } else {
-        mainFeedContent = feedContent;
-      }
-    } else {
-      mainFeedContent = (
-        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center text-sm text-slate-600">
-          {personalFeedError || 'We could not find new papers for your focus areas today. Try refreshing later or adding more keywords to your profile.'}
-        </div>
-      );
-    }
   } else if (!user) {
     mainFeedContent = renderResultList(SAMPLE_PAPERS, 'Featured pick');
   } else {
@@ -3209,7 +2884,7 @@ export default function Home() {
           }
         }
 
-        setProfileManualKeywords(allKeywords.join(', '));
+        setProfileManualKeywords(allKeywords.join('\n'));
         setProfileEnrichmentError('');
       } else {
         setProfileEnrichmentError('No keywords could be generated from your ORCID profile.');
@@ -3288,7 +2963,7 @@ export default function Home() {
           }
         }
 
-        setProfileManualKeywords(allKeywords.join(', '));
+        setProfileManualKeywords(allKeywords.join('\n'));
         setProfileEnrichmentError('');
       } else {
         setProfileEnrichmentError('No keywords could be generated from your website.');
@@ -3367,8 +3042,7 @@ export default function Home() {
     const keywordsChanged = JSON.stringify(profile?.profile_personalization?.manual_keywords || []) !== JSON.stringify(parsedManualKeywords);
     const orcidChanged = (profile?.orcid_id || null) !== normalizedOrcid;
     const websiteChanged = (profile?.academic_website || null) !== (normalizedWebsite || null);
-    const digestChanged = (profile?.email_digest_enabled || false) !== emailDigestEnabled;
-    const hasChanges = keywordsChanged || orcidChanged || websiteChanged || digestChanged;
+    const hasChanges = keywordsChanged || orcidChanged || websiteChanged;
 
     setProfileSaving(true);
     if (hasChanges) {
@@ -3405,7 +3079,6 @@ export default function Home() {
           profile_personalization: simplePersonalization,
           last_profile_enriched_at: new Date().toISOString(),
           profile_enrichment_version: 'manual-v1',
-          email_digest_enabled: emailDigestEnabled,
         })
         .eq('id', user.id);
 
@@ -3415,14 +3088,42 @@ export default function Home() {
         return;
       }
 
+      // Upsert researcher record for script-based feed population
+      const displayName = user.user_metadata?.full_name || user.email || 'Anonymous Researcher';
+      const researcherStatus = parsedManualKeywords.length > 0 ? 'active' : 'paused';
+
+      const researcherRecord = {
+        id: user.id,
+        display_name: displayName,
+        contact_email: user.email,
+        research_interests: parsedManualKeywords,
+        status: researcherStatus,
+      };
+
+      const { data: researcherData, error: researcherError } = await supabase
+        .from('researchers')
+        .upsert(researcherRecord, {
+          onConflict: 'id'
+        })
+        .select();
+
+      if (researcherError) {
+        console.error('Researcher record update failed (non-critical):', {
+          error: researcherError,
+          errorMessage: researcherError.message,
+          errorDetails: researcherError.details,
+          errorHint: researcherError.hint,
+          recordAttempted: researcherRecord
+        });
+        // Don't block the save - this is for background script only
+      }
+
       setProfile((previous) => ({
         orcid_id: normalizedOrcid,
         academic_website: normalizedWebsite || null,
         profile_personalization: simplePersonalization,
         last_profile_enriched_at: new Date().toISOString(),
         profile_enrichment_version: 'manual-v1',
-        email_digest_enabled: emailDigestEnabled,
-        last_digest_sent_at: previous?.last_digest_sent_at ?? null,
       }));
 
       // Reset editing modes
@@ -3432,13 +3133,12 @@ export default function Home() {
       // Close the profile editor modal on successful save
       closeProfileEditor();
 
-      // Only reload the personal feed if there were actual changes
-      if (hasChanges) {
-        try {
-          await loadPersonalFeed(true, parsedManualKeywords);
-        } catch (error) {
-          console.error('Failed to reload personal feed after profile save', error);
-        }
+      // Auto-trigger personal feed search if user has keywords
+      if (parsedManualKeywords.length > 0) {
+        // Small delay to let UI update
+        setTimeout(() => {
+          handleRefreshPersonalFeed();
+        }, 300);
       }
     } catch (error) {
       console.error('Unexpected profile update error', error);
@@ -3615,6 +3315,14 @@ export default function Home() {
                             <UserCog className="h-4 w-4" />
                             Edit Profile
                           </button>
+                          <Link
+                            href="/feed"
+                            onClick={() => setAccountDropdownVisible(false)}
+                            className="flex w-full items-center gap-2 border-t border-slate-200 px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                          >
+                            <Rss className="h-4 w-4" />
+                            Research Feed
+                          </Link>
                           <button
                             type="button"
                             onClick={handleSignOut}
@@ -3738,7 +3446,7 @@ export default function Home() {
                 </div>
               </div>
 
-              <form onSubmit={handleKeywordSearch} className="relative">
+              <form id="keyword-search-form" onSubmit={handleKeywordSearch} className="relative">
                 <div className="relative flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                   <input
                     type="text"

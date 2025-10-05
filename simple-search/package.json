@@ -9,13 +9,21 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "recent-prompts": "node scripts/recent-prompts.mjs",
+    "semantic-recent": "node scripts/semantic-recent.mjs",
+    "deep-prompts": "node scripts/prepare-deep-prompts.mjs",
+    "ingest-analyses": "node scripts/ingest-deep-research.mjs",
+    "recent-scholar": "node scripts/recent-scholar.mjs",
+    "test-scholar-scraper": "node scripts/scholar-scraper-test.mjs",
+    "scholar-feed": "node scripts/scholar-feed.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@react-email/render": "^1.3.1",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.57.4",
+    "clipboardy": "^5.0.0",
     "lucide-react": "^0.544.0",
     "next": "15.5.3",
     "posthog-js": "^1.266.0",

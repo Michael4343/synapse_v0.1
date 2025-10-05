@@ -27,7 +27,12 @@
       "Bash(fi)",
       "Bash(npx next lint:*)",
       "Bash(sed:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "WebFetch(domain:serpapi.com)",
+      "WebFetch(domain:stackoverflow.com)",
+      "Read(//tmp/**)",
+      "WebFetch(domain:scholar.google.com)",
+      "Bash(cd:*)"
     ],
     "deny": [],
     "ask": []
