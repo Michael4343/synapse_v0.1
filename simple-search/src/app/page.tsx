@@ -129,6 +129,7 @@ const SAMPLE_PAPERS: ApiSearchResult[] = [
 
 const AEST_OFFSET_MINUTES = 10 * 60
 const AEST_OFFSET_MS = AEST_OFFSET_MINUTES * 60 * 1000
+const PERSONAL_FEED_LABEL = 'Personal Feed'
 
 function toAest(date: Date): Date {
   return new Date(date.getTime() + AEST_OFFSET_MS)
@@ -273,6 +274,35 @@ const PROFILE_PRIMARY_BUTTON_CLASSES = 'inline-flex items-center justify-center 
 const PROFILE_COMING_SOON_HINT_CLASSES = 'text-xs font-medium text-slate-400';
 const PROFILE_DISABLED_UPLOAD_BUTTON_CLASSES = 'flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-400 cursor-not-allowed';
 
+const RELATIVE_TIME_FORMATTER = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+const RELATIVE_TIME_DIVISIONS: { amount: number; unit: Intl.RelativeTimeFormatUnit }[] = [
+  { amount: 60, unit: 'second' },
+  { amount: 60, unit: 'minute' },
+  { amount: 24, unit: 'hour' },
+  { amount: 7, unit: 'day' },
+  { amount: 4.34524, unit: 'week' },
+  { amount: 12, unit: 'month' },
+  { amount: Number.POSITIVE_INFINITY, unit: 'year' }
+];
+
+function formatRelativePublicationDate(publicationDate: string | null): string | null {
+  if (!publicationDate) return null;
+
+  const publishedAt = new Date(publicationDate);
+  if (Number.isNaN(publishedAt.getTime())) return null;
+
+  let durationInSeconds = (publishedAt.getTime() - Date.now()) / 1000;
+
+  for (const division of RELATIVE_TIME_DIVISIONS) {
+    if (Math.abs(durationInSeconds) < division.amount) {
+      return RELATIVE_TIME_FORMATTER.format(Math.round(durationInSeconds), division.unit);
+    }
+    durationInSeconds /= division.amount;
+  }
+
+  return null;
+}
+
 function formatAuthors(authors: string[]) {
   if (!authors.length) return 'Author information unavailable'
   if (authors.length <= 3) return authors.join(', ')
@@ -293,6 +323,11 @@ function formatMeta(result: ApiSearchResult) {
   if (typeof result.citationCount === 'number' && Number.isFinite(result.citationCount) && result.citationCount >= 0) {
     const formattedCount = result.citationCount.toLocaleString()
     items.push(`${formattedCount} citation${result.citationCount === 1 ? '' : 's'}`)
+  }
+
+  const relativePublication = formatRelativePublicationDate(result.publicationDate)
+  if (relativePublication) {
+    items.push(relativePublication)
   }
 
   return items.join(' • ')
@@ -1886,7 +1921,6 @@ export default function Home() {
   const [yearQuery, setYearQuery] = useState('');
   const [researchChecked, setResearchChecked] = useState(true);
   const [patentsChecked, setPatentsChecked] = useState(false);
-  const [newsChecked, setNewsChecked] = useState(false);
   const [communityChecked, setCommunityChecked] = useState(false);
   const [keywordResults, setKeywordResults] = useState<ApiSearchResult[]>([]);
   const [keywordLoading, setKeywordLoading] = useState(false);
@@ -1927,10 +1961,15 @@ export default function Home() {
   const [scrapedContentError, setScrapedContentError] = useState('');
   const [scrapedContentIsStructured, setScrapedContentIsStructured] = useState(false);
   const [verificationMode, setVerificationMode] = useState<'repro' | 'claims' | null>(null);
+  const [feedPopulating, setFeedPopulating] = useState(false);
 
   const profileManualKeywordsRef = useRef('');
   const isMountedRef = useRef(true);
   const accountDropdownRef = useRef<HTMLDivElement | null>(null);
+  const feedPollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const feedPollCountRef = useRef(0);
+  const feedLastResultCountRef = useRef(0);
+  const feedStableCountRef = useRef(0);
 
   useEffect(() => {
     if (!accountDropdownVisible) {
@@ -2293,7 +2332,7 @@ export default function Home() {
     // Fetch from personal feed API
     setKeywordLoading(true);
     setKeywordError('');
-    setLastKeywordQuery('Personal Feed');
+    setLastKeywordQuery(PERSONAL_FEED_LABEL);
     setLastYearQuery(null);
 
     try {
@@ -2320,6 +2359,83 @@ export default function Home() {
       setKeywordLoading(false);
     }
   }, [profile]);
+
+  // Start polling personal feed for progressive updates
+  const startFeedPolling = useCallback(() => {
+    // Clear any existing polling
+    if (feedPollingIntervalRef.current) {
+      clearInterval(feedPollingIntervalRef.current);
+    }
+
+    // Reset polling state
+    feedPollCountRef.current = 0;
+    feedLastResultCountRef.current = 0;
+    feedStableCountRef.current = 0;
+    setFeedPopulating(true);
+
+    const maxPolls = 40; // 40 * 3s = 2 minutes max
+    const stableThreshold = 2; // Stop if results unchanged for 2 polls
+
+    const pollFeed = async () => {
+      feedPollCountRef.current++;
+
+      try {
+        const response = await fetch('/api/personal-feed');
+        if (response.ok) {
+          const data = await response.json();
+          const results = Array.isArray(data.results) ? data.results : [];
+
+          // Update results as they come in
+          setKeywordResults(results);
+          if (results.length > 0 && !selectedPaper) {
+            setSelectedPaper(results[0]);
+          }
+
+          // Detect if results have stabilized
+          if (results.length === feedLastResultCountRef.current) {
+            feedStableCountRef.current++;
+          } else {
+            feedStableCountRef.current = 0;
+            feedLastResultCountRef.current = results.length;
+          }
+
+          // Stop polling if results are stable or max attempts reached
+          if (feedStableCountRef.current >= stableThreshold || feedPollCountRef.current >= maxPolls) {
+            console.log(`[polling] Stopping - stable: ${feedStableCountRef.current >= stableThreshold}, max: ${feedPollCountRef.current >= maxPolls}`);
+            stopFeedPolling();
+          }
+        }
+      } catch (error) {
+        console.error('[polling] Feed polling error:', error);
+        // Stop polling on persistent errors
+        if (feedPollCountRef.current >= 3) {
+          stopFeedPolling();
+        }
+      }
+    };
+
+    // Poll immediately, then every 3 seconds
+    pollFeed();
+    feedPollingIntervalRef.current = setInterval(pollFeed, 3000);
+  }, [selectedPaper]);
+
+  // Stop polling personal feed
+  const stopFeedPolling = useCallback(() => {
+    if (feedPollingIntervalRef.current) {
+      clearInterval(feedPollingIntervalRef.current);
+      feedPollingIntervalRef.current = null;
+    }
+    setFeedPopulating(false);
+  }, []);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (feedPollingIntervalRef.current) {
+        clearInterval(feedPollingIntervalRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (profile) {
@@ -2363,9 +2479,13 @@ export default function Home() {
 
   const hasKeywords = profile?.profile_personalization?.manual_keywords && profile.profile_personalization.manual_keywords.length > 0;
   const profileNeedsSetup = Boolean(user) && !profileLoading && !profileError && (!profile || !hasKeywords);
-  const isSearchContext = keywordLoading || keywordResults.length > 0 || Boolean(lastKeywordQuery) || Boolean(keywordError);
+  const isPersonalFeedActive = lastKeywordQuery === PERSONAL_FEED_LABEL;
+  const hasActiveSearchResults = keywordResults.length > 0 && !isPersonalFeedActive;
+  const hasActiveSearchQuery = Boolean(lastKeywordQuery) && !isPersonalFeedActive;
+  const hasSearchError = Boolean(keywordError) && !isPersonalFeedActive;
+  const isSearchContext = (keywordLoading && !isPersonalFeedActive) || hasActiveSearchResults || hasActiveSearchQuery || hasSearchError;
   const isListViewActive = Boolean(selectedListId);
-  const shouldShowPersonalFeed = Boolean(user && hasKeywords && !profileNeedsSetup && !isSearchContext && !isListViewActive);
+  const shouldShowPersonalFeed = Boolean(user && hasKeywords && !profileNeedsSetup && !isListViewActive && (!isSearchContext || isPersonalFeedActive));
   const personalizationInputs = (includeAction: boolean) => {
     const keywordsId = includeAction ? 'profile-keywords-editor' : 'profile-keywords';
     const resumeId = includeAction ? 'profile-resume-editor' : 'profile-resume';
@@ -2590,6 +2710,12 @@ export default function Home() {
   } else if (keywordResults.length > 0) {
     mainFeedContent = (
       <>
+        {feedPopulating && (
+          <span className={FEED_LOADING_PILL_CLASSES}>
+            <span className={FEED_SPINNER_CLASSES} aria-hidden="true" />
+            <span>Populating your feed… ({keywordResults.length} papers found)</span>
+          </span>
+        )}
         <div className={RESULT_SUMMARY_CLASSES}>
           <span>Showing</span>
           <span className="text-base font-semibold text-slate-900">{keywordResults.length}</span>
@@ -2603,6 +2729,26 @@ export default function Home() {
         </div>
         {renderResultList(keywordResults, 'Search result')}
       </>
+    );
+  } else if (feedPopulating) {
+    // Show loading state when populating feed with no results yet
+    mainFeedContent = (
+      <div className={FEED_LOADING_WRAPPER_CLASSES}>
+        <span className={FEED_LOADING_PILL_CLASSES}>
+          <span className={FEED_SPINNER_CLASSES} aria-hidden="true" />
+          <span>Populating your feed…</span>
+        </span>
+        {FEED_SKELETON_ITEMS.slice(0, 3).map((_, index) => (
+          <div key={index} className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-slate-200/60 to-transparent animate-[shimmer_1.6s_infinite]" />
+            <div className="px-6 py-8">
+              <div className="h-5 w-1/3 rounded-full bg-slate-200/80" />
+              <div className="mt-4 h-4 w-2/3 rounded-full bg-slate-200/60" />
+              <div className="mt-3 h-3 w-1/2 rounded-full bg-slate-200/50" />
+            </div>
+          </div>
+        ))}
+      </div>
     );
   } else if (lastKeywordQuery && !keywordError) {
     mainFeedContent = (
@@ -3038,8 +3184,21 @@ export default function Home() {
       }
     }
 
-    // Check if anything actually changed before setting loading states
-    const keywordsChanged = JSON.stringify(profile?.profile_personalization?.manual_keywords || []) !== JSON.stringify(parsedManualKeywords);
+    // Smart keyword change detection (normalized comparison)
+    const normalizeKeywordsForComparison = (keywords: string[]) =>
+      keywords.map(k => k.toLowerCase().trim()).sort().join('|');
+
+    const oldKeywords = profile?.profile_personalization?.manual_keywords || [];
+    const keywordsChanged = normalizeKeywordsForComparison(oldKeywords) !== normalizeKeywordsForComparison(parsedManualKeywords);
+
+    // Debug logging for keyword comparison
+    console.log('[profile-save] Keyword comparison:');
+    console.log('  Old keywords:', oldKeywords);
+    console.log('  New keywords:', parsedManualKeywords);
+    console.log('  Old normalized:', normalizeKeywordsForComparison(oldKeywords));
+    console.log('  New normalized:', normalizeKeywordsForComparison(parsedManualKeywords));
+    console.log('  Keywords changed:', keywordsChanged);
+
     const orcidChanged = (profile?.orcid_id || null) !== normalizedOrcid;
     const websiteChanged = (profile?.academic_website || null) !== (normalizedWebsite || null);
     const hasChanges = keywordsChanged || orcidChanged || websiteChanged;
@@ -3133,9 +3292,36 @@ export default function Home() {
       // Close the profile editor modal on successful save
       closeProfileEditor();
 
-      // Auto-trigger personal feed search if user has keywords
-      if (parsedManualKeywords.length > 0) {
-        // Small delay to let UI update
+      // Only run feed population if keywords actually changed
+      if (keywordsChanged && parsedManualKeywords.length > 0) {
+        console.log('[profile-save] Keywords changed - triggering feed population');
+
+        // Set up personal feed view
+        setSelectedListId(null);
+        setListItems([]);
+        setYearQuery('');
+        setKeywordQuery('');
+        setLastKeywordQuery(PERSONAL_FEED_LABEL);
+        setLastYearQuery(null);
+        setKeywordResults([]); // Clear existing results
+        setSelectedPaper(null);
+
+        // Trigger populate endpoint (fire and forget - don't block profile save)
+        fetch('/api/personal-feed/populate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keywords: parsedManualKeywords.slice(0, 5) })
+        }).catch(err => {
+          console.error('[profile-save] Background population failed:', err);
+        });
+
+        // Start polling to show progressive results
+        setTimeout(() => {
+          startFeedPolling();
+        }, 500); // Small delay to let populate endpoint start
+      } else if (parsedManualKeywords.length > 0) {
+        // Keywords didn't change, just show existing feed
+        console.log('[profile-save] Keywords unchanged - showing existing feed');
         setTimeout(() => {
           handleRefreshPersonalFeed();
         }, 300);
@@ -3275,6 +3461,7 @@ export default function Home() {
 
   const closeProfileEditor = useCallback(() => {
     setProfileEnrichmentError('');
+    setProfileManualKeywords(''); // Clear keywords so they re-seed from profile on next open
     setProfileEditorVisible(false);
   }, []);
 
@@ -3315,14 +3502,6 @@ export default function Home() {
                             <UserCog className="h-4 w-4" />
                             Edit Profile
                           </button>
-                          <Link
-                            href="/feed"
-                            onClick={() => setAccountDropdownVisible(false)}
-                            className="flex w-full items-center gap-2 border-t border-slate-200 px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
-                          >
-                            <Rss className="h-4 w-4" />
-                            Research Feed
-                          </Link>
                           <button
                             type="button"
                             onClick={handleSignOut}
@@ -3341,7 +3520,7 @@ export default function Home() {
                     onClick={handleRefreshPersonalFeed}
                     className={`rounded-2xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-sky-100 ${
                       shouldShowPersonalFeed
-                        ? 'border-sky-400 bg-sky-100 shadow-sm'
+                        ? 'border-sky-400 bg-sky-100 ring-2 ring-sky-300 shadow-sm'
                         : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-slate-100'
                     }`}
                   >
@@ -3496,7 +3675,7 @@ export default function Home() {
               </form>
 
               <div className={FILTER_BAR_CLASSES}>
-                {user && hasKeywords && (keywordResults.length > 0 || lastKeywordQuery) && (
+                {user && hasKeywords && !isPersonalFeedActive && (keywordResults.length > 0 || lastKeywordQuery) && (
                   <button
                     onClick={handleRefreshPersonalFeed}
                     className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
@@ -3524,17 +3703,6 @@ export default function Home() {
                     className={`${FILTER_CHECKBOX_INPUT_CLASSES} ${FILTER_CHECKBOX_INPUT_DISABLED_CLASSES}`}
                   />
                   <span>Patents</span>
-                </label>
-                <label className={FILTER_CHECKBOX_DISABLED_LABEL_CLASSES} title="Coming soon">
-                  <input
-                    type="checkbox"
-                    checked={newsChecked}
-                    onChange={() => setNewsChecked((prev) => !prev)}
-                    disabled
-                    aria-disabled
-                    className={`${FILTER_CHECKBOX_INPUT_CLASSES} ${FILTER_CHECKBOX_INPUT_DISABLED_CLASSES}`}
-                  />
-                  <span>News</span>
                 </label>
                 <label className={FILTER_CHECKBOX_DISABLED_LABEL_CLASSES} title="Coming soon">
                   <input
