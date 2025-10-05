@@ -5,6 +5,10 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { useAuth } from '@/lib/auth-context'
+import { useAuthModal } from '@/lib/auth-hooks'
+import { AuthModal } from '@/components/auth-modal'
+import { VerificationModal } from '@/components/verification-modal'
 
 interface PaperSection {
   type: string
@@ -36,6 +40,23 @@ interface PaperDetails {
   contentQuality: 'full_paper' | 'abstract_only' | 'insufficient' | null
   contentType: 'html' | 'pdf' | 'abstract' | 'other' | null
   scrapedUrl: string | null
+}
+
+function buildVerificationPayload(paper: PaperDetails) {
+  return {
+    id: paper.id,
+    title: paper.title,
+    authors: paper.authors,
+    abstract: paper.abstract,
+    year: paper.year,
+    venue: paper.venue,
+    citation_count: paper.citation_count,
+    doi: paper.doi,
+    url: paper.url,
+    scraped_url: paper.scrapedUrl,
+    content_quality: paper.contentQuality,
+    content_type: paper.contentType
+  }
 }
 
 function formatAuthors(authors: string[]) {
@@ -181,9 +202,73 @@ function ProcessedPaperContent({ processedContent }: { processedContent: string 
 function PaperDetailPage() {
   const params = useParams()
   const paperId = params.id as string
+  const { user } = useAuth()
+  const authModal = useAuthModal()
   const [paper, setPaper] = useState<PaperDetails | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [verificationModalOpen, setVerificationModalOpen] = useState(false)
+  const [activeVerification, setActiveVerification] = useState<'claims' | 'reproducibility' | null>(null)
+  const [verificationStatus, setVerificationStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle')
+  const [verificationError, setVerificationError] = useState('')
+  const isVerificationSending = verificationStatus === 'sending'
+
+  const handleVerificationClick = async (type: 'claims' | 'reproducibility') => {
+    if (!paper) {
+      return
+    }
+
+    if (!user) {
+      authModal.openLogin()
+      return
+    }
+
+    setActiveVerification(type)
+    setVerificationError('')
+    setVerificationStatus('sending')
+    setVerificationModalOpen(true)
+
+    try {
+      const response = await fetch(`/api/papers/${paper.id}/verification-request`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          verificationType: type,
+          paper: buildVerificationPayload(paper)
+        })
+      })
+
+      if (!response.ok) {
+        let message = 'Failed to submit verification request. Please try again.'
+        try {
+          const errorData = await response.json()
+          if (errorData?.error) {
+            message = errorData.error
+          }
+        } catch (parseError) {
+          console.error('Failed to parse verification error response:', parseError)
+        }
+        setVerificationError(message)
+        setVerificationStatus('error')
+        return
+      }
+
+      setVerificationStatus('success')
+    } catch (requestError) {
+      console.error('Verification request failed:', requestError)
+      setVerificationError(requestError instanceof Error ? requestError.message : 'Unexpected error submitting verification request.')
+      setVerificationStatus('error')
+    }
+  }
+
+  const handleVerificationModalClose = () => {
+    setVerificationModalOpen(false)
+    setActiveVerification(null)
+    setVerificationStatus('idle')
+    setVerificationError('')
+  }
 
   useEffect(() => {
     if (paperId) {
@@ -321,6 +406,27 @@ function PaperDetailPage() {
             </button>
           </div>
 
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => handleVerificationClick('claims')}
+              disabled={isVerificationSending}
+              title={!user ? 'Sign in to request verification' : undefined}
+              className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              VERIFY CLAIMS
+            </button>
+            <button
+              type="button"
+              onClick={() => handleVerificationClick('reproducibility')}
+              disabled={isVerificationSending}
+              title={!user ? 'Sign in to request verification' : undefined}
+              className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              VERIFY REPRODUCIBILITY
+            </button>
+          </div>
+
           {paper.processedContent ? (
             <ProcessedPaperContent processedContent={paper.processedContent} />
           ) : paper.scrapedContent ? (
@@ -374,6 +480,19 @@ function PaperDetailPage() {
           )}
         </article>
       </main>
+      <VerificationModal
+        isOpen={verificationModalOpen}
+        type={activeVerification}
+        status={verificationStatus}
+        errorMessage={verificationError}
+        onClose={handleVerificationModalClose}
+      />
+      <AuthModal
+        isOpen={authModal.isOpen}
+        mode={authModal.mode}
+        onClose={authModal.close}
+        onSwitchMode={authModal.switchMode}
+      />
     </div>
   )
 }

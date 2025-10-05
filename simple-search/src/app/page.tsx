@@ -8,11 +8,11 @@ import { useAuth } from '../lib/auth-context';
 import { useAuthModal, getUserDisplayName } from '../lib/auth-hooks';
 import { createClient } from '../lib/supabase';
 import { AuthModal } from '../components/auth-modal';
+import { VerificationModal } from '../components/verification-modal';
 import type { ProfilePersonalization } from '../lib/profile-types';
 import { SaveToListModal } from '../components/save-to-list-modal';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { VerifyReproducibilityPayload } from '../lib/reproducibility-report';
 import type { ResearchPaperAnalysis, RiskLevel, Stage } from '../lib/reproducibility-types';
 import {
   getCachedData,
@@ -60,6 +60,25 @@ interface ProcessedContent {
     processed_successfully: boolean
     content_quality: string
   }
+}
+
+type VerificationRequestType = 'claims' | 'reproducibility';
+
+function buildVerificationPayloadFromSearchResult(paper: ApiSearchResult) {
+  return {
+    id: paper.id,
+    title: paper.title,
+    authors: paper.authors,
+    abstract: paper.abstract,
+    year: paper.year,
+    venue: paper.venue,
+    citation_count: paper.citationCount,
+    doi: paper.doi,
+    url: paper.url,
+    scraped_url: null,
+    content_quality: null,
+    content_type: null
+  };
 }
 
 const FEED_SKELETON_ITEMS = Array.from({ length: 6 })
@@ -1299,502 +1318,6 @@ function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperA
   )
 }
 
-function StaticClaimsPreview({ report, onRequestReview }: { report: ResearchPaperAnalysis; onRequestReview?: () => void }) {
-  const topClaim = report.evidenceBase.strongEvidence[0]
-  const topGap = report.evidenceBase.gaps[0]
-
-  const isPlaceholder = report.evidenceBase.strongEvidence.length === 0 && report.evidenceBase.gaps.length === 0
-
-  if (isPlaceholder) {
-    return (
-      <div className="space-y-6">
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900">Claims Verification</h3>
-            <p className="mt-1 text-sm text-slate-600">{report.paper.title}</p>
-            <p className="text-xs text-slate-500">{report.paper.authors} | {report.paper.venue}</p>
-          </div>
-        </section>
-        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
-          <p className="text-sm font-medium text-amber-900">
-            Detailed claims analysis coming soon
-          </p>
-          <p className="mt-2 text-xs text-amber-700">
-            Strong evidence, gaps, and follow-up questions will be added for this paper.
-          </p>
-        </section>
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-6">
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        {topClaim ? (
-          <dl className="grid gap-4 text-sm text-slate-700 sm:grid-cols-2">
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-slate-500">Headline finding</dt>
-              <dd className="mt-1 font-semibold text-slate-900">{topClaim.claim}</dd>
-              <dd className="mt-1 text-xs text-slate-500">Source: {topClaim.source}</dd>
-            </div>
-            {topGap ? (
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-slate-500">Primary open question</dt>
-                <dd className="mt-1 font-semibold text-slate-900">{topGap.concern}</dd>
-                <dd className="mt-1 text-xs text-slate-500">Impact: {topGap.impact}</dd>
-              </div>
-            ) : null}
-          </dl>
-        ) : null}
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h4 className="text-base font-semibold text-slate-900">Evidence we stand behind</h4>
-        <p className="mt-1 text-sm text-slate-600">Claims with citations or data that held up under automated review.</p>
-        <ul className="mt-4 space-y-3 text-sm text-slate-700">
-          {report.evidenceBase.strongEvidence.map((item, idx) => (
-            <li key={`evidence-${idx}`} className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <CheckCircle2 className="mt-1 h-5 w-5 text-emerald-500" />
-              <div>
-                <p className="font-medium text-slate-900">{item.claim}</p>
-                <p className="text-xs text-slate-500">Source: {item.source}</p>
-                {item.notes ? <p className="mt-1 text-xs text-slate-500">{item.notes}</p> : null}
-                <p className="mt-1 text-xs text-slate-400">Confidence: {item.verificationStatus}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h4 className="text-base font-semibold text-slate-900">Gaps and follow-ups</h4>
-        <p className="mt-1 text-sm text-slate-600">Where uncertainty remains and what we would chase next.</p>
-        <ul className="mt-4 space-y-3 text-sm text-slate-700">
-          {report.evidenceBase.gaps.map((gap, idx) => (
-            <li key={`gap-${idx}`} className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <AlertTriangle className="mt-1 h-5 w-5 text-amber-500" />
-              <div>
-                <p className="font-medium text-slate-900">{gap.concern}</p>
-                <p className="text-xs text-slate-500">Impact: {gap.impact}</p>
-                <p className="text-xs text-slate-500">Severity: {gap.severity}</p>
-                <p className="mt-1 text-xs text-slate-400">{gap.resolvableWithExpertAnalysis ? 'Expert outreach planned.' : 'Track internally for now.'}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-        {report.evidenceBase.assumptions.length ? (
-          <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Assumptions we made</p>
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-500">
-              {report.evidenceBase.assumptions.map((assumption) => (
-                <li key={assumption}>{assumption}</li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex items-start gap-4">
-          <button
-            type="button"
-            onClick={onRequestReview}
-            className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 whitespace-nowrap"
-          >
-            Request Community Review
-          </button>
-          <p className="text-sm text-slate-600">We&apos;ll compile patents, PhD theses, and contact the original study authors.</p>
-        </div>
-      </section>
-    </div>
-  )
-}
-
-interface ReproReportState {
-  loading: boolean
-  error: string
-  payload: VerifyReproducibilityPayload | null
-}
-
-function ReproducibilityReportPreview({ paperId, onRequestReview }: { paperId: string; onRequestReview?: () => void }) {
-  const staticReport = paperId ? VERIFICATION_DATA[paperId] : undefined
-  const isLandingSample = Boolean(SAMPLE_PAPERS.find((paper) => paper.id === paperId))
-  const [{ loading, error, payload }, setState] = useState<ReproReportState>({
-    loading: true,
-    error: '',
-    payload: null
-  })
-
-  useEffect(() => {
-    if (!paperId) {
-      setState({ loading: false, error: '', payload: null })
-      return
-    }
-
-    if (staticReport) {
-      setState({ loading: false, error: '', payload: null })
-      return
-    }
-
-    if (isLandingSample) {
-      setState({ loading: false, error: '', payload: null })
-      return
-    }
-
-    let cancelled = false
-    setState({ loading: true, error: '', payload: null })
-
-    fetch(`/api/papers/${paperId}/reproducibility`)
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`Request failed with status ${response.status}`)
-        }
-        const data = await response.json()
-        if (!cancelled) {
-          setState({ loading: false, error: '', payload: data?.report ?? null })
-        }
-      })
-      .catch((requestError: unknown) => {
-        if (cancelled) {
-          return
-        }
-        const message = requestError instanceof Error ? requestError.message : 'Unexpected error'
-        setState({ loading: false, error: message, payload: null })
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [paperId, staticReport, isLandingSample])
-
-  if (staticReport) {
-    return <StaticReproReport report={staticReport} onRequestReview={onRequestReview} />
-  }
-
-  if (!paperId) {
-    return (
-      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-600">
-        Select a paper to generate a reproducibility briefing.
-      </div>
-    )
-  }
-
-  if (loading) {
-    return (
-      <div className="space-y-4">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="h-4 w-1/2 animate-pulse rounded bg-slate-200" />
-            <div className="mt-3 h-3 w-2/3 animate-pulse rounded bg-slate-200/80" />
-            <div className="mt-2 h-3 w-1/3 animate-pulse rounded bg-slate-200/70" />
-          </div>
-        ))}
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
-        We could not generate the reproducibility summary. {error}
-      </div>
-    )
-  }
-
-  if (!payload) {
-    return (
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-700">
-        No reproducibility data is available for this paper yet.
-      </div>
-    )
-  }
-
-  const {
-    summary,
-    assessment,
-    timeEstimate,
-    costEstimate,
-    skillLevel,
-    feasibilityFactors,
-    environment,
-    hyperparameters,
-    seeds,
-    replicationEvidence,
-    risks,
-    gaps,
-    reproductionPlan,
-    sources,
-    metadata
-  } = payload
-
-  const environmentSections = [
-    { title: 'Artefacts', items: environment.artefacts },
-    { title: 'Datasets', items: environment.datasets },
-    { title: 'Code', items: environment.code },
-    { title: 'Hardware', items: environment.hardware },
-    { title: 'Tooling', items: environment.tooling }
-  ].filter((section) => section.items.length > 0)
-
-  const isFallback = metadata.status === 'fallback'
-
-  return (
-    <div className="space-y-6">
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="space-y-2">
-            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-              Reproducibility assessment · {assessment}
-            </span>
-            <div className="prose prose-sm max-w-none text-slate-900">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {summary}
-              </ReactMarkdown>
-            </div>
-          </div>
-          <div className="grid gap-3 text-sm text-slate-700 sm:grid-cols-3">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-slate-500">Time to reproduce</p>
-              <p className="mt-1 font-semibold text-slate-900">{timeEstimate}</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-slate-500">Estimated cost</p>
-              <p className="mt-1 font-semibold text-slate-900">{costEstimate}</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-slate-500">Skill level</p>
-              <p className="mt-1 font-semibold text-slate-900">{skillLevel}</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {isFallback ? (
-        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
-          <p className="text-sm font-medium text-amber-900">
-            Automated coverage is limited for this paper.
-          </p>
-          <p className="mt-1 text-xs text-amber-700">{metadata.notes}</p>
-        </section>
-      ) : null}
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h4 className="text-base font-semibold text-slate-900">Feasibility factors</h4>
-        <ul className="mt-3 space-y-2 text-sm text-slate-700">
-          {feasibilityFactors.map((factor, index) => (
-            <li key={`factor-${index}`} className="flex gap-3">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 text-sky-500" />
-              <div className="prose prose-sm max-w-none text-slate-700">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {factor}
-                </ReactMarkdown>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {environmentSections.length ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h4 className="text-base font-semibold text-slate-900">Environment checklist</h4>
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            {environmentSections.map((section) => (
-              <div key={section.title} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{section.title}</p>
-                <ul className="mt-2 space-y-1 text-sm text-slate-700">
-                  {section.items.map((item, index) => (
-                    <li key={`${section.title}-${index}`}>
-                      <div className="prose prose-sm max-w-none text-slate-700">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {item}
-                        </ReactMarkdown>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {hyperparameters.length || seeds.length ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="grid gap-6 md:grid-cols-2">
-            <div>
-              <h4 className="text-base font-semibold text-slate-900">Hyperparameters</h4>
-              <ul className="mt-3 space-y-2 text-sm text-slate-700">
-                {hyperparameters.map((entry, index) => (
-                  <li key={`hyper-${index}`}>
-                    <div className="prose prose-sm max-w-none text-slate-700">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {entry}
-                      </ReactMarkdown>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <h4 className="text-base font-semibold text-slate-900">Control seeds</h4>
-              <ul className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-700">
-                {seeds.map((seed, index) => (
-                  <li key={`seed-${index}`} className="rounded border border-slate-200 bg-slate-50 px-2 py-1">
-                    {seed}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </section>
-      ) : null}
-
-      {replicationEvidence.length ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h4 className="text-base font-semibold text-slate-900">Replication evidence</h4>
-          <ul className="mt-3 space-y-3">
-            {replicationEvidence.map((item, index) => (
-              <li key={`evidence-${index}`} className="flex gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4">
-                <CheckCircle2 className="mt-1 h-5 w-5 text-emerald-500" />
-                <div className="space-y-2 text-sm text-slate-700">
-                  <div className="prose prose-sm max-w-none text-slate-700">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {item.description}
-                    </ReactMarkdown>
-                  </div>
-                  <p className="text-xs text-slate-500">Confidence: {item.confidence}</p>
-                  {item.sources.length ? (
-                    <p className="text-xs text-slate-500">Sources: {item.sources.join(', ')}</p>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {risks.length ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h4 className="text-base font-semibold text-slate-900">Risks to manage</h4>
-          <ul className="mt-3 space-y-3">
-            {risks.map((risk, index) => (
-              <li key={`risk-${index}`} className="flex gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4">
-                <AlertTriangle className="mt-1 h-5 w-5 text-amber-500" />
-                <div className="space-y-2 text-sm text-slate-700">
-                  <div className="prose prose-sm max-w-none text-slate-700">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {risk.description}
-                    </ReactMarkdown>
-                  </div>
-                  <p className="text-xs text-slate-500">Severity: {risk.severity}</p>
-                  {risk.sources.length ? (
-                    <p className="text-xs text-slate-500">Sources: {risk.sources.join(', ')}</p>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {gaps.length ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h4 className="text-base font-semibold text-slate-900">Information gaps</h4>
-          <ul className="mt-3 space-y-3">
-            {gaps.map((gap, index) => (
-              <li key={`gap-${index}`} className="flex gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4">
-                <AlertTriangle className="mt-1 h-5 w-5 text-red-500" />
-                <div className="space-y-2 text-sm text-slate-700">
-                  <div className="prose prose-sm max-w-none text-slate-700">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {gap.description}
-                    </ReactMarkdown>
-                  </div>
-                  <p className="text-xs text-slate-500">Impact: {gap.impact}</p>
-                  <p className="text-xs text-slate-500">Severity: {gap.severity}</p>
-                  {gap.sources.length ? (
-                    <p className="text-xs text-slate-500">Sources: {gap.sources.join(', ')}</p>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h4 className="text-base font-semibold text-slate-900">Minimal reproduction plan</h4>
-        <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-slate-700">
-          {reproductionPlan.map((step, index) => (
-            <li key={`step-${index}`}>
-              <div className="prose prose-sm max-w-none text-slate-700">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {step}
-                </ReactMarkdown>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h4 className="text-base font-semibold text-slate-900">Sources</h4>
-        <ul className="mt-3 space-y-2 text-sm text-slate-700">
-          {sources.map((source, index) => {
-            const isLink = typeof source.url === 'string' && source.url.toLowerCase().startsWith('http')
-            return (
-              <li key={`source-${index}`}>
-                {isLink ? (
-                  <a
-                    href={source.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sky-600 underline decoration-sky-400 decoration-2 underline-offset-2"
-                  >
-                    {source.label}
-                  </a>
-                ) : (
-                  <span className="text-slate-600">{source.label}</span>
-                )}
-              </li>
-            )
-          })}
-        </ul>
-        <p className="mt-4 text-xs text-slate-400">
-          Query executed in {metadata.durationMs} ms · Citations collected: {metadata.citationCount}
-        </p>
-      </section>
-    </div>
-  )
-}
-
-function ClaimsVerificationPlaceholder({ onRequestReview }: { onRequestReview?: () => void }) {
-  return (
-    <div className="space-y-6">
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-slate-900">Claims verification is coming soon</h3>
-        <p className="mt-2 text-sm text-slate-600">
-          We are reusing the reproducibility research pipeline to surface claim-level evidence. This button will activate once the claim grader is ready.
-        </p>
-      </section>
-      <section className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 shadow-sm text-sm text-slate-600">
-        VERIFY CLAIMS remains disabled so we can ship the reproducibility flow first.
-      </section>
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex items-start gap-4">
-          <button
-            type="button"
-            onClick={onRequestReview}
-            className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 whitespace-nowrap"
-          >
-            Request Community Review
-          </button>
-          <p className="text-sm text-slate-600">We&apos;ll compile patents, PhD theses, and contact the original study authors.</p>
-        </div>
-      </section>
-    </div>
-  )
-}
-
 interface UserProfile {
   orcid_id: string | null
   academic_website: string | null
@@ -1961,7 +1484,11 @@ export default function Home() {
   const [scrapedContentLoading, setScrapedContentLoading] = useState(false);
   const [scrapedContentError, setScrapedContentError] = useState('');
   const [scrapedContentIsStructured, setScrapedContentIsStructured] = useState(false);
-  const [verificationMode, setVerificationMode] = useState<'repro' | 'claims' | null>(null);
+  const [verificationMode, setVerificationMode] = useState<VerificationRequestType | null>(null);
+  const [activeVerificationType, setActiveVerificationType] = useState<VerificationRequestType | null>(null);
+  const [verificationModalOpen, setVerificationModalOpen] = useState(false);
+  const [verificationRequestStatus, setVerificationRequestStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+  const [verificationRequestError, setVerificationRequestError] = useState('');
   const [feedPopulating, setFeedPopulating] = useState(false);
 
   const profileManualKeywordsRef = useRef('');
@@ -2847,32 +2374,81 @@ export default function Home() {
   const shouldShowProfileSpinner = Boolean(user) && profileLoading;
   const selectedPaperPrimaryLink = selectedPaper ? getPrimaryLink(selectedPaper) : null;
 
-  const isLandingSampleSelected = selectedPaper ? SAMPLE_PAPERS.some((paper) => paper.id === selectedPaper.id) : false;
-  const isUserLoggedIn = Boolean(user);
   const hasSelectedPaper = Boolean(selectedPaper);
-  const hasStaticVerification = selectedPaper ? Boolean(VERIFICATION_DATA[selectedPaper.id]) : false;
-  const shouldDisableRepro = !hasSelectedPaper || isUserLoggedIn;
-  const shouldDisableClaims = !hasSelectedPaper || isUserLoggedIn;
+  const selectedPaperId = selectedPaper?.id ?? null;
+  const isVerificationSending = verificationRequestStatus === 'sending';
+  const shouldDisableRepro = !hasSelectedPaper || isVerificationSending;
+  const shouldDisableClaims = !hasSelectedPaper || isVerificationSending;
 
-  const handleVerificationModeChange = (mode: 'repro' | 'claims') => {
-    const isDisabled = mode === 'repro' ? shouldDisableRepro : shouldDisableClaims;
-    if (isDisabled) {
+  const handleVerificationRequest = async (type: VerificationRequestType) => {
+    const isDisabled = type === 'reproducibility' ? shouldDisableRepro : shouldDisableClaims;
+    if (isDisabled || !selectedPaper) {
       return;
     }
 
-    const viewingSamplePaper = isLandingSampleSelected;
-    if (!user && !viewingSamplePaper) {
-      authModal.openSignup();
+    if (!user) {
+      authModal.openLogin();
       return;
     }
 
-    setVerificationMode(mode);
-    requestAnimationFrame(() => {
-      document.getElementById('verification-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
+    setVerificationMode(type);
+    setActiveVerificationType(type);
+    setVerificationRequestError('');
+    setVerificationRequestStatus('sending');
+    setVerificationModalOpen(true);
+
+    try {
+      const response = await fetch(`/api/papers/${selectedPaper.id}/verification-request`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          verificationType: type,
+          paper: buildVerificationPayloadFromSearchResult(selectedPaper)
+        })
+      });
+
+      if (!response.ok) {
+        let message = 'Failed to submit verification request. Please try again.';
+        try {
+          const errorData = await response.json();
+          if (errorData?.error) {
+            message = errorData.error;
+          }
+        } catch (parseError) {
+          console.error('Failed to parse verification error response:', parseError);
+        }
+        setVerificationRequestError(message);
+        setVerificationRequestStatus('error');
+        return;
+      }
+
+      setVerificationRequestStatus('success');
+    } catch (requestError) {
+      console.error('Verification request failed:', requestError);
+      setVerificationRequestError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Unexpected error submitting verification request.'
+      );
+      setVerificationRequestStatus('error');
+    } finally {
+      requestAnimationFrame(() => {
+        document.getElementById('verification-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
   };
 
-  const getVerificationButtonClasses = (mode: 'repro' | 'claims', isDisabled: boolean) => {
+  const handleVerificationModalClose = () => {
+    setVerificationModalOpen(false);
+    if (verificationRequestStatus === 'error') {
+      setVerificationRequestStatus('idle');
+      setVerificationRequestError('');
+    }
+  };
+
+  const getVerificationButtonClasses = (mode: VerificationRequestType, isDisabled: boolean) => {
     const classes = [DETAIL_REPRO_BUTTON_CLASSES];
     if (isDisabled) {
       return 'inline-flex items-center justify-center rounded-lg border border-slate-200 bg-slate-100 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400 cursor-not-allowed opacity-60';
@@ -2883,24 +2459,41 @@ export default function Home() {
     return classes.join(' ');
   };
   useEffect(() => {
-    if (shouldDisableClaims && verificationMode === 'claims') {
+    const shouldClearClaims = shouldDisableClaims && verificationMode === 'claims';
+    const shouldClearRepro = shouldDisableRepro && verificationMode === 'reproducibility';
+    if (shouldClearClaims || shouldClearRepro) {
       setVerificationMode(null);
     }
-  }, [shouldDisableClaims, verificationMode]);
+  }, [shouldDisableClaims, shouldDisableRepro, verificationMode]);
 
-  const getVerificationButtonTitle = (mode: 'repro' | 'claims', isDisabled: boolean): string => {
+  useEffect(() => {
+    if (!selectedPaperId) {
+      setVerificationRequestStatus('idle');
+      setVerificationRequestError('');
+      setActiveVerificationType(null);
+      setVerificationMode(null);
+      return;
+    }
+
+    setVerificationRequestStatus('idle');
+    setVerificationRequestError('');
+    setActiveVerificationType(null);
+    setVerificationMode(null);
+  }, [selectedPaperId]);
+
+  const getVerificationButtonTitle = (mode: VerificationRequestType, isDisabled: boolean): string => {
     if (!isDisabled) {
       return '';
     }
     if (!hasSelectedPaper) {
-      return 'Select a paper to generate the briefing.';
+      return 'Select a paper to request a verification briefing.';
     }
-    if (isUserLoggedIn) {
-      return 'Verification is temporarily unavailable for signed in accounts.';
+    if (isVerificationSending) {
+      return 'Sending your request…';
     }
-    return mode === 'repro'
-      ? 'Select a paper to generate the reproducibility briefing.'
-      : 'Verification is not available for this paper.';
+    return mode === 'reproducibility'
+      ? 'Select a paper to request a reproducibility briefing.'
+      : 'Select a paper to request a claims briefing.';
   };
 
   const verificationButtons = (
@@ -2908,24 +2501,24 @@ export default function Home() {
       <div className="flex flex-col items-center gap-1">
         <button
           type="button"
-          onClick={() => handleVerificationModeChange('repro')}
-          className={getVerificationButtonClasses('repro', shouldDisableRepro)}
-          aria-pressed={verificationMode === 'repro'}
+          onClick={() => handleVerificationRequest('reproducibility')}
+          className={getVerificationButtonClasses('reproducibility', shouldDisableRepro)}
+          aria-pressed={verificationMode === 'reproducibility'}
           disabled={shouldDisableRepro}
-          title={getVerificationButtonTitle('repro', shouldDisableRepro)}
+          title={getVerificationButtonTitle('reproducibility', shouldDisableRepro)}
         >
           <span className="flex items-center gap-2">
             Verify reproducibility
           </span>
         </button>
         <span
-          className={`h-1 w-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-sky-600 transition-all duration-200 ease-out ${verificationMode === 'repro' ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
+          className={`h-1 w-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-sky-600 transition-all duration-200 ease-out ${verificationMode === 'reproducibility' ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
         />
       </div>
       <div className="flex flex-col items-center gap-1">
         <button
           type="button"
-          onClick={() => handleVerificationModeChange('claims')}
+          onClick={() => handleVerificationRequest('claims')}
           className={getVerificationButtonClasses('claims', shouldDisableClaims)}
           aria-pressed={verificationMode === 'claims'}
           disabled={shouldDisableClaims}
@@ -3953,17 +3546,29 @@ export default function Home() {
 
                 <div id="verification-panel" className="space-y-4">
                   {hasSelectedPaper ? (
-                    verificationMode === 'repro' ? (
-                      <ReproducibilityReportPreview paperId={selectedPaper.id} onRequestReview={authModal.openSignup} />
-                    ) : verificationMode === 'claims' ? (
-                      hasStaticVerification ? (
-                        <StaticClaimsPreview report={VERIFICATION_DATA[selectedPaper.id]} onRequestReview={authModal.openSignup} />
-                      ) : (
-                        <ClaimsVerificationPlaceholder onRequestReview={authModal.openSignup} />
-                      )
+                    verificationRequestStatus === 'success' ? (
+                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-6 py-5 text-sm text-emerald-700">
+                        <p className="text-sm font-semibold text-emerald-800">
+                          {activeVerificationType === 'claims' ? 'Claims verification scheduled' : 'Reproducibility verification scheduled'}
+                        </p>
+                        <p className="mt-2 leading-relaxed">
+                          Our agent will search the literature and deliver the findings with your next feed update at 9am.
+                        </p>
+                      </div>
+                    ) : verificationRequestStatus === 'error' ? (
+                      <div className="rounded-2xl border border-rose-200 bg-rose-50 px-6 py-5 text-sm text-rose-600">
+                        <p className="text-sm font-semibold text-rose-700">We could not send this request</p>
+                        <p className="mt-2 leading-relaxed">
+                          {verificationRequestError || 'Please try again in a moment.'}
+                        </p>
+                      </div>
+                    ) : verificationRequestStatus === 'sending' ? (
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-6 py-5 text-center text-sm text-slate-600">
+                        Sending your request…
+                      </div>
                     ) : (
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-600">
-                        Choose a verification track above to load the briefing.
+                        Choose a verification track above to request a briefing.
                       </div>
                     )
                   ) : (
@@ -4047,6 +3652,13 @@ export default function Home() {
         </div>
       </main>
       {/* Auth Modal */}
+      <VerificationModal
+        isOpen={verificationModalOpen}
+        type={activeVerificationType}
+        status={verificationRequestStatus}
+        errorMessage={verificationRequestError}
+        onClose={handleVerificationModalClose}
+      />
       <AuthModal
         isOpen={authModal.isOpen}
         mode={authModal.mode}
