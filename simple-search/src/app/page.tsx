@@ -9,7 +9,7 @@ import { useAuthModal, getUserDisplayName } from '../lib/auth-hooks';
 import { createClient } from '../lib/supabase';
 import { AuthModal } from '../components/auth-modal';
 import { VerificationModal } from '../components/verification-modal';
-import type { ProfilePersonalization } from '../lib/profile-types';
+import type { ProfilePersonalization, UserProfile } from '../lib/profile-types';
 import { SaveToListModal } from '../components/save-to-list-modal';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';

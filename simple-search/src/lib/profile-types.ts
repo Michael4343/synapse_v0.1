@@ -39,6 +39,14 @@ export interface ProfilePersonalization {
   manual_keywords?: string[]
 }
 
+export interface UserProfile {
+  orcid_id: string | null
+  academic_website: string | null
+  profile_personalization: ProfilePersonalization | null
+  last_profile_enriched_at: string | null
+  profile_enrichment_version: string | null
+}
+
 export const DEFAULT_PROFILE_PERSONALIZATION: ProfilePersonalization = {
   topic_clusters: [],
   author_focus: [],
