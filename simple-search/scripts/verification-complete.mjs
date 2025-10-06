@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs'
-import path from 'node:path'
 import { stdin, stdout, exit } from 'node:process'
 import readline from 'node:readline/promises'
 import { createClient } from '@supabase/supabase-js'
+import { Resend } from 'resend'
 
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) {
@@ -36,11 +36,46 @@ function loadEnvFile(filePath) {
   }
 }
 
+function resolveEnvFileOverride(args) {
+  let envFile
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]
+
+    if (typeof arg !== 'string') {
+      continue
+    }
+
+    if (arg === '--env-file' && index + 1 < args.length) {
+      envFile = args[index + 1]
+      break
+    }
+
+    if (arg.startsWith('--env-file=')) {
+      envFile = arg.slice('--env-file='.length)
+      break
+    }
+  }
+
+  return envFile || process.env.VERIFICATION_ENV_FILE || process.env.SUPABASE_ENV_FILE || null
+}
+
+const envFileOverride = resolveEnvFileOverride(process.argv.slice(2))
+
+if (envFileOverride) {
+  loadEnvFile(envFileOverride)
+}
+
 loadEnvFile('.env.local')
 loadEnvFile('.env')
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+const RESEND_API_KEY = process.env.RESEND_API_KEY
+const RESEND_FROM_EMAIL = process.env.RESEND_FROM_EMAIL || null
+const RESEARCH_FEED_URL = process.env.RESEARCH_FEED_URL || 'https://research.evidentia.bio/'
+
+const resendClient = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.error('[verification-complete] Missing supabase credentials. Ensure NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set.')
@@ -59,6 +94,81 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 
 function isUuid(value) {
   return typeof value === 'string' && UUID_PATTERN.test(value)
+}
+
+function sanitiseSummary(summary) {
+  if (summary === undefined || summary === null) {
+    return 'Summary not provided.'
+  }
+
+  if (typeof summary === 'string') {
+    return summary
+  }
+
+  try {
+    return JSON.stringify(summary, null, 2)
+  } catch (error) {
+    return String(summary)
+  }
+}
+
+function resolveRecipientEmail(request) {
+  return request.user_email || request.request_payload?.user?.email || null
+}
+
+async function sendCompletionEmail({ request, paperTitle, reportData }) {
+  if (!resendClient) {
+    return { sent: false, reason: 'Resend is not configured (missing RESEND_API_KEY).' }
+  }
+
+  if (!RESEND_FROM_EMAIL) {
+    return { sent: false, reason: 'RESEND_FROM_EMAIL is not set.' }
+  }
+
+  const recipient = resolveRecipientEmail(request)
+  if (!recipient) {
+    return { sent: false, reason: 'Could not determine recipient email for this request.' }
+  }
+
+  const verificationLabel = request.verification_type ? request.verification_type.replace('_', ' ') : 'verification'
+  const paperDisplayTitle = paperTitle || request.paper_title || request.paper_lookup_id || 'your paper'
+  const summaryBody = sanitiseSummary(reportData.summary)
+  const stageLabel = reportData.stage || 'completed'
+  const updatedAt = reportData.lastUpdated || new Date().toISOString()
+
+  const textLines = [
+    'Hi there,',
+    '',
+    `Your ${verificationLabel} verification request for "${paperDisplayTitle}" is now complete.`,
+    '',
+    `Stage: ${stageLabel}`,
+    `Last updated: ${updatedAt}`,
+    '',
+    'Summary:',
+    summaryBody,
+    '',
+    `Review the full verification details at ${RESEARCH_FEED_URL}`,
+    '',
+    '— Evidentia Team'
+  ]
+
+  try {
+    const response = await resendClient.emails.send({
+      from: RESEND_FROM_EMAIL,
+      to: recipient,
+      subject: `Verification completed for ${paperDisplayTitle}`,
+      text: textLines.join('\n')
+    })
+
+    if (response?.error) {
+      const errorMessage = response.error?.message || 'Unknown Resend API error.'
+      return { sent: false, reason: errorMessage }
+    }
+
+    return { sent: true, recipient }
+  } catch (error) {
+    return { sent: false, reason: error?.message || 'Failed to send email notification.' }
+  }
 }
 
 async function selectRequest(requests) {
@@ -458,6 +568,18 @@ async function main() {
       if (paperForUpdateId) {
         console.log(`Paper record updated with verification data`)
         console.log(`Paper ID: ${paperForUpdateId}\n`)
+      }
+
+      const emailResult = await sendCompletionEmail({
+        request: selected,
+        paperTitle: selected.paper_title || paperMetadata?.title,
+        reportData
+      })
+
+      if (emailResult.sent) {
+        console.log(`✉️  Notification sent to ${emailResult.recipient}`)
+      } else {
+        console.log(`⚠️  Email notification not sent: ${emailResult.reason}`)
       }
     } catch (error) {
       console.error('\n═══════════════════════════════════════════════════════════')

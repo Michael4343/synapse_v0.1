@@ -11,6 +11,7 @@ import { AuthModal } from '../components/auth-modal';
 import { VerificationModal } from '../components/verification-modal';
 import type { ProfilePersonalization, UserProfile } from '../lib/profile-types';
 import { SaveToListModal } from '../components/save-to-list-modal';
+import { buildVerifyListName, savePaperToNamedList } from '../lib/list-actions';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ResearchPaperAnalysis } from '../lib/reproducibility-types';
@@ -2357,6 +2358,19 @@ export default function Home() {
         setVerificationRequestStatus('error');
         return;
       }
+
+      void savePaperToNamedList({
+        listName: buildVerifyListName(selectedPaper.title),
+        paper: selectedPaper,
+        existingLists: userLists.map((list) => ({ id: list.id, name: list.name }))
+      }).then((result) => {
+        if (result.listId) {
+          handlePaperSaved(result.listId);
+        }
+        if (result.status === 'failed' && result.error) {
+          console.error('Failed to add paper to VERIFY list:', result.error);
+        }
+      });
 
       setVerificationRequestStatus('success');
       await refreshVerificationSummary();

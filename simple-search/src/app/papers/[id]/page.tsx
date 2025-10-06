@@ -9,6 +9,8 @@ import { useAuth } from '@/lib/auth-context'
 import { useAuthModal } from '@/lib/auth-hooks'
 import { AuthModal } from '@/components/auth-modal'
 import { VerificationModal } from '@/components/verification-modal'
+import { buildVerifyListName, savePaperToNamedList } from '@/lib/list-actions'
+import type { ListPaperPayload } from '@/lib/list-actions'
 
 interface PaperSection {
   type: string
@@ -56,6 +58,24 @@ function buildVerificationPayload(paper: PaperDetails) {
     scraped_url: paper.scrapedUrl,
     content_quality: paper.contentQuality,
     content_type: paper.contentType
+  }
+}
+
+function buildListPayloadFromDetails(paper: PaperDetails): ListPaperPayload {
+  return {
+    id: paper.id,
+    title: paper.title,
+    abstract: paper.abstract,
+    authors: paper.authors,
+    year: paper.year,
+    venue: paper.venue,
+    citationCount: paper.citation_count,
+    semanticScholarId: paper.id,
+    arxivId: null,
+    doi: paper.doi,
+    url: paper.url,
+    source: 'paper-detail',
+    publicationDate: paper.year ? `${paper.year}-01-01` : null
   }
 }
 
@@ -254,6 +274,15 @@ function PaperDetailPage() {
         setVerificationStatus('error')
         return
       }
+
+      void savePaperToNamedList({
+        listName: buildVerifyListName(paper.title),
+        paper: buildListPayloadFromDetails(paper)
+      }).then((result) => {
+        if (result.status === 'failed' && result.error) {
+          console.error('Failed to add paper to VERIFY list:', result.error)
+        }
+      })
 
       setVerificationStatus('success')
     } catch (requestError) {
