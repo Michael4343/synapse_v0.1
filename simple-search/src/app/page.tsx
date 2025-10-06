@@ -864,10 +864,27 @@ function isNonEmptyString(value: unknown): value is string {
 
 function toStringArray(value: unknown): string[] {
   if (Array.isArray(value)) {
-    return value.filter(isNonEmptyString);
+    return value
+      .filter(isNonEmptyString)
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
   }
   if (isNonEmptyString(value)) {
-    return [value];
+    const normalized = value.replace(/\r\n/g, '\n').trim();
+    if (normalized.length === 0) {
+      return [];
+    }
+
+    const rawItems = normalized
+      .split(/[;\n\u2022]+/)
+      .map((item) => item.replace(/^\s*[-*]\s*/, '').trim())
+      .filter((item) => item.length > 0);
+
+    if (rawItems.length > 0) {
+      return rawItems;
+    }
+
+    return [normalized];
   }
   return [];
 }
@@ -1003,9 +1020,7 @@ function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperA
         </div>
         <div className="mt-6 space-y-5">
           {criticalPhases.map((phase) => {
-            const checklistItems = toStringArray(phase.checklist);
-            const checklist = checklistItems.slice(0, 3);
-            const totalChecklist = checklistItems.length;
+            const checklist = toStringArray(phase.checklist);
             const primaryBlocker =
               phase.primaryRisk && typeof phase.primaryRisk === 'object' ? phase.primaryRisk : null;
             const severityLabel = primaryBlocker && typeof primaryBlocker.severity === 'string'
@@ -1058,16 +1073,13 @@ function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperA
                 {checklist.length ? (
                   <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
                     <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Checklist</p>
-                    <div className="mt-2 space-y-2">
-                      {checklist.map((item) => (
-                        <p key={item} className="text-sm text-slate-700">
+                    <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm text-slate-700">
+                      {checklist.map((item, index) => (
+                        <li key={`${phase.id}-check-${index}`}>
                           {item}
-                        </p>
+                        </li>
                       ))}
-                    </div>
-                    {totalChecklist > checklist.length ? (
-                      <p className="mt-3 text-xs text-slate-400">+{totalChecklist - checklist.length} more</p>
-                    ) : null}
+                    </ol>
                   </div>
                 ) : null}
               </article>
