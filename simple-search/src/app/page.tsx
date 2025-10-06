@@ -3687,7 +3687,7 @@ export default function Home() {
             className={`min-h-0 min-w-0 transition-all duration-300 ${DETAIL_SHELL_CLASSES} xl:basis-[38%] xl:h-full xl:overflow-y-auto xl:overflow-x-hidden xl:pl-2 xl:border-l xl:border-slate-200/70 2xl:basis-[40%]`}
           >
             {selectedPaper ? (
-              <div className="flex flex-col gap-4">
+              <>
                 {/* Share Discovery */}
                 <div className="sticky top-0 z-10 -mx-2 px-2 pt-2 pb-3 xl:-mx-6 xl:px-6 bg-slate-50/95 backdrop-blur">
                   <div className="relative flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm opacity-60">
@@ -3915,7 +3915,7 @@ export default function Home() {
                   </div>
                 )}
               </section>
-            </div>
+            </>
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-slate-500">
               <h2 className="text-lg font-semibold text-slate-700">No paper selected</h2>
