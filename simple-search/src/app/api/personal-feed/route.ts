@@ -78,13 +78,18 @@ function transformToApiSearchResult(paper: PersonalFeedPaper): ApiSearchResult {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
 
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  // Parse query parameters
+  const { searchParams } = new URL(request.url)
+  const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10))
+  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '10', 10)))
 
   // Read cached papers from database
   const { data: papers, error } = await supabase
@@ -93,7 +98,7 @@ export async function GET() {
     .eq('user_id', user.id)
     .order('publication_date', { ascending: false, nullsFirst: false })
     .order('scraped_at', { ascending: false })
-    .limit(12)
+    .range(offset, offset + limit - 1)
 
   if (error) {
     console.error('[personal-feed] Database error:', error)
@@ -102,10 +107,12 @@ export async function GET() {
 
   // Transform to ApiSearchResult format
   const results = (papers || []).map(transformToApiSearchResult)
+  const hasMore = results.length === limit
 
   return NextResponse.json({
     results,
     lastUpdated: papers?.[0]?.scraped_at || null,
-    source: 'cached'
+    source: 'cached',
+    hasMore
   })
 }

@@ -19,7 +19,8 @@ const SEMANTIC_SCHOLAR_FIELDS = [
   'publicationDate',
 ].join(',')
 
-const MAX_RESULTS = 12
+const DEFAULT_LIMIT = 10
+const MAX_LIMIT = 100 // Maximum results per request
 const CACHE_TTL_MS = 1000 * 60 * 60 * 6 // 6 hours
 
 // Rate limiting configuration
@@ -254,8 +255,8 @@ async function getCachedResults(query: string, year: number | null): Promise<{ r
     fresh: isFresh,
   }
 }
-async function fetchSemanticScholar(query: string, year: number | null): Promise<SemanticScholarPaper[]> {
-  const requestKey = `${query}|${year || 'null'}`
+async function fetchSemanticScholar(query: string, year: number | null, offset: number, limit: number): Promise<SemanticScholarPaper[]> {
+  const requestKey = `${query}|${year || 'null'}|${offset}|${limit}`
 
   // Request deduplication: if same request is already in flight, return that promise
   const existingRequest = pendingRequests.get(requestKey)
@@ -264,7 +265,7 @@ async function fetchSemanticScholar(query: string, year: number | null): Promise
   }
 
   // Create and cache the request promise
-  const requestPromise = performSemanticScholarRequest(query, year)
+  const requestPromise = performSemanticScholarRequest(query, year, offset, limit)
   pendingRequests.set(requestKey, requestPromise)
 
   try {
@@ -276,7 +277,7 @@ async function fetchSemanticScholar(query: string, year: number | null): Promise
   }
 }
 
-async function performSemanticScholarRequest(query: string, year: number | null, attempt = 1): Promise<SemanticScholarPaper[]> {
+async function performSemanticScholarRequest(query: string, year: number | null, offset: number, limit: number, attempt = 1): Promise<SemanticScholarPaper[]> {
   const apiKey = process.env.SEMANTIC_SCHOLAR_API_KEY
   const hasApiKey = Boolean(apiKey)
   const userAgent =
@@ -305,7 +306,8 @@ async function performSemanticScholarRequest(query: string, year: number | null,
   const params = new URLSearchParams({
     query,
     fields: SEMANTIC_SCHOLAR_FIELDS,
-    limit: String(MAX_RESULTS),
+    limit: String(limit),
+    offset: String(offset),
   });
 
   if (year) {
@@ -335,7 +337,7 @@ async function performSemanticScholarRequest(query: string, year: number | null,
 
       console.log(`429 rate limit hit, waiting ${delay}ms before retry ${attempt + 1}/5`)
       await waitFor(delay)
-      return performSemanticScholarRequest(query, year, attempt + 1)
+      return performSemanticScholarRequest(query, year, offset, limit, attempt + 1)
     }
 
     const errorMessage = await response
@@ -535,6 +537,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}))
     const rawQuery = typeof body.query === 'string' ? body.query : ''
     const year = typeof body.year === 'number' ? body.year : null
+    const offset = typeof body.offset === 'number' ? Math.max(0, body.offset) : 0
+    const limit = typeof body.limit === 'number'
+      ? Math.min(Math.max(1, body.limit), MAX_LIMIT)
+      : DEFAULT_LIMIT
     const query = normaliseQuery(rawQuery)
 
     if (!query) {
@@ -549,12 +555,16 @@ export async function POST(request: NextRequest) {
     let papers: SemanticScholarPaper[] = []
 
     try {
-      papers = await fetchSemanticScholar(query, year)
+      papers = await fetchSemanticScholar(query, year, offset, limit)
     } catch (apiError) {
       console.error('Semantic Scholar fetch failed', apiError)
 
       if (cacheHit?.results?.length) {
-        return NextResponse.json({ results: buildResponsePayload(cacheHit.results), cached: true })
+        return NextResponse.json({
+          results: buildResponsePayload(cacheHit.results),
+          cached: true,
+          hasMore: false
+        })
       }
 
       return NextResponse.json(
@@ -564,12 +574,17 @@ export async function POST(request: NextRequest) {
     }
 
     if (!papers.length) {
-      return NextResponse.json({ results: [] })
+      return NextResponse.json({ results: [], hasMore: false })
     }
 
     const storedResults = await storeResults(query, year, papers)
+    const hasMore = papers.length === limit
 
-    return NextResponse.json({ results: buildResponsePayload(storedResults), cached: false })
+    return NextResponse.json({
+      results: buildResponsePayload(storedResults),
+      cached: false,
+      hasMore
+    })
   } catch (error) {
     console.error('Unhandled search API error', error)
     return NextResponse.json({ error: 'Unexpected server error.' }, { status: 500 })

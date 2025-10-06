@@ -1327,6 +1327,9 @@ export default function Home() {
   const [keywordError, setKeywordError] = useState('');
   const [lastKeywordQuery, setLastKeywordQuery] = useState('');
   const [lastYearQuery, setLastYearQuery] = useState<number | null>(null);
+  const [resultOffset, setResultOffset] = useState(0);
+  const [hasMoreResults, setHasMoreResults] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [selectedPaper, setSelectedPaper] = useState<ApiSearchResult | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -1722,7 +1725,7 @@ export default function Home() {
       user,
     ]);
 
-  const handleRefreshPersonalFeed = useCallback(async () => {
+  const handleRefreshPersonalFeed = useCallback(async (loadMore = false) => {
     const hasKeywords = profile?.profile_personalization?.manual_keywords?.length > 0;
 
     if (!hasKeywords) {
@@ -1731,20 +1734,30 @@ export default function Home() {
       return;
     }
 
-    // Clear current state
-    setSelectedListId(null);
-    setListItems([]);
-    setYearQuery('');
-    setKeywordQuery('');
+    // Clear current state (but not when loading more)
+    if (!loadMore) {
+      setSelectedListId(null);
+      setListItems([]);
+      setYearQuery('');
+      setKeywordQuery('');
+      setResultOffset(0);
+    }
+
+    const currentOffset = loadMore ? resultOffset : 0;
+    const limit = 10;
 
     // Fetch from personal feed API
-    setKeywordLoading(true);
-    setKeywordError('');
-    setLastKeywordQuery(PERSONAL_FEED_LABEL);
-    setLastYearQuery(null);
+    if (loadMore) {
+      setLoadingMore(true);
+    } else {
+      setKeywordLoading(true);
+      setKeywordError('');
+      setLastKeywordQuery(PERSONAL_FEED_LABEL);
+      setLastYearQuery(null);
+    }
 
     try {
-      const response = await fetch('/api/personal-feed');
+      const response = await fetch(`/api/personal-feed?offset=${currentOffset}&limit=${limit}`);
 
       if (!response.ok) {
         throw new Error(`Personal feed failed with status ${response.status}`);
@@ -1752,21 +1765,165 @@ export default function Home() {
 
       const data = await response.json();
       const results = Array.isArray(data.results) ? data.results : [];
+      const hasMore = data.hasMore ?? false;
 
-      setKeywordResults(results);
-
-      if (results.length > 0) {
-        setSelectedPaper(results[0]);
+      if (loadMore) {
+        setKeywordResults(prev => [...prev, ...results]);
+        setResultOffset(currentOffset + results.length);
       } else {
-        setKeywordError('No recent papers found in your personal feed. Papers are updated daily.');
+        setKeywordResults(results);
+        setResultOffset(results.length);
+        if (results.length > 0) {
+          setSelectedPaper(results[0]);
+        } else {
+          setKeywordError('No recent papers found in your personal feed. Papers are updated daily.');
+        }
       }
+
+      setHasMoreResults(hasMore);
     } catch (error) {
       console.error('Personal feed error:', error);
-      setKeywordError('Could not load your personal feed. Please try again.');
+      if (!loadMore) {
+        setKeywordError('Could not load your personal feed. Please try again.');
+      }
     } finally {
-      setKeywordLoading(false);
+      if (loadMore) {
+        setLoadingMore(false);
+      } else {
+        setKeywordLoading(false);
+      }
     }
-  }, [profile]);
+  }, [profile, resultOffset]);
+
+  const handleKeywordSearch = useCallback(async (e: React.FormEvent, loadMore = false) => {
+    e.preventDefault();
+    const trimmed = keywordQuery.trim();
+    const trimmedYear = yearQuery.trim();
+    const parsedYear = trimmedYear ? parseInt(trimmedYear, 10) : null;
+    const validYear = parsedYear && parsedYear >= 1900 && parsedYear <= new Date().getFullYear() + 2 ? parsedYear : null;
+    const atLeastOneFilter = researchChecked || patentsChecked;
+
+    // Clear list selection when searching (but not when loading more)
+    if (!loadMore) {
+      setSelectedListId(null);
+      setListItems([]);
+    }
+
+    if (!trimmed) {
+      setKeywordError('Enter keywords to explore the literature feed.');
+      setKeywordResults([]);
+      setSelectedPaper(!user ? SAMPLE_PAPERS[0] : null);
+      setLastKeywordQuery('');
+      setLastYearQuery(null);
+      setResultOffset(0);
+      setHasMoreResults(false);
+      return;
+    }
+
+    if (!atLeastOneFilter) {
+      setKeywordError('Select at least one source before searching.');
+      setKeywordResults([]);
+      setSelectedPaper(!user ? SAMPLE_PAPERS[0] : null);
+      setLastKeywordQuery('');
+      setLastYearQuery(null);
+      setResultOffset(0);
+      setHasMoreResults(false);
+      return;
+    }
+
+    const filterLabels: string[] = [];
+    if (researchChecked) filterLabels.push('research');
+    if (patentsChecked) filterLabels.push('patents');
+
+    const queryWithFilters = filterLabels.length
+      ? `${trimmed} ${filterLabels.join(' ')}`
+      : trimmed;
+
+    const currentOffset = loadMore ? resultOffset : 0;
+    const limit = 10;
+
+    if (loadMore) {
+      setLoadingMore(true);
+    } else {
+      setKeywordLoading(true);
+      setKeywordError('');
+      setLastKeywordQuery(trimmed);
+      setLastYearQuery(validYear);
+      setResultOffset(0);
+    }
+
+    try {
+      const response = await fetch('/api/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: queryWithFilters,
+          ...(validYear && { year: validYear }),
+          offset: currentOffset,
+          limit
+        }),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        const message = typeof payload.error === 'string' ? payload.error : 'Unable to fetch results right now.';
+        setKeywordError(message);
+        if (!loadMore) {
+          setKeywordResults([]);
+          setSelectedPaper(!user ? SAMPLE_PAPERS[0] : null);
+        }
+        return;
+      }
+
+      const payload = await response.json();
+      const results = Array.isArray(payload.results) ? payload.results : [];
+      const hasMore = payload.hasMore ?? false;
+
+      if (loadMore) {
+        setKeywordResults(prev => [...prev, ...results]);
+        setResultOffset(currentOffset + results.length);
+      } else {
+        setKeywordResults(results);
+        setResultOffset(results.length);
+        setSelectedPaper(prev => {
+          if (prev && results.find(result => result.id === prev.id)) {
+            return prev;
+          }
+          return results[0] ?? null;
+        });
+      }
+
+      setHasMoreResults(hasMore);
+    } catch (error) {
+      console.error('Keyword search failed', error);
+      setKeywordError('We could not reach the search service. Please try again.');
+      if (!loadMore) {
+        setKeywordResults([]);
+        setSelectedPaper(!user ? SAMPLE_PAPERS[0] : null);
+      }
+    } finally {
+      if (loadMore) {
+        setLoadingMore(false);
+      } else {
+        setKeywordLoading(false);
+      }
+    }
+  }, [keywordQuery, yearQuery, researchChecked, patentsChecked, user, resultOffset]);
+
+  const handleLoadMore = useCallback(async () => {
+    const isPersonalFeedActive = lastKeywordQuery === PERSONAL_FEED_LABEL;
+
+    if (isPersonalFeedActive) {
+      await handleRefreshPersonalFeed(true);
+    } else {
+      const syntheticEvent = {
+        preventDefault: () => {},
+      } as React.FormEvent;
+      await handleKeywordSearch(syntheticEvent, true);
+    }
+  }, [lastKeywordQuery, handleRefreshPersonalFeed, handleKeywordSearch]);
 
   // Stop polling personal feed
   const stopFeedPolling = useCallback(() => {
@@ -2198,6 +2355,25 @@ export default function Home() {
           )}
         </div>
         {renderResultList(keywordResults, 'Search result')}
+        {hasMoreResults && !keywordLoading && !loadingMore && !feedPopulating && (
+          <div className="flex justify-center mt-4">
+            <button
+              type="button"
+              onClick={handleLoadMore}
+              className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2"
+            >
+              Load More
+            </button>
+          </div>
+        )}
+        {loadingMore && (
+          <div className="flex justify-center mt-4">
+            <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm text-slate-600">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" aria-hidden="true" />
+              <span>Loading more...</span>
+            </span>
+          </div>
+        )}
       </>
     );
   } else if (feedPopulating) {
@@ -3143,86 +3319,6 @@ export default function Home() {
       if (hasChanges) {
         setProfileSaveLoading(false);
       }
-    }
-  };
-
-  const handleKeywordSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmed = keywordQuery.trim();
-    const trimmedYear = yearQuery.trim();
-    const parsedYear = trimmedYear ? parseInt(trimmedYear, 10) : null;
-    const validYear = parsedYear && parsedYear >= 1900 && parsedYear <= new Date().getFullYear() + 2 ? parsedYear : null;
-    const atLeastOneFilter = researchChecked || patentsChecked;
-
-    // Clear list selection when searching
-    setSelectedListId(null);
-    setListItems([]);
-
-    if (!trimmed) {
-      setKeywordError('Enter keywords to explore the literature feed.');
-      setKeywordResults([]);
-      setSelectedPaper(!user ? SAMPLE_PAPERS[0] : null); // Return to default for non-auth users
-      setLastKeywordQuery('');
-    setLastYearQuery(null);
-      return;
-    }
-
-    if (!atLeastOneFilter) {
-      setKeywordError('Select at least one source before searching.');
-      setKeywordResults([]);
-      setSelectedPaper(!user ? SAMPLE_PAPERS[0] : null); // Return to default for non-auth users
-      setLastKeywordQuery('');
-    setLastYearQuery(null);
-      return;
-    }
-
-    const filterLabels: string[] = [];
-    if (researchChecked) filterLabels.push('research');
-    if (patentsChecked) filterLabels.push('patents');
-
-    const queryWithFilters = filterLabels.length
-      ? `${trimmed} ${filterLabels.join(' ')}`
-      : trimmed;
-
-    setKeywordLoading(true);
-    setKeywordError('');
-    setLastKeywordQuery(trimmed);
-    setLastYearQuery(validYear);
-
-    try {
-      const response = await fetch('/api/search', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ query: queryWithFilters, ...(validYear && { year: validYear }) }),
-      });
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        const message = typeof payload.error === 'string' ? payload.error : 'Unable to fetch results right now.';
-        setKeywordError(message);
-        setKeywordResults([]);
-        setSelectedPaper(!user ? SAMPLE_PAPERS[0] : null); // Return to default for non-auth users
-        return;
-      }
-
-      const payload = await response.json();
-      const results = Array.isArray(payload.results) ? payload.results : [];
-      setKeywordResults(results);
-      setSelectedPaper(prev => {
-        if (prev && results.find(result => result.id === prev.id)) {
-          return prev;
-        }
-        return results[0] ?? null;
-      });
-    } catch (error) {
-      console.error('Keyword search failed', error);
-      setKeywordError('We could not reach the search service. Please try again.');
-      setKeywordResults([]);
-      setSelectedPaper(!user ? SAMPLE_PAPERS[0] : null); // Return to default for non-auth users
-    } finally {
-      setKeywordLoading(false);
     }
   };
 

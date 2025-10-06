@@ -68,7 +68,7 @@ export function VerificationModal({ isOpen, type, status, errorMessage, onClose 
           Request received
         </h2>
         <p className="mt-4 text-sm leading-relaxed text-slate-600">
-          Our agent will search the literature and compile this information for your next feed update at 9am.
+          Our agent will search the literature and compile this information. You will receive an email notification when it is ready.
         </p>
         {isSending && (
           <p className="mt-4 text-sm font-medium text-slate-500">Sending your request…</p>
