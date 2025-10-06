@@ -16,7 +16,8 @@
     "ingest-analyses": "node scripts/ingest-deep-research.mjs",
     "recent-scholar": "node scripts/recent-scholar.mjs",
     "test-scholar-scraper": "node scripts/scholar-scraper-test.mjs",
-    "scholar-feed": "node scripts/scholar-feed.mjs"
+    "scholar-feed": "node scripts/scholar-feed.mjs",
+    "verification-complete": "node scripts/verification-complete.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

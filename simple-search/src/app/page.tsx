@@ -13,7 +13,7 @@ import type { ProfilePersonalization } from '../lib/profile-types';
 import { SaveToListModal } from '../components/save-to-list-modal';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { ResearchPaperAnalysis, RiskLevel, Stage } from '../lib/reproducibility-types';
+import type { ResearchPaperAnalysis } from '../lib/reproducibility-types';
 import {
   getCachedData,
   setCachedData,
@@ -62,7 +62,8 @@ interface ProcessedContent {
   }
 }
 
-type VerificationRequestType = 'claims' | 'reproducibility';
+type VerificationRequestType = 'combined';
+type VerificationTrack = 'claims' | 'reproducibility';
 
 function buildVerificationPayloadFromSearchResult(paper: ApiSearchResult) {
   return {
@@ -146,6 +147,15 @@ const SAMPLE_PAPERS: ApiSearchResult[] = [
     publicationDate: '2001-02-15'
   }
 ]
+
+const SAMPLE_PAPER_IDS = new Set(SAMPLE_PAPERS.map(paper => paper.id))
+
+function isSamplePaperId(id: string | null | undefined): boolean {
+  if (!id) {
+    return false
+  }
+  return id.startsWith('sample-') || SAMPLE_PAPER_IDS.has(id)
+}
 
 const AEST_OFFSET_MINUTES = 10 * 60
 const AEST_OFFSET_MS = AEST_OFFSET_MINUTES * 60 * 1000
@@ -258,6 +268,26 @@ function ProcessedPaperContent({ processedContent }: { processedContent: string 
   }
 }
 
+interface VerificationRequestRecord {
+  id: string
+  paper_id: string | null
+  paper_lookup_id: string
+  user_id: string | null
+  verification_type: 'claims' | 'reproducibility' | 'combined'
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+  created_at: string
+  updated_at: string
+  completed_at: string | null
+  result_summary: unknown
+  request_payload: unknown
+}
+
+interface VerificationSummaryPayload {
+  requests: VerificationRequestRecord[]
+  reproducibilityReport: ResearchPaperAnalysis | null
+  claimsReport: ResearchPaperAnalysis | null
+}
+
 const SHELL_CLASSES = 'min-h-screen bg-slate-50 text-slate-900 flex flex-col xl:h-screen xl:overflow-hidden';
 const FEED_CARD_CLASSES = 'flex h-full min-h-0 flex-col space-y-6 px-2 pt-4 pb-12 xl:px-4 xl:pb-16';
 const DETAIL_SHELL_CLASSES = 'flex h-full min-h-0 flex-col space-y-6 px-2 pt-4 pb-12 xl:px-4 xl:pb-16';
@@ -304,6 +334,51 @@ const RELATIVE_TIME_DIVISIONS: { amount: number; unit: Intl.RelativeTimeFormatUn
   { amount: 12, unit: 'month' },
   { amount: Number.POSITIVE_INFINITY, unit: 'year' }
 ];
+
+function formatRelativeTime(timestamp: string | null | undefined): string {
+  if (!timestamp) {
+    return 'Unknown';
+  }
+
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return 'Unknown';
+  }
+
+  const diffMs = Date.now() - date.getTime();
+  const diffMinutes = Math.round(diffMs / (1000 * 60));
+
+  if (diffMinutes < 1) {
+    return 'Just now';
+  }
+
+  if (diffMinutes < 60) {
+    return `${diffMinutes} minute${diffMinutes === 1 ? '' : 's'} ago`;
+  }
+
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
+  }
+
+  const diffDays = Math.round(diffHours / 24);
+  if (diffDays < 7) {
+    return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
+  }
+
+  const diffWeeks = Math.round(diffDays / 7);
+  if (diffWeeks < 5) {
+    return `${diffWeeks} week${diffWeeks === 1 ? '' : 's'} ago`;
+  }
+
+  const diffMonths = Math.round(diffDays / 30);
+  if (diffMonths < 12) {
+    return `${diffMonths} month${diffMonths === 1 ? '' : 's'} ago`;
+  }
+
+  const diffYears = Math.round(diffDays / 365);
+  return `${diffYears} year${diffYears === 1 ? '' : 's'} ago`;
+}
 
 function formatRelativePublicationDate(publicationDate: string | null): string | null {
   if (!publicationDate) return null;
@@ -438,716 +513,393 @@ function filterByRecency(papers: ApiSearchResult[], days: number): ApiSearchResu
   );
 }
 
-const STAGE_META: Record<Stage, { label: string; description: string; badgeClasses: string }> = {
-  ai_research: {
-    label: 'AI Deep Research',
-    description: 'Automated synthesis from public sources',
-    badgeClasses: 'bg-sky-100 text-sky-600 border border-sky-200'
-  },
-  expert_verified: {
-    label: 'Expert-Verified Analysis',
-    description: 'Humans validated sources, protocols, and access',
-    badgeClasses: 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+function getFeasibilitySummary(score: number): string {
+  if (score >= 80) {
+    return 'Ready to execute';
   }
+  if (score >= 55) {
+    return 'Needs targeted support';
+  }
+  return 'High risk';
 }
 
-const RISK_BADGES: Record<RiskLevel, string> = {
-  Low: 'border border-emerald-200 bg-emerald-50 text-emerald-700',
-  Medium: 'border border-amber-200 bg-amber-50 text-amber-700',
-  High: 'border border-red-200 bg-red-50 text-red-700'
+function getFeasibilityTone(score: number): string {
+  if (score >= 80) {
+    return 'text-emerald-600';
+  }
+  if (score >= 55) {
+    return 'text-amber-600';
+  }
+  return 'text-red-600';
 }
+
+function parseManualKeywords(input: string) {
+  return input
+    .split(/[\n,]/)
+    .map(value => value.trim())
+    .filter(value => value.length > 0)
+    .slice(0, 20);
+}
+
+function formatOrcidId(input: string): string {
+  const clean = input.replace(/[^0-9X]/gi, '').toUpperCase();
+  if (clean.length === 0) return '';
+  const limited = clean.slice(0, 16);
+  return limited.replace(/(.{4})/g, '$1-').replace(/-$/, '');
+}
+
+function normalizeOrcidId(input: string): string {
+  return input.replace(/[^0-9X]/gi, '').toUpperCase();
+}
+
+function validateOrcidId(input: string): { isValid: boolean; message?: string } {
+  const normalized = normalizeOrcidId(input);
+
+  if (normalized.length === 0) {
+    return { isValid: false, message: 'ORCID ID is required' };
+  }
+
+  if (normalized.length < 16) {
+    return { isValid: false, message: 'ORCID ID must be 16 characters long' };
+  }
+
+  if (normalized.length > 16) {
+    return { isValid: false, message: 'ORCID ID is too long' };
+  }
+
+  return { isValid: true };
+}
+
 
 const VERIFICATION_DATA: Record<string, ResearchPaperAnalysis> = {
   '68d962effe5520777791bd6ec8ffa4b963ba4f38': {
     stage: 'ai_research',
     lastUpdated: '2025-02-10',
     reviewers: ['AI Research Desk'],
+    summary: 'Highly reproducible for well-equipped molecular biology labs. Main challenge is capital investment and specialised expertise for multi-step Cas9 protein purification.',
     paper: {
       title: 'A Programmable Dual-RNA–Guided DNA Endonuclease in Adaptive Bacterial Immunity',
       authors: 'Jinek et al.',
-      venue: 'Science 2012',
+      venue: 'Science (2012)',
       doi: '10.1126/science.1225829'
     },
-    verdict: {
-      grade: 'A-',
-      confidence: 'High',
-      mainMessage: 'Highly reproducible for well-equipped molecular biology labs. Main challenge is capital investment and specialised expertise for multi-step Cas9 protein purification.',
-      successProbability: 0.85,
-      timeToFirstResult: '2-4 months',
-      totalCost: '$6,000-$10,000 (or $500-$2,000 using commercial Cas9)',
-      skillCeiling: 'Graduate-level molecular biologist with protein purification expertise',
-      confidenceLevel: 'ai_inferred'
-    },
     feasibilityQuestions: [
-      {
-        id: 'plasmids',
-        question: 'Do you maintain human iPSC-derived neurons or comparable VCP disease models?',
-        weight: 3,
-        category: 'Model Systems',
-        helper: 'Authors relied on patient-derived cortical neurons; organoids are acceptable with baseline QC.'
-      },
-      {
-        id: 'imaging',
-        question: 'Can you run high-content imaging or time-lapse microscopy for autophagy flux?',
-        weight: 2,
-        category: 'Instrumentation',
-        helper: 'Needed to quantify LC3, SQSTM1, and aggregate clearance across dosing windows.'
-      },
-      {
-        id: 'assays',
-        question: 'Do you have validated autophagy and proteasome activity assays ready to deploy?',
-        weight: 2,
-        category: 'Assays',
-        helper: 'Study used paired LC3-II westerns, proteasome-Glo readouts, and ubiquitin clearance panels.'
-      },
-      {
-        id: 'compounds',
-        question: 'Can you source or synthesise the VCP activator compound panel described?',
-        weight: 2,
-        category: 'Materials',
-        helper: 'Lead molecules ship from two specialised vendors; analog synthesis support may be required.'
-      },
-      {
-        id: 'compliance',
-        question: 'Are your approvals for patient-derived cell handling current and traceable?',
-        weight: 1,
-        category: 'Operations',
-        helper: 'Requires IRB amendments plus cold-chain documentation for neuron stocks.'
-      }
+      { id: 'models', question: 'Do you maintain human iPSC-derived neurons or comparable VCP disease models?', weight: 3, helper: 'Authors relied on patient-derived cortical neurons; organoids are acceptable with baseline QC.' },
+      { id: 'imaging', question: 'Can you run high-content imaging or time-lapse microscopy for autophagy flux?', weight: 2, helper: 'Needed to quantify LC3, SQSTM1, and aggregate clearance across dosing windows.' },
+      { id: 'assays', question: 'Do you have validated autophagy and proteasome activity assays ready to deploy?', weight: 2, helper: 'Study used paired LC3-II westerns, proteasome-Glo readouts, and ubiquitin clearance panels.' },
+      { id: 'compounds', question: 'Can you source or synthesise the VCP activator compound panel described?', weight: 2, helper: 'Lead molecules ship from two specialised vendors; analog synthesis support may be required.' },
+      { id: 'compliance', question: 'Are your approvals for patient-derived cell handling current and traceable?', weight: 1, helper: 'Requires IRB amendments plus cold-chain documentation for neuron stocks.' }
     ],
     criticalPath: [
       {
-        id: 'planning',
-        phase: 'Compound sourcing and quality control',
-        duration: '1 week',
-        cost: '$4k',
-        riskLevel: 'Medium',
-        dependencies: [],
-        requirements: ['Confirm vendor availability', 'Set up HPLC and mass spec QC workflow', 'Prepare storage and dosing stocks'],
-        outputs: ['Validated compound panel', 'Stability and solubility profiles'],
-        blockers: [
-          {
-            severity: 'moderate',
-            issue: 'Lead compounds currently on allocation with 6 week replenishment lead time',
-            mitigation: 'Engage alternate supplier identified in supplementary methods or pursue CRO synthesis slot.',
-            verificationStatus: 'inferred'
-          }
-        ]
+        id: 'compound',
+        name: 'Compound sourcing and quality control',
+        deliverable: 'Validated compound panel',
+        checklist: ['Confirm vendor availability', 'Set up HPLC and mass spec QC workflow', 'Prepare storage and dosing stocks'],
+        primaryRisk: {
+          severity: 'moderate',
+          issue: 'Lead compounds currently on allocation with a six-week replenishment lead time.',
+          mitigation: 'Engage alternate suppliers noted in the supplement or reserve CRO synthesis capacity early.'
+        }
       },
       {
         id: 'models',
-        phase: 'Neuronal model setup and characterisation',
-        duration: '2-3 weeks',
-        cost: '$12k',
-        riskLevel: 'Medium',
-        dependencies: ['planning'],
-        requirements: ['Differentiate iPSC neurons or thaw VCP mutant lines', 'Benchmark baseline autophagy and proteasome markers'],
-        outputs: ['QC validated neurons ready for dosing', 'Baseline proteostasis reference set'],
-        blockers: [
-          {
-            severity: 'critical',
-            issue: 'Differentiation batches show day-to-day variability that shifts proteostasis baseline',
-            mitigation: 'Adopt author SOP for maturation days and include internal healthy control lines.',
-            verificationStatus: 'inferred'
-          },
-          {
-            severity: 'moderate',
-            issue: 'Neurons require mycoplasma-negative confirmation before dosing window',
-            mitigation: 'Schedule third-party sterility panel in advance; include kill step in SOP.',
-            verificationStatus: 'inferred'
-          }
-        ]
+        name: 'Neuronal model setup and characterisation',
+        deliverable: 'QC validated neurons ready for dosing',
+        checklist: ['Differentiate iPSC neurons or thaw VCP mutant lines', 'Benchmark baseline autophagy and proteasome markers'],
+        primaryRisk: {
+          severity: 'critical',
+          issue: 'Differentiation batches drift in proteostasis baseline without tight SOP control.',
+          mitigation: 'Adopt the author SOP for maturation days and include internal healthy control lines.'
+        }
       },
       {
         id: 'assays',
-        phase: 'Autophagy and proteasome assays',
-        duration: '10 days',
-        cost: '$9k',
-        riskLevel: 'High',
-        dependencies: ['models'],
-        requirements: ['High-content imaging pipeline configured', 'Proteasome activity kit validated with controls'],
-        outputs: ['Flux curves across compound doses', 'Proteasome recovery metrics'],
-        blockers: [
-          {
-            severity: 'moderate',
-            issue: 'Compound cytotoxicity window is narrow beyond 48 hours',
-            mitigation: 'Adopt staggered dosing schedule and include viability gating described in supplement.',
-            verificationStatus: 'inferred'
-          }
-        ]
+        name: 'Autophagy and proteasome assays',
+        deliverable: 'Flux curves across compound doses',
+        checklist: ['High-content imaging pipeline configured', 'Proteasome activity kit validated with controls'],
+        primaryRisk: {
+          severity: 'moderate',
+          issue: 'Compound cytotoxicity window narrows sharply after 48 hours.',
+          mitigation: 'Use staggered dosing and viability gates described in the supplement to avoid false positives.'
+        }
       },
       {
         id: 'analysis',
-        phase: 'Data integration and reporting',
-        duration: '1 week',
-        cost: '$3k',
-        riskLevel: 'Low',
-        dependencies: ['assays'],
-        requirements: ['Analysis scripts for proteostasis metrics', 'Predefined QC gates for outlier exclusion'],
-        outputs: ['Integrated autophagy and proteasome report', 'Recommendations for in vivo follow-up'],
-        blockers: [
-          {
-            severity: 'minor',
-            issue: 'Normalisation requires internal controls not included in public data dump',
-            mitigation: 'Recreate control curves using provided spreadsheets or request raw files via expert channel.',
-            verificationStatus: 'inferred'
-          }
-        ]
+        name: 'Data integration and reporting',
+        deliverable: 'Integrated autophagy and proteasome report',
+        checklist: ['Analysis scripts for proteostasis metrics', 'Predefined QC gates for outlier exclusion'],
+        primaryRisk: {
+          severity: 'minor',
+          issue: 'Normalisation requires internal controls not included in the public data dump.',
+          mitigation: 'Recreate control curves from the shared spreadsheets or request raw files via the author contact channel.'
+        }
       }
     ],
-    evidenceBase: {
-      strongEvidence: [
-        {
-          claim: 'VCP-874 compound boosted autophagic flux by 45 percent in patient-derived neurons.',
-          source: 'Chen et al. Supplementary Figure 4',
-          verificationStatus: 'verified'
-        },
-        {
-          claim: 'Proteasome-Glo assays showed 1.6x activity recovery after 24 hour dosing.',
-          source: 'Main text Figure 3C + methods section',
-          verificationStatus: 'inferred',
-          notes: 'Authors provide raw luminescence tables with positive control alignment.'
-        },
-        {
-          claim: 'Co-treatment with NRF2 activator reduced aggregate burden without additional toxicity.',
-          source: 'Appendix synergy screen',
-          verificationStatus: 'inferred'
-        }
+    evidence: {
+      strong: [
+        { claim: 'VCP-874 boosted autophagic flux by 45% in patient-derived neurons.', source: 'Supplementary Figure 4', confidence: 'verified' },
+        { claim: 'Proteasome-Glo assays showed 1.6× activity recovery after 24-hour dosing.', source: 'Main Figure 3C and methods', confidence: 'inferred', notes: 'Raw luminescence tables include positive controls for cross-checking.' }
       ],
       gaps: [
-        {
-          concern: 'Exact supplier formulation for lead compound not disclosed.',
-          impact: 'Potency may drift if excipients differ.',
-          severity: 'critical',
-          resolvableWithExpertAnalysis: true
-        },
-        {
-          concern: 'Long-term toxicity data limited to 48 hour window.',
-          impact: 'Chronic dosing plans remain speculative.',
-          severity: 'moderate',
-          resolvableWithExpertAnalysis: true
-        },
-        {
-          concern: 'Proteasome assay instrumentation details are high level.',
-          impact: 'Labs may burn cycles troubleshooting calibration.',
-          severity: 'minor',
-          resolvableWithExpertAnalysis: false
-        }
+        { description: 'Large-scale Cas9 purification not benchmarked.', impact: 'Scale-up to GMP lots remains uncertain without pilot runs.', severity: 'moderate', needsExpert: true },
+        { description: 'Long-term dosing cytotoxicity not reported.', impact: 'Chronic treatment risk requires toxicology follow-up.', severity: 'critical', needsExpert: true }
       ],
       assumptions: [
-        'Lab can allocate uninterrupted incubator capacity for 3 week neuronal maturation.',
-        'Reproduction focuses on in vitro clearance outcomes; in vivo validation is out of scope.'
+        'Cas9 reagents or expression systems are already validated in-house.',
+        'Neuron culture workflows operate at BSL-2 with documented sterility.',
+        'Analytical HPLC/MS capacity is available for compound QC.'
       ]
-    },
-    expertEnhancements: {
-      authorContacted: false,
-      datasetsVerified: ['Vendor roster for VCP activators with batch QC sheets', 'Validated iPSC differentiation SOP with day-by-day milestones'],
-      protocolClarifications: ['Autophagy imaging acquisition settings', 'Proteasome activity normalisation script'],
-      additionalResources: ['Chemistry CRO intro for analog synthesis', 'Template for IRB amendment covering VCP neuron work'],
-      turnaround: 'Delivered within 12 business days'
     }
   },
   abd1c342495432171beb7ca8fd9551ef13cbd0ff: {
     stage: 'ai_research',
-    lastUpdated: '2025-02-05',
-    reviewers: ['AI Research Desk'],
+    lastUpdated: '2025-01-22',
+    reviewers: ['ML Scale Desk'],
+    summary: 'Moderately reproducible if you have deterministic data pipelines and multi-GPU training capacity. Main challenge is aligning legacy augmentation schedules with modern frameworks.',
     paper: {
       title: 'ImageNet Classification with Deep Convolutional Neural Networks',
-      authors: 'Krizhevsky et al.',
-      venue: 'NeurIPS 2012',
+      authors: 'Krizhevsky, Sutskever, Hinton',
+      venue: 'Communications of the ACM (2017)',
       doi: '10.1145/3065386'
     },
-    verdict: {
-      grade: 'B+',
-      confidence: 'Medium',
-      mainMessage: 'Reproducing AlexNet is feasible with modern tooling, but matching reported accuracy still requires meticulous hyperparameter control and careful data preprocessing.',
-      successProbability: 0.72,
-      timeToFirstResult: '3-5 weeks',
-      totalCost: '$12k-$18k (GPU time + engineering)',
-      skillCeiling: 'Applied ML engineer with CUDA familiarity',
-      confidenceLevel: 'ai_inferred'
-    },
     feasibilityQuestions: [
-      {
-        id: 'gpu_fleet',
-        question: 'Do you have access to at least two 24GB GPUs or equivalent cloud instances for distributed training?',
-        weight: 3,
-        category: 'Compute',
-        helper: 'The original configuration used two GTX 580 cards; modern replications typically run on A6000 or H100 class hardware.'
-      },
-      {
-        id: 'dataset_ops',
-        question: 'Is your team comfortable managing the full ImageNet ingestion pipeline with deterministic preprocessing?',
-        weight: 2,
-        category: 'Data Engineering',
-        helper: 'Consistent crop, flip, and colour jitter policies are required to reproduce the headline accuracy.'
-      },
-      {
-        id: 'framework',
-        question: 'Can you maintain a custom CUDA/CuDNN environment or leverage a framework that hides the legacy kernels?',
-        weight: 2,
-        category: 'Tooling',
-        helper: 'Original code relies on bespoke kernels; contemporary PyTorch implementations close the gap but need precise cuDNN versions.'
-      }
+      { id: 'gpu', question: 'Do you control at least two 24GB GPUs or equivalent cloud instances for multi-week training?', weight: 3, helper: 'Original experiments ran on dual GTX 580s; modern replications use A6000/H100-class hardware for parity.' },
+      { id: 'dataset', question: 'Is your team comfortable rebuilding the ImageNet ingestion pipeline with deterministic preprocessing?', weight: 2, helper: 'Consistent crop, flip, and colour jitter policies are required to hit the reported accuracy.' },
+      { id: 'kernels', question: 'Can you maintain or emulate the legacy CUDA/cuDNN kernels referenced in the paper?', weight: 2, helper: 'Contemporary frameworks hide some details but still require precise cuDNN versions or equivalent fused kernels.' },
+      { id: 'ops', question: 'Do you have telemetry to monitor throughput, loss curves, and gradient spikes during long runs?', weight: 1, helper: 'Helps catch divergence early when reproducing the baseline schedule.' }
     ],
     criticalPath: [
       {
         id: 'data-prep',
-        phase: 'Dataset normalisation and caching',
-        duration: '1 week',
-        cost: '$2k',
-        riskLevel: 'Medium',
-        dependencies: [],
-        requirements: ['Curate ImageNet train/val split', 'Generate deterministic shuffles', 'Provision fast NVMe cache'],
-        outputs: ['Verified TFRecords/LMDB shards', 'Augmentation checklist'],
-        blockers: [
-          {
-            severity: 'moderate',
-            issue: 'Checksum drift or missing images break reproducibility guarantees.',
-            mitigation: 'Reconcile with ImageNet 2012 metadata archive and store manifest diffs.',
-            verificationStatus: 'inferred'
-          }
-        ]
+        name: 'Dataset normalisation and caching',
+        deliverable: 'Verified ImageNet shard set',
+        checklist: ['Curate 2012 train/val manifest', 'Generate deterministic shuffles', 'Provision NVMe cache'],
+        primaryRisk: {
+          severity: 'moderate',
+          issue: 'Checksum drift or missing images break reproducibility guarantees.',
+          mitigation: 'Reconcile with ImageNet metadata archive and store manifest diffs alongside cached shards.'
+        }
       },
       {
         id: 'training',
-        phase: 'Baseline training run',
-        duration: '10-14 days',
-        cost: '$8k',
-        riskLevel: 'High',
-        dependencies: ['data-prep'],
-        requirements: ['Two high-memory GPUs', 'Mixed precision friendly kernels', 'Robust checkpointing'],
-        outputs: ['Top-1/Top-5 curves', 'Checkpoint artefacts'],
-        blockers: [
-          {
-            severity: 'critical',
-            issue: 'Learning rate schedule or weight decay misconfiguration collapses accuracy.',
-            mitigation: 'Adopt original step schedule and monitor validation every 20k iterations.',
-            verificationStatus: 'inferred'
-          }
-        ]
+        name: 'Baseline training run',
+        deliverable: 'Top-1 / Top-5 accuracy curves',
+        checklist: ['Reserve two high-memory GPUs', 'Match the original LR momentum schedule', 'Enable robust checkpointing'],
+        primaryRisk: {
+          severity: 'critical',
+          issue: 'Deviation in learning rate schedule collapses accuracy.',
+          mitigation: 'Mirror the original step schedule and validate every 20k iterations to confirm convergence.'
+        }
       },
       {
-        id: 'benchmarking',
-        phase: 'Evaluation and ablation runs',
-        duration: '1-2 weeks',
-        cost: '$4k',
-        riskLevel: 'Medium',
-        dependencies: ['training'],
-        requirements: ['Automated evaluation scripts', 'Telemetry for throughput'],
-        outputs: ['Reproduction metrics with confidence intervals', 'Throughput benchmarks'],
-        blockers: [
-          {
-            severity: 'moderate',
-            issue: 'Hardware variance makes throughput comparisons noisy.',
-            mitigation: 'Report normalised images/sec and include A/B with reference implementation.',
-            verificationStatus: 'inferred'
-          }
-        ]
+        id: 'benchmark',
+        name: 'Evaluation and ablation sweeps',
+        deliverable: 'Reproduction metrics with confidence intervals',
+        checklist: ['Run deterministic evaluation script', 'Log throughput and memory usage', 'Capture ablation deltas'],
+        primaryRisk: {
+          severity: 'moderate',
+          issue: 'Hardware variance makes throughput comparisons noisy.',
+          mitigation: 'Report normalised images/second and compare against a PyTorch reference implementation.'
+        }
       }
     ],
-    evidenceBase: {
-      strongEvidence: [
-        {
-          claim: 'Modern PyTorch reference implementations reach within 1% top-5 accuracy when original augmentation schedule is mirrored.',
-          source: 'PyTorch hub AlexNet reproduction [GitHub](https://github.com/pytorch/vision)',
-          verificationStatus: 'verified'
-        },
-        {
-          claim: 'Deterministic data loaders improve convergence stability across seeds.',
-          source: 'FastAI ImageNet replication notes [Fast.ai forums](https://forums.fast.ai)',
-          verificationStatus: 'inferred'
-        }
+    evidence: {
+      strong: [
+        { claim: 'Modern PyTorch reference implementations reach within 1% Top-5 accuracy when augmentations match the original schedule.', source: 'torchvision.models AlexNet reproduction notes', confidence: 'verified' },
+        { claim: 'Deterministic data loaders reduce variance across random seeds.', source: 'Fast.ai ImageNet replication forum threads', confidence: 'inferred' }
       ],
       gaps: [
-        {
-          concern: 'Exact random seed usage per GPU stream is undocumented.',
-          impact: 'Accuracy can fluctuate by >1% without aligned seeds.',
-          severity: 'moderate',
-          resolvableWithExpertAnalysis: true
-        },
-        {
-          concern: 'Legacy CUDA kernels referenced in the paper are not maintained.',
-          impact: 'Teams must port to modern frameworks or backport drivers.',
-          severity: 'critical',
-          resolvableWithExpertAnalysis: true
-        }
+        { description: 'Exact per-device random seed usage is undocumented.', impact: 'Accuracy can fluctuate by >1% without aligned RNG streams.', severity: 'moderate', needsExpert: true },
+        { description: 'Legacy CUDA kernels cited in the paper are unmaintained.', impact: 'Teams must port to modern frameworks or backport drivers to reproduce raw throughput.', severity: 'critical', needsExpert: true }
       ],
       assumptions: [
-        'Reproduction targets FP32 parity before experimenting with mixed precision.',
-        'Cloud spot interruptions are avoided by reserving dedicated GPU capacity.'
+        'Cloud interruptions are avoided by reserving dedicated GPU capacity.',
+        'Baseline reproduction targets FP32 parity before attempting mixed precision.',
+        'Restarts are automated with checkpoint and LR schedule recovery.'
       ]
-    },
-    expertEnhancements: {
-      authorContacted: false,
-      datasetsVerified: ['ImageNet 2012 manifest with checksum report'],
-      protocolClarifications: ['Learning rate and momentum schedule cross-check'],
-      additionalResources: ['Script for deterministic PyTorch data loaders', 'GPU scheduling template for Slurm'],
-      turnaround: 'Delivered within 9 business days'
     }
   },
   c92bd747a97eeafdb164985b0d044caa1dc6e73e: {
-    stage: 'ai_research',
+    stage: 'human_review',
     lastUpdated: '2024-11-18',
     reviewers: ['Materials Repro Desk'],
+    summary: 'Highly reproducible for nanofabrication labs with clean-room access. Main challenge is maintaining single-layer graphene quality during transfer and device patterning.',
     paper: {
       title: 'Electric Field Effect in Atomically Thin Carbon Films',
       authors: 'Novoselov et al.',
-      venue: 'Science 2004',
+      venue: 'Science (2004)',
       doi: '10.1126/science.1102896'
     },
-    verdict: {
-      grade: 'B',
-      confidence: 'Medium',
-      mainMessage: 'Graphene exfoliation and device fabrication remain craft-heavy; reproduced mobility numbers require disciplined cleanroom practice.',
-      successProbability: 0.62,
-      timeToFirstResult: '6-8 weeks',
-      totalCost: '$25k-$40k (consumables + device processing)',
-      skillCeiling: 'Cleanroom physicist with microfabrication portfolio',
-      confidenceLevel: 'ai_inferred'
-    },
     feasibilityQuestions: [
-      {
-        id: 'cleanroom',
-        question: 'Do you have ISO-6 or better cleanroom access with electron-beam lithography?',
-        weight: 3,
-        category: 'Facilities',
-        helper: 'High-mobility graphene devices need low-particle environments for contacts and gates.'
-      },
-      {
-        id: 'metrology',
-        question: 'Is Raman spectroscopy and AFM characterisation available in-house?',
-        weight: 2,
-        category: 'Instrumentation',
-        helper: 'Layer verification and strain diagnostics depend on Raman signatures and thickness mapping.'
-      },
-      {
-        id: 'substrate',
-        question: 'Can you source high-quality Si/SiO₂ wafers with 300 nm oxide stack?',
-        weight: 1,
-        category: 'Materials',
-        helper: 'Optical identification of flakes assumes this stack; alternative thicknesses complicate QC.'
-      }
+      { id: 'substrate', question: 'Do you have a proven workflow for mechanical exfoliation or CVD transfer onto SiO₂/Si substrates?', weight: 3, helper: 'The mobility metrics rely on defect-free monolayers adhered to 300 nm SiO₂.' },
+      { id: 'patterning', question: 'Can you pattern sub-micron Hall bar geometries with e-beam or high-resolution photolithography?', weight: 2, helper: 'Device geometry strongly influences carrier mobility; edge roughness degrades performance.' },
+      { id: 'anneal', question: 'Do you operate an inert-atmosphere anneal step for residue removal?', weight: 2, helper: 'Annealing in forming gas or argon is necessary to recover carrier mobility after lithography.' },
+      { id: 'metrology', question: 'Is Raman/AFM metrology available to confirm monolayer thickness and strain?', weight: 1, helper: 'Spectra confirm the G and 2D peaks; AFM ensures the transfer avoided wrinkles.' }
     ],
     criticalPath: [
       {
-        id: 'exfoliation',
-        phase: 'Graphene exfoliation and transfer',
-        duration: '2 weeks',
-        cost: '$6k',
-        riskLevel: 'High',
-        dependencies: [],
-        requirements: ['Natural graphite source', 'Polymethyl methacrylate transfer pipeline', 'Optical inspection workflow'],
-        outputs: ['Catalogue of mono- and bilayer flakes', 'Transfer yield report'],
-        blockers: [
-          {
-            severity: 'critical',
-            issue: 'Flake contamination or wrinkling degrades mobility.',
-            mitigation: 'Adopt dry-transfer protocol and anneal under forming gas.',
-            verificationStatus: 'inferred'
-          }
-        ]
+        id: 'flake-harvest',
+        name: 'Graphene exfoliation and inspection',
+        deliverable: 'Monolayer graphene flakes catalogued',
+        checklist: ['Exfoliate onto 300 nm SiO₂', 'Optically screen for monolayers', 'Log candidate flakes with coordinates'],
+        primaryRisk: {
+          severity: 'moderate',
+          issue: 'Flake contamination or wrinkles reduce mobility.',
+          mitigation: 'Use clean tape, verify with Raman/AFM, and discard flakes with polymer residue.'
+        }
       },
       {
-        id: 'patterning',
-        phase: 'Device lithography and metallisation',
-        duration: '3 weeks',
-        cost: '$12k',
-        riskLevel: 'Medium',
-        dependencies: ['exfoliation'],
-        requirements: ['E-beam resist stack', 'Ti/Au evaporation', 'Lift-off controls'],
-        outputs: ['Hall-bar devices', 'Contact resistance measurements'],
-        blockers: [
-          {
-            severity: 'moderate',
-            issue: 'Contact resistance variance masks intrinsic mobility.',
-            mitigation: 'Perform four-probe calibration and anneal contacts at 200°C in forming gas.',
-            verificationStatus: 'inferred'
-          }
-        ]
+        id: 'pattern',
+        name: 'Hall bar patterning and metallisation',
+        deliverable: 'Contacted Hall bar devices',
+        checklist: ['Spin-coat resist with soft bake', 'Define geometry via e-beam', 'Deposit Cr/Au contacts'],
+        primaryRisk: {
+          severity: 'critical',
+          issue: 'Overexposure or resist scumming damages the flake edge.',
+          mitigation: 'Optimise dose on sacrificial flakes and include oxygen descum before metallisation.'
+        }
       },
       {
-        id: 'measurement',
-        phase: 'Electrical testing and analysis',
-        duration: '1-2 weeks',
-        cost: '$7k',
-        riskLevel: 'Medium',
-        dependencies: ['patterning'],
-        requirements: ['Low-noise probe station', 'Gate bias sweeps', 'Carrier mobility extraction scripts'],
-        outputs: ['Mobility curves', 'Charge neutrality point analysis'],
-        blockers: [
-          {
-            severity: 'moderate',
-            issue: 'Water adsorption shifts Dirac point over measurement window.',
-            mitigation: 'Measure in vacuum and bake samples prior to testing.',
-            verificationStatus: 'inferred'
-          }
-        ]
+        id: 'anneal',
+        name: 'Anneal and electrical characterisation',
+        deliverable: 'Mobility curves vs. gate voltage',
+        checklist: ['Anneal in forming gas', 'Wire-bond device', 'Sweep gate voltage for mobility extraction'],
+        primaryRisk: {
+          severity: 'moderate',
+          issue: 'Ambient exposure post-anneal reintroduces dopants.',
+          mitigation: 'Package devices immediately or work inside a nitrogen glovebox.'
+        }
       }
     ],
-    evidenceBase: {
-      strongEvidence: [
-        {
-          claim: 'Multiple groups have matched room-temperature mobility ~10,000 cm²/Vs with improved transfer protocols.',
-          source: 'Graphene replication survey [Nature Nanotechnology](https://www.nature.com/articles/nnano.2010.221)',
-          verificationStatus: 'verified'
-        },
-        {
-          claim: 'Dry-transfer techniques reduce polymer residue and raise yield.',
-          source: 'Graphene dry transfer comparison [ACS Nano](https://pubs.acs.org/doi/10.1021/nn201207c)',
-          verificationStatus: 'inferred'
-        }
+    evidence: {
+      strong: [
+        { claim: 'Independent labs have reproduced mobility >10,000 cm²/Vs with similar exfoliation workflows.', source: 'Tombros et al., Nature Physics 2007', confidence: 'verified' },
+        { claim: 'Forming-gas anneals restore graphene transport after lithography residues.', source: 'Ishigami et al., Nano Letters 2007', confidence: 'inferred' }
       ],
       gaps: [
-        {
-          concern: 'Original substrate cleaning recipe not fully specified.',
-          impact: 'Residues alter device mobility and gating behaviour.',
-          severity: 'moderate',
-          resolvableWithExpertAnalysis: true
-        },
-        {
-          concern: 'Long-term stability of devices under ambient exposure unreported.',
-          impact: 'Field effect measurements drift after hours without encapsulation.',
-          severity: 'minor',
-          resolvableWithExpertAnalysis: false
-        }
+        { description: 'Long-term device stability under ambient storage is not documented.', impact: 'Mobility can degrade within days without encapsulation.', severity: 'moderate', needsExpert: false },
+        { description: 'Transfer yield statistics are omitted.', impact: 'Planning wafer-scale experiments is difficult without yield baselines.', severity: 'critical', needsExpert: true }
       ],
       assumptions: [
-        'Hydrogen anneal capability is available for interface cleaning.',
-        'Reproduction focuses on back-gated devices; top-gated variants are out of scope.'
+        'Class 1000 clean-room access with e-beam lithography is available.',
+        'Thermal evaporators support Cr/Au deposition.',
+        'Raman spectroscopy is calibrated for graphene signatures.'
       ]
-    },
-    expertEnhancements: {
-      authorContacted: false,
-      datasetsVerified: ['Transfer yield log template'],
-      protocolClarifications: ['Annealing schedule confirmation'],
-      additionalResources: ['Cleanroom traveller for graphene Hall bars'],
-      turnaround: 'Delivered within 3 weeks'
     }
   },
   fc448a7db5a2fac242705bd8e37ae1fc4a858643: {
-    stage: 'ai_research',
-    lastUpdated: '2024-10-02',
-    reviewers: ['Genomics Repro Desk'],
+    stage: 'community_feedback',
+    lastUpdated: '2024-12-05',
+    reviewers: ['Genomics Community Panel'],
+    summary: 'Mostly reproducible for large genome centres with automated sequencing pipelines. Main challenge is orchestrating the multi-lab assembly workflow and matching archival reference standards.',
     paper: {
-      title: 'Initial sequencing and analysis of the human genome.',
+      title: 'Initial sequencing and analysis of the human genome',
       authors: 'Lander et al.',
-      venue: 'Nature 2001',
+      venue: 'Nature (2001)',
       doi: '10.1038/35057062'
     },
-    verdict: {
-      grade: 'C',
-      confidence: 'Low',
-      mainMessage: 'Reproducing the full Human Genome Project workflow is impractical; focus on targeted re-analyses with contemporary reference datasets.',
-      successProbability: 0.32,
-      timeToFirstResult: '3-6 months',
-      totalCost: '$150k-$250k+',
-      skillCeiling: 'Computational genomics lead + wet-lab sequencing core',
-      confidenceLevel: 'ai_inferred'
-    },
     feasibilityQuestions: [
-      {
-        id: 'sequencing-core',
-        question: 'Do you operate or collaborate with a high-throughput sequencing core capable of whole-genome runs?',
-        weight: 3,
-        category: 'Infrastructure',
-        helper: 'Replicating the full pipeline requires industrial-scale instruments; partial reproductions can leverage NovaSeq or PromethION systems.'
-      },
-      {
-        id: 'storage',
-        question: 'Can you store and process petabyte-scale intermediate datasets securely?',
-        weight: 2,
-        category: 'Data Management',
-        helper: 'Assembly and variant calling workflows generate large temporary artefacts that must be retained for audit.'
-      },
-      {
-        id: 'ethics',
-        question: 'Are ethics approvals and data governance frameworks in place for human genomic data?',
-        weight: 2,
-        category: 'Governance',
-        helper: 'Replication even with public datasets must comply with consent restrictions and jurisdictional privacy standards.'
-      }
+      { id: 'platform', question: 'Do you operate high-throughput sequencing instruments or maintain partnerships with a genome centre?', weight: 3, helper: 'The original effort involved multiple capillary sequencing centres; modern equivalents use NovaSeq or PacBio Revio runs.' },
+      { id: 'assembly', question: 'Can you run large-scale assembly pipelines with version-controlled reference data?', weight: 2, helper: 'Assembly requires orchestrating Celera-style overlap layout consensus or modern HiFi assemblers with strict metadata tracking.' },
+      { id: 'storage', question: 'Is petabyte-scale storage with audit trails available for raw reads and intermediate contigs?', weight: 2, helper: 'Trace files and consensus scaffolds must be retained for reproducibility and regulatory review.' },
+      { id: 'annotation', question: 'Do you have a team that can refresh gene annotation and QC against current reference builds?', weight: 1, helper: 'Updates to Ensembl/RefSeq annotations are needed to align with modern gene models.' }
     ],
     criticalPath: [
       {
-        id: 'scope',
-        phase: 'Scope baseline and secure reference datasets',
-        duration: '4 weeks',
-        cost: '$15k',
-        riskLevel: 'Medium',
-        dependencies: [],
-        requirements: ['Access to public HGP releases', 'Alignment on evaluation metrics', 'Compliance review'],
-        outputs: ['Replication charter', 'Data governance checklist'],
-        blockers: [
-          {
-            severity: 'moderate',
-            issue: 'Data use agreements may restrict redistribution of derived artefacts.',
-            mitigation: 'Engage institutional review and adopt controlled-access workflows.',
-            verificationStatus: 'inferred'
-          }
-        ]
+        id: 'pilot',
+        name: 'Pilot sequencing and calibration',
+        deliverable: 'Calibrated sequencing runs with QC reports',
+        checklist: ['Sequence well-characterised BAC clones', 'Benchmark against NIST genomes', 'Validate base-call accuracy'],
+        primaryRisk: {
+          severity: 'moderate',
+          issue: 'Instrument drift skews quality metrics across centres.',
+          mitigation: 'Run recurring calibration against the Genome in a Bottle reference set and share QC dashboards.'
+        }
       },
       {
         id: 'assembly',
-        phase: 'Computational assembly and annotation replay',
-        duration: '8-12 weeks',
-        cost: '$80k',
-        riskLevel: 'High',
-        dependencies: ['scope'],
-        requirements: ['High-memory compute cluster', 'Assembly pipelines (SOAPdenovo/ALLPATHS-LG equivalent)', 'Annotation tooling'],
-        outputs: ['Draft assemblies', 'Annotation comparison reports'],
-        blockers: [
-          {
-            severity: 'critical',
-            issue: 'Legacy pipeline components are unmaintained and require porting to modern environments.',
-            mitigation: 'Use contemporary assemblers with documented parameter translation to original methods.',
-            verificationStatus: 'inferred'
-          }
-        ]
+        name: 'Whole-genome assembly and scaffolding',
+        deliverable: 'Consensus assembly with gap catalogue',
+        checklist: ['Merge reads across centres', 'Run assembly with documented parameters', 'Annotate remaining gaps/scaffolds'],
+        primaryRisk: {
+          severity: 'critical',
+          issue: 'Metadata mismatches between centres introduce chimeric contigs.',
+          mitigation: 'Enforce shared manifest templates and re-run suspect libraries through independent validation.'
+        }
       },
       {
-        id: 'analysis',
-        phase: 'Comparative analysis and validation',
-        duration: '6-8 weeks',
-        cost: '$60k',
-        riskLevel: 'Medium',
-        dependencies: ['assembly'],
-        requirements: ['Variant analysis toolchain', 'Cross-reference with GRCh38', 'Statistical validation scripts'],
-        outputs: ['Variant concordance tables', 'Functional annotation deltas'],
-        blockers: [
-          {
-            severity: 'moderate',
-            issue: 'Legacy reference builds complicate alignment and interpretation.',
-            mitigation: 'Normalise outputs against modern references and document coordinate lifts.',
-            verificationStatus: 'inferred'
-          }
-        ]
+        id: 'annotation',
+        name: 'Annotation and comparative analysis',
+        deliverable: 'Annotated reference genome release',
+        checklist: ['Lift over to current gene models', 'Run repeat masking and structural variant calls', 'Publish QC and coverage reports'],
+        primaryRisk: {
+          severity: 'moderate',
+          issue: 'Legacy annotation pipelines do not map cleanly to modern references.',
+          mitigation: 'Use Ensembl/RefSeq joint pipelines and document manual curation steps.'
+        }
       }
     ],
-    evidenceBase: {
-      strongEvidence: [
-        {
-          claim: 'Public HGP assemblies and annotations are reproducible with current tooling when pipelines are translated carefully.',
-          source: 'Genome assembly replication study [Genome Research](https://genome.cshlp.org/content/25/10/1546)',
-          verificationStatus: 'inferred'
-        }
+    evidence: {
+      strong: [
+        { claim: 'The human genome reference has been independently reassembled multiple times with concordant coverage metrics.', source: 'Telomere-to-Telomere consortium reports (2022)', confidence: 'verified' },
+        { claim: 'Shared QC dashboards and reference standards enable cross-centre reproducibility.', source: 'Genome in a Bottle technical documentation', confidence: 'inferred' }
       ],
       gaps: [
-        {
-          concern: 'Experimental wet-lab protocols from 2001 are obsolete.',
-          impact: 'Full biological replication would require redesign using modern sequencing chemistry.',
-          severity: 'critical',
-          resolvableWithExpertAnalysis: true
-        },
-        {
-          concern: 'Cost estimates assume access to institutional compute subsidies.',
-          impact: 'Commercial cloud replication may exceed $400k.',
-          severity: 'moderate',
-          resolvableWithExpertAnalysis: false
-        }
+        { description: 'Gap closure for centromeric regions remains specialised.', impact: 'Long-read platforms or ultra-long nanopore runs are required for completeness.', severity: 'critical', needsExpert: true },
+        { description: 'Data retention policies differ across sequencing centres.', impact: 'Audit trails may be incomplete without unified storage governance.', severity: 'moderate', needsExpert: false }
       ],
       assumptions: [
-        'Replication focuses on computational replay with existing raw reads.',
-        'Wet-lab validation is limited to targeted re-sequencing using modern instruments.'
+        'Sequencing centres participate in shared metadata and QC standards.',
+        'Long-read or HiFi sequencing is budgeted for repetitive regions.',
+        'Dedicated data engineers maintain the assembly pipelines.'
       ]
-    },
-    expertEnhancements: {
-      authorContacted: false,
-      datasetsVerified: ['Ensembl/NCBI mirrored HGP releases'],
-      protocolClarifications: ['Parameter translation guide for assembly pipelines'],
-      additionalResources: ['Costing worksheet for hybrid cloud clusters'],
-      turnaround: 'Delivered within 8 weeks'
     }
   }
-}
-
-const EXPERT_UPGRADE_NOTES = [
-  'Secure compound supply details, batch QC, and alternate vendors.',
-  'Review the authors autophagy and proteasome assay playbooks with annotated settings.',
-  'Coordinate a live Q&A with the study team on dosing cadence and toxicity monitoring.'
-]
-
-function getFeasibilitySummary(score: number): string {
-  if (score >= 80) {
-    return 'Ready to execute'
-  }
-  if (score >= 55) {
-    return 'Needs targeted support'
-  }
-  return 'High risk'
-}
-
-function getFeasibilityTone(score: number): string {
-  if (score >= 80) {
-    return 'text-emerald-600'
-  }
-  if (score >= 55) {
-    return 'text-amber-600'
-  }
-  return 'text-red-600'
-}
+};
 
 function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperAnalysis; onRequestReview?: () => void }) {
-  const questions = report.feasibilityQuestions
+  const questions = report.feasibilityQuestions;
 
   const [answers, setAnswers] = useState<Record<string, 'yes' | 'no' | null>>(() => {
-    const initial: Record<string, 'yes' | 'no' | null> = {}
+    const initial: Record<string, 'yes' | 'no' | null> = {};
     questions.forEach((question) => {
-      initial[question.id] = null
-    })
-    return initial
-  })
+      initial[question.id] = null;
+    });
+    return initial;
+  });
 
-  const totalWeight = useMemo(() => questions.reduce((sum, question) => sum + question.weight, 0), [questions])
+  const totalWeight = useMemo(() => questions.reduce((sum, question) => sum + question.weight, 0), [questions]);
   const yesWeight = useMemo(
     () => questions.reduce((sum, question) => sum + (answers[question.id] === 'yes' ? question.weight : 0), 0),
     [answers, questions]
-  )
-  const answeredCount = useMemo(
-    () => questions.reduce((sum, question) => sum + (answers[question.id] ? 1 : 0), 0),
-    [answers, questions]
-  )
+  );
 
-  const feasibilityScore = totalWeight > 0 ? Math.round((yesWeight / totalWeight) * 100) : 0
-  const feasibilitySummary = getFeasibilitySummary(feasibilityScore)
-  const feasibilityTone = getFeasibilityTone(feasibilityScore)
-
-  const stageMeta = STAGE_META[report.stage]
-  const confidenceSource = report.verdict.confidenceLevel === 'ai_inferred' ? 'AI generated' : 'Expert verified'
+  const feasibilityScore = totalWeight > 0 ? Math.round((yesWeight / totalWeight) * 100) : 0;
+  const feasibilitySummary = getFeasibilitySummary(feasibilityScore);
+  const feasibilityTone = getFeasibilityTone(feasibilityScore);
 
   function handleAnswer(questionId: string, response: 'yes' | 'no') {
     setAnswers((prev) => ({
       ...prev,
       [questionId]: prev[questionId] === response ? null : response
-    }))
+    }));
   }
 
-  const isPlaceholder = questions.length === 0 && report.criticalPath.length === 0
-
-  const riskToneStyles: Record<string, string> = {
-    High: 'border border-red-200 bg-red-50 text-red-600',
-    Medium: 'border border-amber-200 bg-amber-50 text-amber-600',
-    Low: 'border border-emerald-200 bg-emerald-50 text-emerald-600'
-  }
+  const isPlaceholder = questions.length === 0 && report.criticalPath.length === 0;
 
   const blockerSeverityTone: Record<string, string> = {
     critical: 'border border-red-200 bg-red-50 text-red-600',
     moderate: 'border border-amber-200 bg-amber-50 text-amber-600',
     minor: 'border border-sky-200 bg-sky-50 text-sky-600'
-  }
-
-  const blockerPanelTone: Record<string, string> = {
-    critical: 'border border-red-200 bg-red-50/70',
-    moderate: 'border border-amber-200 bg-amber-50/70',
-    minor: 'border border-sky-200 bg-sky-50/70'
-  }
+  };
 
   if (isPlaceholder) {
     return (
       <div className="space-y-6">
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div>
-            <h3 className="text-lg font-semibold text-slate-900">{report.verdict.mainMessage}</h3>
+            <h3 className="text-lg font-semibold text-slate-900">{report.summary}</h3>
             <p className="mt-1 text-sm text-slate-600">{report.paper.title}</p>
             <p className="text-xs text-slate-500">{report.paper.authors} | {report.paper.venue}</p>
           </div>
@@ -1161,14 +913,15 @@ function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperA
           </p>
         </section>
       </div>
-    )
+    );
   }
 
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div>
-          <h3 className="text-lg font-semibold text-slate-900">{report.verdict.mainMessage}</h3>
+          <h3 className="text-lg font-semibold text-slate-900">{report.summary}</h3>
+          <p className="mt-1 text-xs text-slate-500">Updated {formatRelativeTime(report.lastUpdated)} · {report.reviewers.join(', ')}</p>
         </div>
       </section>
 
@@ -1191,7 +944,7 @@ function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperA
         </div>
         <div className="mt-4 space-y-3">
           {questions.map((question) => {
-            const currentAnswer = answers[question.id]
+            const currentAnswer = answers[question.id];
             return (
               <div key={question.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -1215,7 +968,7 @@ function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperA
                   </button>
                 </div>
               </div>
-            )
+            );
           })}
         </div>
       </section>
@@ -1228,22 +981,19 @@ function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperA
           </div>
         </div>
         <div className="mt-6 space-y-5">
-          {report.criticalPath.map((phase, index) => {
-            const primaryOutput = phase.outputs[0] ?? 'Output captured during expert review'
-            const primaryBlocker = phase.blockers[0]
-            const dependenciesText = phase.dependencies.length ? `Depends on: ${phase.dependencies.join(', ')}` : null
-            const riskBadge = riskToneStyles[phase.riskLevel] ?? 'border border-slate-200 bg-slate-50 text-slate-600'
+          {report.criticalPath.map((phase) => {
+            const checklist = phase.checklist.slice(0, 3);
+            const totalChecklist = phase.checklist.length;
+            const primaryBlocker = phase.primaryRisk;
             const severityLabel = primaryBlocker
               ? primaryBlocker.severity.charAt(0).toUpperCase() + primaryBlocker.severity.slice(1)
-              : 'No major risk'
-            const totalRequirements = phase.requirements?.length ?? 0
-            const checklist = phase.requirements?.slice(0, 3) ?? []
+              : 'No major risk';
 
             return (
               <article key={phase.id} className="rounded-xl border border-slate-200 bg-slate-50 p-5">
                 <header className="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <p className="mt-1 text-base font-semibold text-slate-900">{phase.phase}</p>
+                    <p className="mt-1 text-base font-semibold text-slate-900">{phase.name}</p>
                   </div>
                 </header>
 
@@ -1251,7 +1001,7 @@ function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperA
                   <div className="space-y-5">
                     <div>
                       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Key deliverable</p>
-                      <p className="mt-2 text-sm text-slate-700">{primaryOutput}</p>
+                      <p className="mt-2 text-sm text-slate-700">{phase.deliverable}</p>
                     </div>
                     {checklist.length ? (
                       <div>
@@ -1264,8 +1014,8 @@ function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperA
                             </li>
                           ))}
                         </ul>
-                        {totalRequirements > checklist.length ? (
-                          <p className="mt-3 text-xs text-slate-400">+{totalRequirements - checklist.length} more</p>
+                        {totalChecklist > checklist.length ? (
+                          <p className="mt-3 text-xs text-slate-400">+{totalChecklist - checklist.length} more</p>
                         ) : null}
                       </div>
                     ) : null}
@@ -1297,144 +1047,126 @@ function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperA
                   </div>
                 </div>
               </article>
-            )
+            );
           })}
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex items-start gap-4">
-          <button
-            type="button"
-            onClick={onRequestReview}
-            className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 whitespace-nowrap"
-          >
-            Request Community Review
-          </button>
-          <p className="text-sm text-slate-600">We&apos;ll compile patents, PhD theses, and contact the original study authors.</p>
-        </div>
-      </section>
+  {onRequestReview ? (
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="flex items-start gap-4">
+        <button
+          type="button"
+              onClick={onRequestReview}
+              className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 whitespace-nowrap"
+            >
+              Request Community Review
+            </button>
+            <p className="text-sm text-slate-600">We&apos;ll compile patents, PhD theses, and contact the original study authors.</p>
+          </div>
+        </section>
+      ) : null}
     </div>
-  )
+  );
 }
 
-interface UserProfile {
-  orcid_id: string | null
-  academic_website: string | null
-  profile_personalization: ProfilePersonalization | null
-  last_profile_enriched_at: string | null
-  profile_enrichment_version: string | null
-}
+function ClaimsReportPreview({ report, onRequestReview }: { report: ResearchPaperAnalysis; onRequestReview?: () => void }) {
+  const headline = report.evidence.strong[0];
+  const strongEvidence = report.evidence.strong;
+  const gaps = report.evidence.gaps;
+  const assumptions = report.evidence.assumptions;
 
-function formatRelativeTime(timestamp: string | null | undefined) {
-  if (!timestamp) {
-    return 'Never'
-  }
+  return (
+    <div className="space-y-6">
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Claims verification snapshot</h3>
+            <p className="mt-1 text-sm text-slate-600">{report.paper.title}</p>
+            <p className="text-xs text-slate-500">{report.paper.authors} • {report.paper.venue}</p>
+          </div>
+          <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-violet-700">
+            Claims
+          </span>
+        </div>
+        {headline ? (
+          <div className="mt-4">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Headline finding</h4>
+            <p className="mt-2 text-sm font-semibold text-slate-900">{headline.claim}</p>
+            <p className="mt-1 text-xs text-slate-500">Source: {headline.source}</p>
+          </div>
+        ) : null}
+      </section>
 
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) {
-    return 'Unknown'
-  }
+      {strongEvidence.length ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Evidence we stand behind</h4>
+          <ul className="mt-4 space-y-3 text-sm text-slate-700">
+            {strongEvidence.map((item, index) => (
+              <li key={`claims-evidence-${index}`} className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <CheckCircle2 className="mt-1 h-5 w-5 text-emerald-500" />
+                <div>
+                  <p className="font-medium text-slate-900">{item.claim}</p>
+                  <p className="text-xs text-slate-500">Source: {item.source}</p>
+                  {item.notes ? <p className="mt-1 text-xs text-slate-500">{item.notes}</p> : null}
+                  {item.confidence ? <p className="mt-1 text-xs text-slate-400">Confidence: {item.confidence}</p> : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
-  const diffMs = Date.now() - date.getTime()
-  const diffMinutes = Math.round(diffMs / (1000 * 60))
+      {gaps.length ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Gaps & follow-ups</h4>
+          <ul className="mt-4 space-y-3 text-sm text-slate-700">
+            {gaps.map((gap, index) => (
+              <li key={`claims-gap-${index}`} className="flex gap-3 rounded-xl border border-slate-200 bg-white p-4">
+                <AlertTriangle className="mt-1 h-5 w-5 text-amber-500" />
+                <div>
+                  <p className="font-medium text-slate-900">{gap.description}</p>
+                  <p className="text-xs text-slate-500">Impact: {gap.impact}</p>
+                  <p className="text-xs text-slate-500">Severity: {gap.severity}</p>
+                  {gap.needsExpert !== undefined ? (
+                    <p className="mt-1 text-xs text-slate-400">
+                      {gap.needsExpert ? 'Requires expert outreach.' : 'Track internally for now.'}
+                    </p>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
-  if (diffMinutes < 1) {
-    return 'Just now'
-  }
+      {assumptions.length ? (
+        <section className="rounded-2xl border border-slate-200 bg-slate-50 p-6 shadow-sm">
+          <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Assumptions we made</h4>
+          <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-slate-600">
+            {assumptions.map((assumption, index) => (
+              <li key={`assumption-${index}`}>{assumption}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
-  if (diffMinutes < 60) {
-    return `${diffMinutes} minute${diffMinutes === 1 ? '' : 's'} ago`
-  }
-
-  const diffHours = Math.round(diffMinutes / 60)
-  if (diffHours < 24) {
-    return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`
-  }
-
-  const diffDays = Math.floor(diffHours / 24)
-  if (diffDays < 7) {
-    return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`
-  }
-
-  return date.toLocaleString()
-}
-
-function parseManualKeywords(input: string) {
-  return input
-    .split(/[\n,]/)
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0)
-    .slice(0, 20)
-}
-
-function formatOrcidId(input: string): string {
-  // Remove all non-digit and non-X characters
-  const clean = input.replace(/[^0-9X]/gi, '').toUpperCase()
-
-  // Only format if we have digits to work with
-  if (clean.length === 0) return ''
-
-  // Add dashes every 4 characters, max 16 characters
-  const limited = clean.slice(0, 16)
-  return limited.replace(/(.{4})/g, '$1-').replace(/-$/, '')
-}
-
-function normalizeOrcidId(input: string): string {
-  // Remove all dashes and spaces, keep only digits and X
-  return input.replace(/[^0-9X]/gi, '').toUpperCase()
-}
-
-function validateOrcidId(input: string): { isValid: boolean; message?: string } {
-  const normalized = normalizeOrcidId(input)
-
-  if (normalized.length === 0) {
-    return { isValid: false, message: 'ORCID ID is required' }
-  }
-
-  if (normalized.length < 16) {
-    return { isValid: false, message: 'ORCID ID must be 16 characters long' }
-  }
-
-  if (normalized.length > 16) {
-    return { isValid: false, message: 'ORCID ID is too long' }
-  }
-
-  // Check format: 15 digits followed by digit or X
-  const pattern = /^[0-9]{15}[0-9X]$/
-  if (!pattern.test(normalized)) {
-    return { isValid: false, message: 'ORCID ID must contain 16 digits, with optional X as last character' }
-  }
-
-  return { isValid: true }
-}
-
-function createKeywordClusters(input: string) {
-  // Split by newlines to get individual clusters
-  const lines = input.split(/\n/).map((line) => line.trim()).filter((line) => line.length > 0)
-
-  return lines.map((line, index) => {
-    // Split by commas within each line to get keywords for this cluster
-    const keywords = line.split(/,/).map((keyword) => keyword.trim()).filter((keyword) => keyword.length > 0)
-
-    return {
-      id: `manual-${Date.now()}-${index}`, // Generate unique ID
-      label: keywords[0] || `Cluster ${index + 1}`, // Use first keyword as label
-      priority: index + 1, // Order by appearance
-      keywords: keywords,
-      synonyms: [],
-      methods: [],
-      applications: [],
-      source: 'manual' as const // Mark as manually created
-    }
-  }).slice(0, 10) // Limit to 10 clusters max
-}
-
-function truncateTitleForList(title: string, maxLength = 64) {
-  if (title.length <= maxLength) {
-    return title
-  }
-  return `${title.slice(0, maxLength - 1)}…`
+      {onRequestReview ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-start gap-4">
+            <button
+              type="button"
+              onClick={onRequestReview}
+              className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 whitespace-nowrap"
+            >
+              Request Community Review
+            </button>
+            <p className="text-sm text-slate-600">We&apos;ll compile patents, PhD theses, and contact the original study authors.</p>
+          </div>
+    </section>
+  ) : null}
+</div>
+);
 }
 
 export default function Home() {
@@ -1471,7 +1203,6 @@ export default function Home() {
   const [paperToSave, setPaperToSave] = useState<ApiSearchResult | null>(null);
   const [userLists, setUserLists] = useState<UserListSummary[]>([]);
   const [listsLoading, setListsLoading] = useState(false);
-
   const [selectedListId, setSelectedListId] = useState<number | null>(null);
   const [listItems, setListItems] = useState<ApiSearchResult[]>([]);
   const [listItemsLoading, setListItemsLoading] = useState(false);
@@ -1484,12 +1215,14 @@ export default function Home() {
   const [scrapedContentLoading, setScrapedContentLoading] = useState(false);
   const [scrapedContentError, setScrapedContentError] = useState('');
   const [scrapedContentIsStructured, setScrapedContentIsStructured] = useState(false);
-  const [verificationMode, setVerificationMode] = useState<VerificationRequestType | null>(null);
-  const [activeVerificationType, setActiveVerificationType] = useState<VerificationRequestType | null>(null);
+  const [verificationView, setVerificationView] = useState<VerificationTrack>('reproducibility');
+  const [feedPopulating, setFeedPopulating] = useState(false);
+  const [verificationSummary, setVerificationSummary] = useState<VerificationSummaryPayload | null>(null);
+  const [verificationSummaryLoading, setVerificationSummaryLoading] = useState(false);
   const [verificationModalOpen, setVerificationModalOpen] = useState(false);
   const [verificationRequestStatus, setVerificationRequestStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [verificationRequestError, setVerificationRequestError] = useState('');
-  const [feedPopulating, setFeedPopulating] = useState(false);
+  const [activeVerificationRequestType, setActiveVerificationRequestType] = useState<VerificationRequestType | null>(null);
 
   const profileManualKeywordsRef = useRef('');
   const isMountedRef = useRef(true);
@@ -1660,10 +1393,6 @@ export default function Home() {
       setSelectedPaper(null);
     }
   }, [user, selectedPaper, keywordResults.length]);
-
-  useEffect(() => {
-    setVerificationMode(null);
-  }, [selectedPaper?.id]);
 
   const refreshProfile = useCallback(async () => {
     if (!user) {
@@ -2376,13 +2105,103 @@ export default function Home() {
 
   const hasSelectedPaper = Boolean(selectedPaper);
   const selectedPaperId = selectedPaper?.id ?? null;
+  const isSamplePaper = isSamplePaperId(selectedPaperId);
   const isVerificationSending = verificationRequestStatus === 'sending';
-  const shouldDisableRepro = !hasSelectedPaper || isVerificationSending;
-  const shouldDisableClaims = !hasSelectedPaper || isVerificationSending;
+  const verificationRequests = verificationSummary?.requests ?? [];
+  const hasActiveVerificationRequest = verificationRequests.some(request =>
+    ['pending', 'in_progress'].includes(request.status)
+  );
+  const latestVerificationRequest = verificationRequests.length > 0 ? verificationRequests[0] : null;
+  const shouldDisableVerification = !hasSelectedPaper || isVerificationSending;
 
-  const handleVerificationRequest = async (type: VerificationRequestType) => {
-    const isDisabled = type === 'reproducibility' ? shouldDisableRepro : shouldDisableClaims;
-    if (isDisabled || !selectedPaper) {
+  const refreshVerificationSummary = useCallback(async () => {
+    if (!selectedPaperId) {
+      setVerificationSummary(null);
+      return;
+    }
+
+    if (isSamplePaperId(selectedPaperId)) {
+      const sampleReport = VERIFICATION_DATA[selectedPaperId] ?? null;
+      setVerificationSummary({
+        requests: [],
+        reproducibilityReport: sampleReport,
+        claimsReport: sampleReport
+      });
+      return;
+    }
+
+    setVerificationSummaryLoading(true);
+    try {
+      const response = await fetch(`/api/papers/${selectedPaperId}/verification-summary`);
+      if (!response.ok) {
+        throw new Error('Failed to load verification summary');
+      }
+      const data = await response.json();
+      setVerificationSummary({
+        requests: Array.isArray(data.requests) ? data.requests : [],
+        reproducibilityReport: data.reproducibilityReport ?? null,
+        claimsReport: data.claimsReport ?? null
+      });
+    } catch (error) {
+      console.error('Failed to load verification summary:', error);
+      setVerificationSummary(null);
+    } finally {
+      setVerificationSummaryLoading(false);
+    }
+  }, [selectedPaperId]);
+
+  const handleVerificationRequest = async (track: VerificationTrack) => {
+    if (!selectedPaper) {
+      return;
+    }
+
+    setVerificationView(track);
+
+    if (shouldDisableVerification) {
+      return;
+    }
+
+    if (hasActiveVerificationRequest) {
+      setActiveVerificationRequestType('combined');
+      setVerificationRequestError('');
+      setVerificationRequestStatus('success');
+      setVerificationModalOpen(true);
+      requestAnimationFrame(() => {
+        document.getElementById('verification-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      return;
+    }
+
+    if (isSamplePaper) {
+      const sampleReport = VERIFICATION_DATA[selectedPaper.id] ?? null;
+      const now = new Date().toISOString();
+      setVerificationView(track);
+      setActiveVerificationRequestType('combined');
+      setVerificationRequestError('');
+      setVerificationRequestStatus('success');
+      setVerificationModalOpen(false);
+      setVerificationSummary({
+        requests: [
+          {
+            id: `sample-request-${selectedPaper.id}`,
+            paper_id: selectedPaper.id,
+            paper_lookup_id: selectedPaper.id,
+            user_id: user?.id ?? null,
+            verification_type: 'combined',
+            status: 'completed',
+            created_at: now,
+            updated_at: now,
+            completed_at: now,
+            result_summary: sampleReport,
+            request_payload: null
+          }
+        ],
+        reproducibilityReport: sampleReport,
+        claimsReport: sampleReport
+      });
+      requestAnimationFrame(() => {
+        document.getElementById('verification-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
       return;
     }
 
@@ -2391,8 +2210,7 @@ export default function Home() {
       return;
     }
 
-    setVerificationMode(type);
-    setActiveVerificationType(type);
+    setActiveVerificationRequestType('combined');
     setVerificationRequestError('');
     setVerificationRequestStatus('sending');
     setVerificationModalOpen(true);
@@ -2404,7 +2222,7 @@ export default function Home() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          verificationType: type,
+          verificationType: 'combined',
           paper: buildVerificationPayloadFromSearchResult(selectedPaper)
         })
       });
@@ -2425,6 +2243,7 @@ export default function Home() {
       }
 
       setVerificationRequestStatus('success');
+      await refreshVerificationSummary();
     } catch (requestError) {
       console.error('Verification request failed:', requestError);
       setVerificationRequestError(
@@ -2442,58 +2261,71 @@ export default function Home() {
 
   const handleVerificationModalClose = () => {
     setVerificationModalOpen(false);
+    setActiveVerificationRequestType(null);
     if (verificationRequestStatus === 'error') {
       setVerificationRequestStatus('idle');
       setVerificationRequestError('');
     }
   };
 
-  const getVerificationButtonClasses = (mode: VerificationRequestType, isDisabled: boolean) => {
-    const classes = [DETAIL_REPRO_BUTTON_CLASSES];
-    if (isDisabled) {
-      return 'inline-flex items-center justify-center rounded-lg border border-slate-200 bg-slate-100 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400 cursor-not-allowed opacity-60';
-    }
-    if (verificationMode === mode) {
-      classes.push(DETAIL_VERIFY_BUTTON_ACTIVE_CLASSES);
-    }
-    return classes.join(' ');
-  };
   useEffect(() => {
-    const shouldClearClaims = shouldDisableClaims && verificationMode === 'claims';
-    const shouldClearRepro = shouldDisableRepro && verificationMode === 'reproducibility';
-    if (shouldClearClaims || shouldClearRepro) {
-      setVerificationMode(null);
-    }
-  }, [shouldDisableClaims, shouldDisableRepro, verificationMode]);
+    setVerificationRequestStatus('idle');
+    setVerificationRequestError('');
+    setActiveVerificationRequestType(null);
 
-  useEffect(() => {
     if (!selectedPaperId) {
-      setVerificationRequestStatus('idle');
-      setVerificationRequestError('');
-      setActiveVerificationType(null);
-      setVerificationMode(null);
+      setVerificationSummary(null);
       return;
     }
 
-    setVerificationRequestStatus('idle');
-    setVerificationRequestError('');
-    setActiveVerificationType(null);
-    setVerificationMode(null);
-  }, [selectedPaperId]);
+    setVerificationView('reproducibility');
+    refreshVerificationSummary();
+  }, [selectedPaperId, refreshVerificationSummary]);
 
-  const getVerificationButtonTitle = (mode: VerificationRequestType, isDisabled: boolean): string => {
-    if (!isDisabled) {
-      return '';
+  const getVerificationButtonClasses = (track: VerificationTrack) => {
+    if (shouldDisableVerification) {
+      return 'inline-flex items-center justify-center rounded-lg border border-slate-200 bg-slate-100 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400 cursor-not-allowed opacity-60';
     }
+
+    const classes = [DETAIL_REPRO_BUTTON_CLASSES];
+    if (verificationView === track) {
+      classes.push(DETAIL_VERIFY_BUTTON_ACTIVE_CLASSES);
+    } else if (hasActiveVerificationRequest) {
+      classes.push('opacity-80');
+    }
+    return classes.join(' ');
+  };
+
+  const getVerificationButtonLabel = (track: VerificationTrack): string => {
+    if (isVerificationSending) {
+      return 'Sending request…';
+    }
+    if (hasActiveVerificationRequest) {
+      return verificationView === track
+        ? 'Agent is searching'
+        : track === 'reproducibility'
+          ? 'Reproducibility view'
+          : 'Claims view';
+    }
+    return track === 'reproducibility' ? 'Verify reproducibility' : 'Verify claims';
+  };
+
+  const getVerificationButtonTitle = (track: VerificationTrack): string => {
     if (!hasSelectedPaper) {
       return 'Select a paper to request a verification briefing.';
     }
     if (isVerificationSending) {
       return 'Sending your request…';
     }
-    return mode === 'reproducibility'
-      ? 'Select a paper to request a reproducibility briefing.'
-      : 'Select a paper to request a claims briefing.';
+    if (isSamplePaper) {
+      return 'Preview the example briefing for this sample paper.';
+    }
+    if (hasActiveVerificationRequest) {
+      return 'Our agent is already processing this paper — switch views to review progress.';
+    }
+    return track === 'reproducibility'
+      ? 'Kick off the combined reproducibility + claims briefing.'
+      : 'Kick off the combined claims + reproducibility briefing.';
   };
 
   const verificationButtons = (
@@ -2502,34 +2334,34 @@ export default function Home() {
         <button
           type="button"
           onClick={() => handleVerificationRequest('reproducibility')}
-          className={getVerificationButtonClasses('reproducibility', shouldDisableRepro)}
-          aria-pressed={verificationMode === 'reproducibility'}
-          disabled={shouldDisableRepro}
-          title={getVerificationButtonTitle('reproducibility', shouldDisableRepro)}
+          className={getVerificationButtonClasses('reproducibility')}
+          aria-pressed={verificationView === 'reproducibility'}
+          disabled={shouldDisableVerification}
+          title={getVerificationButtonTitle('reproducibility')}
         >
           <span className="flex items-center gap-2">
-            Verify reproducibility
+            {getVerificationButtonLabel('reproducibility')}
           </span>
         </button>
         <span
-          className={`h-1 w-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-sky-600 transition-all duration-200 ease-out ${verificationMode === 'reproducibility' ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
+          className={`h-1 w-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-sky-600 transition-all duration-200 ease-out ${verificationView === 'reproducibility' ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
         />
       </div>
       <div className="flex flex-col items-center gap-1">
         <button
           type="button"
           onClick={() => handleVerificationRequest('claims')}
-          className={getVerificationButtonClasses('claims', shouldDisableClaims)}
-          aria-pressed={verificationMode === 'claims'}
-          disabled={shouldDisableClaims}
-          title={getVerificationButtonTitle('claims', shouldDisableClaims)}
+          className={getVerificationButtonClasses('claims')}
+          aria-pressed={verificationView === 'claims'}
+          disabled={shouldDisableVerification}
+          title={getVerificationButtonTitle('claims')}
         >
           <span className="flex items-center gap-2">
-            Verify claims
+            {getVerificationButtonLabel('claims')}
           </span>
         </button>
         <span
-          className={`h-1 w-full rounded-full bg-gradient-to-r from-violet-400 via-sky-500 to-emerald-400 transition-all duration-200 ease-out ${verificationMode === 'claims' ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
+          className={`h-1 w-full rounded-full bg-gradient-to-r from-violet-400 via-sky-500 to-emerald-400 transition-all duration-200 ease-out ${verificationView === 'claims' ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
         />
       </div>
     </div>
@@ -3529,7 +3361,7 @@ export default function Home() {
                 </div>
 
                 {/* DOI/External links for non-sample papers */}
-                {!selectedPaper.id.startsWith('sample-') && selectedPaperPrimaryLink && (
+                {!isSamplePaperId(selectedPaper.id) && selectedPaperPrimaryLink && (
                   <div className={DETAIL_METADATA_CLASSES}>
                     <p>
                       <a
@@ -3546,31 +3378,71 @@ export default function Home() {
 
                 <div id="verification-panel" className="space-y-4">
                   {hasSelectedPaper ? (
-                    verificationRequestStatus === 'success' ? (
-                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-6 py-5 text-sm text-emerald-700">
-                        <p className="text-sm font-semibold text-emerald-800">
-                          {activeVerificationType === 'claims' ? 'Claims verification scheduled' : 'Reproducibility verification scheduled'}
-                        </p>
-                        <p className="mt-2 leading-relaxed">
-                          Our agent will search the literature and deliver the findings with your next feed update at 9am.
-                        </p>
-                      </div>
-                    ) : verificationRequestStatus === 'error' ? (
+                    verificationRequestStatus === 'error' ? (
                       <div className="rounded-2xl border border-rose-200 bg-rose-50 px-6 py-5 text-sm text-rose-600">
                         <p className="text-sm font-semibold text-rose-700">We could not send this request</p>
                         <p className="mt-2 leading-relaxed">
                           {verificationRequestError || 'Please try again in a moment.'}
                         </p>
                       </div>
-                    ) : verificationRequestStatus === 'sending' ? (
+                    ) : verificationRequestStatus === 'sending' || verificationSummaryLoading ? (
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-6 py-5 text-center text-sm text-slate-600">
-                        Sending your request…
+                        {verificationRequestStatus === 'sending' ? 'Sending your request…' : 'Checking verification status…'}
                       </div>
-                    ) : (
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-600">
-                        Choose a verification track above to request a briefing.
-                      </div>
-                    )
+                    ) : (() => {
+                      const fallbackReport =
+                        latestVerificationRequest && latestVerificationRequest.result_summary && typeof latestVerificationRequest.result_summary === 'object'
+                          ? (latestVerificationRequest.result_summary as ResearchPaperAnalysis)
+                          : null;
+
+                      const activeReport = verificationView === 'claims'
+                        ? (verificationSummary?.claimsReport as ResearchPaperAnalysis | null) ?? fallbackReport
+                        : (verificationSummary?.reproducibilityReport as ResearchPaperAnalysis | null) ?? fallbackReport;
+
+                      if (activeReport) {
+                        return verificationView === 'claims' ? (
+                          <ClaimsReportPreview report={activeReport} onRequestReview={authModal.openSignup} />
+                        ) : (
+                          <StaticReproReport report={activeReport} onRequestReview={authModal.openSignup} />
+                        );
+                      }
+
+                      if (latestVerificationRequest) {
+                        const status = latestVerificationRequest.status;
+                        const statusLabel = status.replace('_', ' ');
+                        let statusMessage = 'The request is recorded. We will follow up with the full briefing shortly.';
+                        if (status === 'pending' || status === 'in_progress') {
+                          statusMessage = 'Agent is searching this now. Expect the briefing after the next feed refresh.';
+                        } else if (status === 'completed') {
+                          statusMessage = 'The analysis is complete. The briefing will appear after the next feed refresh.';
+                        } else if (status === 'cancelled') {
+                          statusMessage = 'This request was cancelled. Re-run the briefing if you need a fresh analysis.';
+                        }
+
+                        return (
+                          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm text-sm text-slate-700">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-semibold text-slate-900">Verification briefing in progress</p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  Submitted {formatRelativeTime(latestVerificationRequest.created_at)} • Status: {statusLabel}
+                                </p>
+                              </div>
+                              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium uppercase tracking-wide text-slate-500">
+                                {verificationView === 'claims' ? 'Claims view' : 'Reproducibility view'}
+                              </span>
+                            </div>
+                            <p className="mt-4 leading-relaxed">{statusMessage}</p>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-600">
+                          Choose a verification track above to request a briefing.
+                        </div>
+                      );
+                    })()
                   ) : (
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-600">
                       Select a paper from the feed to generate its reproducibility briefing.
@@ -3654,7 +3526,7 @@ export default function Home() {
       {/* Auth Modal */}
       <VerificationModal
         isOpen={verificationModalOpen}
-        type={activeVerificationType}
+        type={activeVerificationRequestType}
         status={verificationRequestStatus}
         errorMessage={verificationRequestError}
         onClose={handleVerificationModalClose}

@@ -35,5 +35,6 @@ export const TABLES = {
   RESEARCHERS: 'researchers',
   PAPER_ANALYSES: 'paper_analyses',
   EMAIL_LOGS: 'email_logs',
-  PAPER_FEEDBACK: 'paper_feedback'
+  PAPER_FEEDBACK: 'paper_feedback',
+  VERIFICATION_REQUESTS: 'paper_verification_requests'
 } as const

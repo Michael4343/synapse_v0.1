@@ -1,1 +1,8 @@
-{}
+{
+  "crons": [
+    {
+      "path": "/api/cron/daily-scholar-feed",
+      "schedule": "0 22 * * *"
+    }
+  ]
+}

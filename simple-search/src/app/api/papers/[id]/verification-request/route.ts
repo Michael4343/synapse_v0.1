@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase-server'
+import { createClient, supabaseAdmin } from '@/lib/supabase-server'
 import type { User } from '@supabase/supabase-js'
 import { Resend } from 'resend'
+import { TABLES } from '@/lib/supabase'
 
-const VERIFICATION_LABELS: Record<'claims' | 'reproducibility', string> = {
-  claims: 'Verify Claims',
-  reproducibility: 'Verify Reproducibility'
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function isUuid(value: string): boolean {
+  return UUID_PATTERN.test(value)
+}
+
+const VERIFICATION_LABELS: Record<'combined', string> = {
+  combined: 'Verification Briefing'
 }
 
 type VerificationType = keyof typeof VERIFICATION_LABELS
@@ -26,7 +32,7 @@ interface PaperPayload {
 }
 
 interface VerificationRequestBody {
-  verificationType?: VerificationType
+  verificationType?: 'combined' | 'claims' | 'reproducibility'
   paper?: PaperPayload
 }
 
@@ -310,14 +316,55 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const { verificationType, paper } = body
+  const rawVerificationType = body.verificationType ?? 'combined'
+  const paperIdIsUuid = isUuid(paperId)
 
-  if (!verificationType || !['claims', 'reproducibility'].includes(verificationType)) {
-    return NextResponse.json({ error: 'verificationType must be "claims" or "reproducibility"' }, { status: 400 })
+  if (!['combined', 'claims', 'reproducibility'].includes(rawVerificationType)) {
+    return NextResponse.json({ error: 'verificationType must be "combined"' }, { status: 400 })
   }
+
+  const resolvedVerificationType: VerificationType = 'combined'
+
+  const paper = body.paper
 
   if (!paper || typeof paper !== 'object' || paper.id !== paperId) {
     return NextResponse.json({ error: 'Paper details are required and must match the requested paper' }, { status: 400 })
+  }
+
+  const timestamp = new Date().toISOString()
+  const paperSnapshot = {
+    id: paper.id,
+    title: paper.title || null,
+    authors: Array.isArray(paper.authors) ? paper.authors : null,
+    venue: paper.venue || null,
+    year: paper.year ?? null,
+    doi: paper.doi || null,
+    url: paper.url || null
+  }
+
+  const { error: insertError } = await supabaseAdmin
+    .from(TABLES.VERIFICATION_REQUESTS)
+    .insert({
+      paper_id: paperIdIsUuid ? paperId : null,
+      paper_lookup_id: paperId,
+      user_id: user.id,
+      verification_type: resolvedVerificationType,
+      status: 'pending',
+      request_payload: {
+        triggered_at: timestamp,
+        requested_type: rawVerificationType,
+        requested_tracks: ['reproducibility', 'claims'],
+        user: {
+          id: user.id,
+          email: user.email
+        },
+        paper: paperSnapshot
+      }
+    })
+
+  if (insertError) {
+    console.error('Failed to record verification request:', insertError)
+    return NextResponse.json({ error: 'Unable to record verification request' }, { status: 500 })
   }
 
   const resendApiKey = process.env.RESEND_API_KEY
@@ -335,16 +382,15 @@ export async function POST(
   }
 
   const resend = new Resend(resendApiKey)
-  const timestamp = new Date().toISOString()
 
-  const html = buildEmailHtml(user, paper, verificationType, timestamp)
-  const text = buildPlainText(user, paper, verificationType, timestamp)
+  const html = buildEmailHtml(user, paper, resolvedVerificationType, timestamp)
+  const text = buildPlainText(user, paper, resolvedVerificationType, timestamp)
 
   try {
     const response = await resend.emails.send({
       from: resendFromEmail,
       to: deliverTo,
-      subject: `${VERIFICATION_LABELS[verificationType]} request for ${paper.title || 'Untitled paper'}`,
+      subject: `${VERIFICATION_LABELS[resolvedVerificationType]} request for ${paper.title || 'Untitled paper'}`,
       html,
       text
     })
