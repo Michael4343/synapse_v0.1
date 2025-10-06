@@ -3423,7 +3423,7 @@ export default function Home() {
                   </div>
                   <button
                     type="button"
-                    onClick={handleRefreshPersonalFeed}
+                    onClick={() => handleRefreshPersonalFeed()}
                     className={`rounded-2xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-sky-100 ${
                       shouldShowPersonalFeed
                         ? 'border-sky-400 bg-sky-100 ring-2 ring-sky-300 shadow-sm'
@@ -3583,7 +3583,7 @@ export default function Home() {
               <div className={FILTER_BAR_CLASSES}>
                 {user && hasKeywords && !isPersonalFeedActive && (keywordResults.length > 0 || lastKeywordQuery) && (
                   <button
-                    onClick={handleRefreshPersonalFeed}
+                    onClick={() => handleRefreshPersonalFeed()}
                     className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
                     title="Back to Personal Feed"
                   >
