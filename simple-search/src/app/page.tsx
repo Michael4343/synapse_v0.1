@@ -2227,6 +2227,7 @@ export default function Home() {
       const sampleReport = VERIFICATION_DATA[selectedPaperId] ?? null;
       setVerificationSummary({
         requests: [],
+        communityReviewRequests: [],
         reproducibilityReport: sampleReport,
         claimsReport: sampleReport
       });
@@ -2310,6 +2311,7 @@ export default function Home() {
             request_payload: null
           }
         ],
+        communityReviewRequests: [],
         reproducibilityReport: sampleReport,
         claimsReport: sampleReport
       });
