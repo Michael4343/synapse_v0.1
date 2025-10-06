@@ -14,7 +14,6 @@ import { SaveToListModal } from '../components/save-to-list-modal';
 import { buildVerifyListName, savePaperToNamedList } from '../lib/list-actions';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { ResearchPaperAnalysis } from '../lib/reproducibility-types';
 import {
   getCachedData,
   setCachedData,
@@ -65,6 +64,51 @@ interface ProcessedContent {
 
 type VerificationRequestType = 'combined';
 type VerificationTrack = 'claims' | 'reproducibility';
+
+interface ResearchPaperAnalysis {
+  stage: string;
+  lastUpdated: string;
+  reviewers: string[];
+  summary: string;
+  paper: {
+    title: string;
+    authors: string;
+    venue: string;
+    doi?: string;
+  };
+  feasibilityQuestions?: Array<{
+    id: string;
+    question: string;
+    weight: number;
+    helper?: string;
+  }>;
+  criticalPath?: Array<{
+    id: string;
+    name: string;
+    deliverable: string;
+    checklist: string[];
+    primaryRisk?: {
+      severity: string;
+      issue: string;
+      mitigation: string;
+    };
+  }>;
+  evidence: {
+    strong: Array<{
+      claim: string;
+      source: string;
+      confidence?: string;
+      notes?: string;
+    }>;
+    gaps: Array<{
+      description: string;
+      impact: string;
+      severity: string;
+      needsExpert?: boolean;
+    }>;
+    assumptions: string[];
+  };
+}
 
 function buildVerificationPayloadFromSearchResult(paper: ApiSearchResult) {
   return {
