@@ -1034,10 +1034,6 @@ function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperA
                           </span>
                         </div>
                         <p className="mt-3 text-sm font-semibold text-slate-900">{primaryBlocker.issue}</p>
-                        <div className="mt-3 rounded-md bg-slate-50 p-3 text-sm text-slate-700">
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Mitigation</p>
-                          <p className="mt-1 leading-relaxed">{primaryBlocker.mitigation}</p>
-                        </div>
                       </div>
                     ) : (
                       <div className="mt-2 rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-600">
@@ -1046,6 +1042,13 @@ function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperA
                     )}
                   </div>
                 </div>
+
+                {primaryBlocker ? (
+                  <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Mitigation</p>
+                    <p className="mt-2 text-sm text-slate-700">{primaryBlocker.mitigation}</p>
+                  </div>
+                ) : null}
               </article>
             );
           })}
