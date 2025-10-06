@@ -410,7 +410,7 @@ function PaperDetailPage() {
             <button
               type="button"
               onClick={() => handleVerificationClick('claims')}
-              disabled={isVerificationSending}
+              disabled={loading || isVerificationSending}
               title={!user ? 'Sign in to request verification' : undefined}
               className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -419,7 +419,7 @@ function PaperDetailPage() {
             <button
               type="button"
               onClick={() => handleVerificationClick('reproducibility')}
-              disabled={isVerificationSending}
+              disabled={loading || isVerificationSending}
               title={!user ? 'Sign in to request verification' : undefined}
               className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600 disabled:cursor-not-allowed disabled:opacity-60"
             >

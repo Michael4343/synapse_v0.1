@@ -27,6 +27,8 @@ SEARCH
 improve search speed load - WAITING FOR API KEY
 only 12 paper tiles want more add button to load more 
 
+IMPORT PAPERS WITH PLUGIN
+
 
 DEEP RESEARCH AGENTS FOR METHODS - human in loop - CHECK COST OF HOSTED GEMINI
 npm run recent-prompts
@@ -155,4 +157,4 @@ paste output
 
 npm run ingest-analyses
 
-IMPORT PAPERS WITH PLUGIN
+

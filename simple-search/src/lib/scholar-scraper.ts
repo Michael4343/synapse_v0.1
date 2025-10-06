@@ -1,7 +1,7 @@
 // Google Scholar scraping utilities
 // Extracted from scholar-feed.mjs for use in API routes
 
-const FETCH_WINDOW_DAYS = 7
+const FETCH_WINDOW_DAYS = 30
 const FETCH_WINDOW_MS = FETCH_WINDOW_DAYS * 24 * 60 * 60 * 1000
 const SCRAPER_DELAY_MS = 3000 // 3 seconds between requests
 
@@ -239,6 +239,11 @@ export async function scrapeGoogleScholar(query: string, scraperApiKey: string, 
   }
 
   const html = await response.text()
+
+  // Debug: Log first 2000 chars and HTML length
+  console.log(`[scholar-scraper] Received HTML length: ${html.length} chars`)
+  console.log(`[scholar-scraper] HTML preview: ${html.substring(0, 2000)}`)
+
   return html
 }
 
@@ -250,7 +255,9 @@ export function parseScholarHTML(html: string): ScholarPaper[] {
   const resultPattern = /<div class="gs_r[^"]*"[^>]*>([\s\S]*?)<div class="gs_fl[\s\S]*?<\/div>/g
 
   let match
+  let matchCount = 0
   while ((match = resultPattern.exec(html)) !== null) {
+    matchCount++
     const resultHtml = match[1]
 
     // Extract title and URL from <h3 class="gs_rt">
@@ -313,6 +320,19 @@ export function parseScholarHTML(html: string): ScholarPaper[] {
     }
 
     results.push(paper)
+  }
+
+  console.log(`[scholar-scraper] Regex matched ${matchCount} result blocks, extracted ${results.length} papers`)
+
+  // Debug: If no matches, try to find what structure we're getting
+  if (matchCount === 0) {
+    console.log('[scholar-scraper] No matches found. Checking for common patterns...')
+    const hasGsRi = html.includes('class="gs_ri"')
+    const hasGsRt = html.includes('class="gs_rt"')
+    const hasGsA = html.includes('class="gs_a"')
+    const hasCaptcha = html.toLowerCase().includes('captcha')
+    const hasError = html.toLowerCase().includes('error') || html.toLowerCase().includes('unusual traffic')
+    console.log(`[scholar-scraper] Found: gs_ri=${hasGsRi}, gs_rt=${hasGsRt}, gs_a=${hasGsA}, captcha=${hasCaptcha}, error=${hasError}`)
   }
 
   return results

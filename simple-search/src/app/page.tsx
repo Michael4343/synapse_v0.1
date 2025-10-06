@@ -1021,27 +1021,9 @@ function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperA
                 </header>
 
                 <div className="mt-5 grid gap-5 md:grid-cols-2">
-                  <div className="space-y-5">
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Key deliverable</p>
-                      <p className="mt-2 text-sm text-slate-700">{phase.deliverable}</p>
-                    </div>
-                    {checklist.length ? (
-                      <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Checklist</p>
-                        <ul className="mt-2 space-y-2 text-sm text-slate-700">
-                          {checklist.map((item) => (
-                            <li key={item} className="flex items-start gap-2">
-                              <span className="mt-1 h-1.5 w-1.5 rounded-full bg-slate-400" />
-                              <span>{item}</span>
-                            </li>
-                          ))}
-                        </ul>
-                        {totalChecklist > checklist.length ? (
-                          <p className="mt-3 text-xs text-slate-400">+{totalChecklist - checklist.length} more</p>
-                        ) : null}
-                      </div>
-                    ) : null}
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Key deliverable</p>
+                    <p className="mt-2 text-sm text-slate-700">{phase.deliverable}</p>
                   </div>
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Primary risk</p>
@@ -1067,9 +1049,25 @@ function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperA
                 </div>
 
                 {primaryBlocker ? (
-                  <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
                     <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Mitigation</p>
                     <p className="mt-2 text-sm text-slate-700">{primaryBlocker.mitigation}</p>
+                  </div>
+                ) : null}
+
+                {checklist.length ? (
+                  <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Checklist</p>
+                    <div className="mt-2 space-y-2">
+                      {checklist.map((item) => (
+                        <p key={item} className="text-sm text-slate-700">
+                          {item}
+                        </p>
+                      ))}
+                    </div>
+                    {totalChecklist > checklist.length ? (
+                      <p className="mt-3 text-xs text-slate-400">+{totalChecklist - checklist.length} more</p>
+                    ) : null}
                   </div>
                 ) : null}
               </article>
@@ -2142,7 +2140,7 @@ export default function Home() {
   const reproducibilityReport = (verificationSummary?.reproducibilityReport as ResearchPaperAnalysis | null) ?? null;
   const hasClaimsReport = Boolean(claimsReport);
   const hasReproReport = Boolean(reproducibilityReport);
-  const shouldDisableVerification = !hasSelectedPaper || isVerificationSending;
+  const shouldDisableVerification = !hasSelectedPaper || isVerificationSending || verificationSummaryLoading;
 
   const isTrackReportAvailable = (track: VerificationTrack) =>
     track === 'claims' ? hasClaimsReport : hasReproReport;
@@ -2341,8 +2339,8 @@ export default function Home() {
   };
 
   const VIEW_LABELS: Record<VerificationTrack, string> = {
-    reproducibility: 'VIEW REPRODUCIBILITY BRIEFING',
-    claims: 'VIEW CLAIMS BRIEFING'
+    reproducibility: 'VERIFIED REPRODUCIBILITY',
+    claims: 'VERIFIED CLAIMS'
   };
 
   const getVerificationButtonLabel = (track: VerificationTrack): string => {

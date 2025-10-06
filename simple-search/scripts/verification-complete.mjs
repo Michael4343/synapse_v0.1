@@ -69,11 +69,13 @@ async function selectRequest(requests) {
   requests.forEach((request, index) => {
     const number = index + 1
     const type = request.verification_type.toUpperCase()
-    const paperRef = request.paper_id ? request.paper_id.substring(0, 8) : request.paper_lookup_id.substring(0, 40)
+    const paperTitle = request.paper_title || `ID: ${request.paper_id?.substring(0, 8) || request.paper_lookup_id?.substring(0, 40)}...`
+    const userDisplay = request.user_email || request.user_id?.substring(0, 8) || 'Unknown user'
     const date = new Date(request.created_at).toLocaleDateString()
 
     console.log(`  ${number}. ${type} verification`)
-    console.log(`     Paper: ${paperRef}...`)
+    console.log(`     Paper: ${paperTitle}`)
+    console.log(`     Requested by: ${userDisplay}`)
     console.log(`     Created: ${date}`)
     console.log('')
   })
@@ -166,11 +168,22 @@ function validateVerificationJson(data) {
 }
 
 async function main() {
-  const { data: requests, error } = await supabase
+  const { data: rawRequests, error } = await supabase
     .from('paper_verification_requests')
-    .select(
-      'id, paper_id, paper_lookup_id, user_id, verification_type, status, created_at, updated_at, completed_at, request_payload, result_summary'
-    )
+    .select(`
+      id,
+      paper_id,
+      paper_lookup_id,
+      user_id,
+      verification_type,
+      status,
+      created_at,
+      updated_at,
+      completed_at,
+      request_payload,
+      result_summary,
+      search_results!paper_id(title)
+    `)
     .in('status', ['pending', 'in_progress'])
     .order('created_at', { ascending: true })
 
@@ -179,13 +192,67 @@ async function main() {
     exit(1)
   }
 
-  if (!requests || requests.length === 0) {
+  if (!rawRequests || rawRequests.length === 0) {
     console.log('\n═══════════════════════════════════════════════════════════')
     console.log('  NO PENDING REQUESTS')
     console.log('═══════════════════════════════════════════════════════════\n')
     console.log('All verification requests have been completed.\n')
     exit(0)
   }
+
+  // Fetch user emails from auth.users for all user_ids
+  const userIds = [...new Set(rawRequests.map((req) => req.user_id).filter(Boolean))]
+  const userEmailMap = new Map()
+
+  if (userIds.length > 0) {
+    const { data: users } = await supabase.auth.admin.listUsers()
+    if (users?.users) {
+      users.users.forEach((user) => {
+        if (userIds.includes(user.id)) {
+          userEmailMap.set(user.id, user.email)
+        }
+      })
+    }
+  }
+
+  // Fetch paper titles for all requests
+  const paperTitleMap = new Map()
+  for (const req of rawRequests) {
+    // First check if title is in the request payload
+    if (req.request_payload?.paper?.title) {
+      paperTitleMap.set(req.id, req.request_payload.paper.title)
+      continue
+    }
+
+    // Then try to fetch from database
+    const candidateIds = []
+    if (req.paper_id) candidateIds.push(req.paper_id)
+    if (req.paper_lookup_id && req.paper_lookup_id !== req.paper_id) {
+      candidateIds.push(req.paper_lookup_id)
+    }
+
+    for (const candidateId of candidateIds) {
+      if (!isUuid(candidateId)) continue
+
+      const { data: paper } = await supabase
+        .from('search_results')
+        .select('id, title')
+        .eq('id', candidateId)
+        .maybeSingle()
+
+      if (paper?.title) {
+        paperTitleMap.set(req.id, paper.title)
+        break
+      }
+    }
+  }
+
+  // Flatten joined data for easier access
+  const requests = rawRequests.map((req) => ({
+    ...req,
+    paper_title: paperTitleMap.get(req.id) || req.search_results?.title,
+    user_email: userEmailMap.get(req.user_id)
+  }))
 
   const selected = await selectRequest(requests)
   if (!selected) {
