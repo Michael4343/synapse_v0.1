@@ -108,70 +108,73 @@ export async function POST(request: NextRequest) {
       // Don't fail - this is cleanup
     }
 
-    // Process each keyword sequentially
-    let totalPapersFound = 0
-    const seenUrls = new Set<string>()
+    const runKeywordPass = async (windowDays: number): Promise<number> => {
+      let papersFound = 0
+      const seenUrls = new Set<string>()
 
-    for (let i = 0; i < keywordsToProcess.length; i++) {
-      const keyword = keywordsToProcess[i]
-      console.log(`[populate] Processing keyword ${i + 1}/${keywordsToProcess.length}: "${keyword}"`)
+      for (let i = 0; i < keywordsToProcess.length; i++) {
+        const keyword = keywordsToProcess[i]
+        console.log(`[populate] (${windowDays}d) Processing keyword ${i + 1}/${keywordsToProcess.length}: "${keyword}"`)
 
-      try {
-        // Fetch papers for this keyword
-        const papers = await fetchPapersForKeyword(keyword, scraperApiKey)
+        try {
+          const papers = await fetchPapersForKeyword(keyword, scraperApiKey, windowDays)
 
-        // Deduplicate and limit
-        const papersToInsert = papers
-          .filter(paper => {
-            const key = (paper.url || paper.title).toLowerCase()
-            if (seenUrls.has(key)) return false
-            seenUrls.add(key)
-            return true
-          })
-          .slice(0, MAX_RESULTS_PER_KEYWORD)
-          .map(paper => ({
-            user_id: user.id,
-            paper_title: paper.title,
-            paper_url: paper.url,
-            paper_snippet: paper.snippet,
-            paper_authors: paper.authors,
-            publication_date: paper.publication_date,
-            raw_publication_date: paper.raw_publication_date,
-            query_keyword: keyword
-          }))
+          const papersToInsert = papers
+            .filter(paper => {
+              const key = (paper.url || paper.title).toLowerCase()
+              if (seenUrls.has(key)) return false
+              seenUrls.add(key)
+              return true
+            })
+            .slice(0, MAX_RESULTS_PER_KEYWORD)
+            .map(paper => ({
+              user_id: user.id,
+              paper_title: paper.title,
+              paper_url: paper.url,
+              paper_snippet: paper.snippet,
+              paper_authors: paper.authors,
+              publication_date: paper.publication_date,
+              raw_publication_date: paper.raw_publication_date,
+              query_keyword: keyword
+            }))
 
-        // Insert papers to database
-        if (papersToInsert.length > 0) {
-          const { error: insertError } = await supabaseAdmin
-            .from('personal_feed_papers')
-            .insert(papersToInsert)
+          if (papersToInsert.length > 0) {
+            const { error: insertError } = await supabaseAdmin
+              .from('personal_feed_papers')
+              .insert(papersToInsert)
 
-          if (insertError) {
-            console.error(`[populate] Failed to insert papers for keyword "${keyword}":`, insertError)
-            // Continue to next keyword even if insert fails
+            if (insertError) {
+              console.error(`[populate] Failed to insert papers for keyword "${keyword}" (${windowDays}d):`, insertError)
+            } else {
+              papersFound += papersToInsert.length
+              console.log(`[populate] Inserted ${papersToInsert.length} papers for keyword "${keyword}" (${windowDays}d)`)
+            }
           } else {
-            totalPapersFound += papersToInsert.length
-            console.log(`[populate] Inserted ${papersToInsert.length} papers for keyword "${keyword}"`)
+            console.log(`[populate] No papers found for keyword "${keyword}" (${windowDays}d)`)
           }
-        } else {
-          console.log(`[populate] No papers found for keyword "${keyword}"`)
-        }
 
-        // Delay before next keyword (except after last one)
-        if (i < keywordsToProcess.length - 1) {
-          console.log(`[populate] Waiting ${SCRAPER_DELAY_MS}ms before next keyword...`)
-          await delay(SCRAPER_DELAY_MS)
-        }
+          if (i < keywordsToProcess.length - 1) {
+            console.log(`[populate] Waiting ${SCRAPER_DELAY_MS}ms before next keyword...`)
+            await delay(SCRAPER_DELAY_MS)
+          }
 
-      } catch (error) {
-        console.error(`[populate] Error processing keyword "${keyword}":`, error)
-        // Continue to next keyword even if one fails
+        } catch (error) {
+          console.error(`[populate] Error processing keyword "${keyword}" (${windowDays}d):`, error)
 
-        // Still delay before next keyword to avoid rate limiting
-        if (i < keywordsToProcess.length - 1) {
-          await delay(SCRAPER_DELAY_MS)
+          if (i < keywordsToProcess.length - 1) {
+            await delay(SCRAPER_DELAY_MS)
+          }
         }
       }
+
+      return papersFound
+    }
+
+    let totalPapersFound = await runKeywordPass(30)
+
+    if (totalPapersFound === 0 && keywordsToProcess.length > 0) {
+      console.log('[populate] No papers found within 30 days. Retrying with 90-day window.')
+      totalPapersFound = await runKeywordPass(90)
     }
 
     console.log(`[populate] Completed. Processed ${keywordsToProcess.length} keywords, found ${totalPapersFound} papers`)

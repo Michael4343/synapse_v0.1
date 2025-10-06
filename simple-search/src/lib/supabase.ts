@@ -36,5 +36,6 @@ export const TABLES = {
   PAPER_ANALYSES: 'paper_analyses',
   EMAIL_LOGS: 'email_logs',
   PAPER_FEEDBACK: 'paper_feedback',
-  VERIFICATION_REQUESTS: 'paper_verification_requests'
+  VERIFICATION_REQUESTS: 'paper_verification_requests',
+  COMMUNITY_REVIEW_REQUESTS: 'paper_community_review_requests'
 } as const

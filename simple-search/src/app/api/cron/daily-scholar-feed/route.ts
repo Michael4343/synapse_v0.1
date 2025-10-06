@@ -201,7 +201,6 @@ export async function GET(request: NextRequest) {
 
       // Limit to 5 keywords to avoid excessive scraping
       const limitedKeywords = keywords.slice(0, 5)
-      const queryCounts = new Map<string, number>()
 
       console.log(`[daily-scholar-feed] Processing ${researcher.display_name} with ${limitedKeywords.length} keyword(s)`)
 
@@ -218,71 +217,86 @@ export async function GET(request: NextRequest) {
           console.error(`[daily-scholar-feed] Failed to delete old papers for ${researcher.display_name}:`, deleteError)
         }
 
-        const seenUrls = new Set<string>()
-        let researcherPapersFound = 0
+        const runKeywordPass = async (
+          windowDays: number
+        ): Promise<{ papersFound: number; counts: Map<string, number> }> => {
+          let papersFound = 0
+          const counts = new Map<string, number>()
+          const seenUrls = new Set<string>()
 
-        // Process each keyword sequentially
-        for (let i = 0; i < limitedKeywords.length; i++) {
-          const keyword = limitedKeywords[i]
-          console.log(`[daily-scholar-feed] Processing keyword ${i + 1}/${limitedKeywords.length} for ${researcher.display_name}: "${keyword}"`)
+          for (let i = 0; i < limitedKeywords.length; i++) {
+            const keyword = limitedKeywords[i]
+            console.log(`[daily-scholar-feed] (${windowDays}d) Processing keyword ${i + 1}/${limitedKeywords.length} for ${researcher.display_name}: "${keyword}"`)
 
-          try {
-            // Fetch papers for this keyword
-            const papers = await fetchPapersForKeyword(keyword, scraperApiKey)
+            try {
+              const papers = await fetchPapersForKeyword(keyword, scraperApiKey, windowDays)
 
-            // Deduplicate and limit
-            const papersToInsert = papers
-              .filter(paper => {
-                const key = (paper.url || paper.title).toLowerCase()
-                if (seenUrls.has(key)) return false
-                seenUrls.add(key)
-                return true
-              })
-              .slice(0, MAX_RESULTS_PER_KEYWORD)
-              .map(paper => ({
-                user_id: researcher.id,
-                paper_title: paper.title,
-                paper_url: paper.url,
-                paper_snippet: paper.snippet,
-                paper_authors: paper.authors,
-                publication_date: paper.publication_date,
-                raw_publication_date: paper.raw_publication_date,
-                query_keyword: keyword
-              }))
+              const papersToInsert = papers
+                .filter(paper => {
+                  const key = (paper.url || paper.title).toLowerCase()
+                  if (seenUrls.has(key)) return false
+                  seenUrls.add(key)
+                  return true
+                })
+                .slice(0, MAX_RESULTS_PER_KEYWORD)
+                .map(paper => ({
+                  user_id: researcher.id,
+                  paper_title: paper.title,
+                  paper_url: paper.url,
+                  paper_snippet: paper.snippet,
+                  paper_authors: paper.authors,
+                  publication_date: paper.publication_date,
+                  raw_publication_date: paper.raw_publication_date,
+                  query_keyword: keyword
+                }))
 
-            // Insert papers to database
-            if (papersToInsert.length > 0) {
-              const { error: insertError } = await supabaseAdmin
-                .from('personal_feed_papers')
-                .insert(papersToInsert)
+              if (papersToInsert.length > 0) {
+                const { error: insertError } = await supabaseAdmin
+                  .from('personal_feed_papers')
+                  .insert(papersToInsert)
 
-              if (insertError) {
-                console.error(`[daily-scholar-feed] Failed to insert papers for keyword "${keyword}":`, insertError)
+                if (insertError) {
+                  console.error(`[daily-scholar-feed] Failed to insert papers for keyword "${keyword}" (${windowDays}d):`, insertError)
+                  counts.set(keyword, 0)
+                } else {
+                  papersFound += papersToInsert.length
+                  counts.set(keyword, papersToInsert.length)
+                  console.log(`[daily-scholar-feed] Inserted ${papersToInsert.length} papers for keyword "${keyword}" (${windowDays}d)`)
+                }
               } else {
-                researcherPapersFound += papersToInsert.length
-                queryCounts.set(keyword, papersToInsert.length)
-                console.log(`[daily-scholar-feed] Inserted ${papersToInsert.length} papers for keyword "${keyword}"`)
+                console.log(`[daily-scholar-feed] No papers found for keyword "${keyword}" (${windowDays}d)`)
+                counts.set(keyword, 0)
               }
-            } else {
-              console.log(`[daily-scholar-feed] No papers found for keyword "${keyword}"`)
-              queryCounts.set(keyword, 0)
-            }
 
-            // Delay before next keyword (except after last one)
-            if (i < limitedKeywords.length - 1) {
-              await delay(SCRAPER_DELAY_MS)
-            }
+              if (i < limitedKeywords.length - 1) {
+                await delay(SCRAPER_DELAY_MS)
+              }
 
-          } catch (error) {
-            console.error(`[daily-scholar-feed] Error processing keyword "${keyword}":`, error)
-            queryCounts.set(keyword, 0)
+            } catch (error) {
+              console.error(`[daily-scholar-feed] Error processing keyword "${keyword}" (${windowDays}d):`, error)
+              counts.set(keyword, 0)
 
-            // Still delay before next keyword to avoid rate limiting
-            if (i < limitedKeywords.length - 1) {
-              await delay(SCRAPER_DELAY_MS)
+              if (i < limitedKeywords.length - 1) {
+                await delay(SCRAPER_DELAY_MS)
+              }
             }
           }
+
+          return { papersFound, counts }
         }
+
+        const firstPass = await runKeywordPass(30)
+        let researcherPapersFound = firstPass.papersFound
+        let passQueryCounts = firstPass.counts
+
+        if (researcherPapersFound === 0 && limitedKeywords.length > 0) {
+          console.log(`[daily-scholar-feed] ${researcher.display_name}: No papers found within 30 days. Retrying with 90-day window.`)
+          const fallbackPass = await runKeywordPass(90)
+          researcherPapersFound = fallbackPass.papersFound
+          passQueryCounts = fallbackPass.counts
+        }
+
+        const queryCounts = passQueryCounts
 
         // Send email summary
         await sendEmailSummary(researcher, queryCounts, resendClient)

@@ -282,8 +282,20 @@ interface VerificationRequestRecord {
   request_payload: unknown
 }
 
+interface CommunityReviewRequestRecord {
+  id: string
+  paper_id: string | null
+  paper_lookup_id: string
+  user_id: string | null
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+  request_payload: unknown
+  created_at: string
+  updated_at: string
+}
+
 interface VerificationSummaryPayload {
   requests: VerificationRequestRecord[]
+  communityReviewRequests: CommunityReviewRequestRecord[]
   reproducibilityReport: ResearchPaperAnalysis | null
   claimsReport: ResearchPaperAnalysis | null
 }
@@ -889,7 +901,19 @@ function toStringArray(value: unknown): string[] {
   return [];
 }
 
-function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperAnalysis; onRequestReview?: () => void }) {
+function StaticReproReport({
+  report,
+  onRequestReview,
+  communityReviewStatus = 'idle',
+  communityReviewRequested = false,
+  communityReviewError = ''
+}: {
+  report: ResearchPaperAnalysis;
+  onRequestReview?: (source: VerificationTrack) => void;
+  communityReviewStatus?: 'idle' | 'sending' | 'success' | 'error';
+  communityReviewRequested?: boolean;
+  communityReviewError?: string;
+}) {
   const questions = useMemo(
     () => (Array.isArray(report.feasibilityQuestions) ? report.feasibilityQuestions : []),
     [report.feasibilityQuestions]
@@ -953,6 +977,10 @@ function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperA
       </div>
     );
   }
+
+  const isSending = communityReviewStatus === 'sending';
+  const isComplete = communityReviewRequested || communityReviewStatus === 'success';
+  const buttonLabel = isSending ? 'Sending…' : isComplete ? 'Request Received' : 'Request Community Review';
 
   return (
     <div className="space-y-6">
@@ -1038,7 +1066,9 @@ function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperA
                 <div className="mt-5 grid gap-5 md:grid-cols-2">
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Key deliverable</p>
-                    <p className="mt-2 text-sm text-slate-700">{phase.deliverable}</p>
+                    <div className="mt-2 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700">
+                      {phase.deliverable}
+                    </div>
                   </div>
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Primary risk</p>
@@ -1088,17 +1118,26 @@ function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperA
         </div>
       </section>
 
-  {onRequestReview ? (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex items-start gap-4">
-        <button
-          type="button"
-              onClick={onRequestReview}
-              className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 whitespace-nowrap"
+      {onRequestReview ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-start gap-4">
+            <button
+              type="button"
+              onClick={() => onRequestReview('reproducibility')}
+              disabled={isSending || isComplete}
+              className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Request Community Review
+              {buttonLabel}
             </button>
-            <p className="text-sm text-slate-600">We&apos;ll compile patents, PhD theses, and contact the original study authors.</p>
+            <div>
+              <p className="text-sm text-slate-600">We&apos;ll compile patents, PhD theses, and contact the original study authors.</p>
+              {communityReviewStatus === 'error' && communityReviewError ? (
+                <p className="mt-2 text-xs text-rose-600">{communityReviewError}</p>
+              ) : null}
+              {isComplete ? (
+                <p className="mt-2 text-xs text-slate-500">Thanks — we&apos;ll reach out via email to coordinate this review.</p>
+              ) : null}
+            </div>
           </div>
         </section>
       ) : null}
@@ -1106,11 +1145,26 @@ function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperA
   );
 }
 
-function ClaimsReportPreview({ report, onRequestReview }: { report: ResearchPaperAnalysis; onRequestReview?: () => void }) {
+function ClaimsReportPreview({
+  report,
+  onRequestReview,
+  communityReviewStatus = 'idle',
+  communityReviewRequested = false,
+  communityReviewError = ''
+}: {
+  report: ResearchPaperAnalysis;
+  onRequestReview?: (source: VerificationTrack) => void;
+  communityReviewStatus?: 'idle' | 'sending' | 'success' | 'error';
+  communityReviewRequested?: boolean;
+  communityReviewError?: string;
+}) {
   const headline = report.evidence.strong[0];
   const strongEvidence = report.evidence.strong;
   const gaps = report.evidence.gaps;
   const assumptions = report.evidence.assumptions;
+  const isSending = communityReviewStatus === 'sending';
+  const isComplete = communityReviewRequested || communityReviewStatus === 'success';
+  const buttonLabel = isSending ? 'Sending…' : isComplete ? 'Request Received' : 'Request Community Review';
 
   return (
     <div className="space-y-6">
@@ -1192,12 +1246,21 @@ function ClaimsReportPreview({ report, onRequestReview }: { report: ResearchPape
           <div className="flex items-start gap-4">
             <button
               type="button"
-              onClick={onRequestReview}
-              className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 whitespace-nowrap"
+              onClick={() => onRequestReview('claims')}
+              disabled={isSending || isComplete}
+              className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Request Community Review
+              {buttonLabel}
             </button>
-            <p className="text-sm text-slate-600">We&apos;ll compile patents, PhD theses, and contact the original study authors.</p>
+            <div>
+              <p className="text-sm text-slate-600">We&apos;ll compile patents, PhD theses, and contact the original study authors.</p>
+              {communityReviewStatus === 'error' && communityReviewError ? (
+                <p className="mt-2 text-xs text-rose-600">{communityReviewError}</p>
+              ) : null}
+              {isComplete ? (
+                <p className="mt-2 text-xs text-slate-500">Thanks — we&apos;ll reach out via email to coordinate this review.</p>
+              ) : null}
+            </div>
           </div>
     </section>
   ) : null}
@@ -1259,6 +1322,8 @@ export default function Home() {
   const [verificationRequestStatus, setVerificationRequestStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [verificationRequestError, setVerificationRequestError] = useState('');
   const [activeVerificationRequestType, setActiveVerificationRequestType] = useState<VerificationRequestType | null>(null);
+  const [communityReviewStatus, setCommunityReviewStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+  const [communityReviewError, setCommunityReviewError] = useState('');
 
   const profileManualKeywordsRef = useRef('');
   const isMountedRef = useRef(true);
@@ -1974,28 +2039,18 @@ export default function Home() {
 
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
-            <label htmlFor="profile-website" className={PROFILE_LABEL_CLASSES}>
-              Academic website <span className="text-xs font-normal text-slate-500">(keywords auto-generated)</span>
-            </label>
+            <span className={PROFILE_LABEL_CLASSES}>Academic website</span>
+            <span className={PROFILE_COMING_SOON_HINT_CLASSES}>Coming soon</span>
           </div>
-          <div className="flex gap-2">
-            <input
-              id="profile-website"
-              type="text"
-              placeholder="Enter your academic website URL"
-              value={profileFormWebsite}
-              onChange={(event) => setProfileFormWebsite(event.target.value)}
-              className={`flex-1 ${PROFILE_INPUT_CLASSES}`}
-            />
-            <button
-              type="button"
-              onClick={handleWebsiteSave}
-              disabled={websiteScrapingLoading}
-              className="px-4 py-2 text-sm font-medium text-white bg-sky-600 border border-sky-600 rounded-lg hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {websiteScrapingLoading ? 'Saving…' : 'Save'}
-            </button>
-          </div>
+          <input
+            id="profile-website"
+            type="text"
+            placeholder="Enter your academic website URL"
+            value={profileFormWebsite}
+            onChange={(event) => setProfileFormWebsite(event.target.value)}
+            disabled
+            className={`${PROFILE_INPUT_CLASSES} opacity-50 cursor-not-allowed`}
+          />
         </div>
 
         <div className="space-y-2">
@@ -2148,6 +2203,11 @@ export default function Home() {
     ['pending', 'in_progress'].includes(request.status)
   );
   const latestVerificationRequest = verificationRequests.length > 0 ? verificationRequests[0] : null;
+  const communityReviewRequests = verificationSummary?.communityReviewRequests ?? [];
+  const activeCommunityReviewRequest = user
+    ? communityReviewRequests.find(request => request.user_id === user.id)
+    : null;
+  const hasCommunityReviewRequest = Boolean(activeCommunityReviewRequest);
   const claimsReport = (verificationSummary?.claimsReport as ResearchPaperAnalysis | null) ?? null;
   const reproducibilityReport = (verificationSummary?.reproducibilityReport as ResearchPaperAnalysis | null) ?? null;
   const hasClaimsReport = Boolean(claimsReport);
@@ -2182,6 +2242,9 @@ export default function Home() {
       const data = await response.json();
       setVerificationSummary({
         requests: Array.isArray(data.requests) ? data.requests : [],
+        communityReviewRequests: Array.isArray(data.communityReviewRequests)
+          ? data.communityReviewRequests
+          : [],
         reproducibilityReport: data.reproducibilityReport ?? null,
         claimsReport: data.claimsReport ?? null
       });
@@ -2319,10 +2382,93 @@ export default function Home() {
     }
   };
 
+  const handleCommunityReviewRequest = async (source: VerificationTrack) => {
+    if (!selectedPaper) {
+      return;
+    }
+
+    if (!user) {
+      authModal.openSignup();
+      return;
+    }
+
+    if (isSamplePaper) {
+      setCommunityReviewError('Select a paper from your feed to request a community review.');
+      setCommunityReviewStatus('error');
+      return;
+    }
+
+    if (communityReviewStatus === 'sending') {
+      return;
+    }
+
+    if (hasCommunityReviewRequest) {
+      setCommunityReviewStatus('success');
+      setCommunityReviewError('');
+      return;
+    }
+
+    setCommunityReviewStatus('sending');
+    setCommunityReviewError('');
+
+    try {
+      const response = await fetch(`/api/papers/${selectedPaper.id}/community-review-request`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          paper: buildVerificationPayloadFromSearchResult(selectedPaper),
+          source
+        })
+      });
+
+      if (!response.ok) {
+        let message = 'Failed to submit community review request. Please try again.';
+        try {
+          const errorData = await response.json();
+          if (errorData?.error) {
+            message = errorData.error;
+          }
+        } catch (parseError) {
+          console.error('Failed to parse community review error response:', parseError);
+        }
+        setCommunityReviewError(message);
+        setCommunityReviewStatus('error');
+        return;
+      }
+
+      try {
+        const data = await response.json();
+        if (!data?.alreadyExists) {
+          await refreshVerificationSummary();
+        } else {
+          refreshVerificationSummary();
+        }
+      } catch (parseError) {
+        console.error('Failed to parse community review success response:', parseError);
+        refreshVerificationSummary();
+      }
+
+      setCommunityReviewStatus('success');
+      setCommunityReviewError('');
+    } catch (requestError) {
+      console.error('Community review request failed:', requestError);
+      setCommunityReviewError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Unexpected error submitting community review request.'
+      );
+      setCommunityReviewStatus('error');
+    }
+  };
+
   useEffect(() => {
     setVerificationRequestStatus('idle');
     setVerificationRequestError('');
     setActiveVerificationRequestType(null);
+    setCommunityReviewStatus('idle');
+    setCommunityReviewError('');
 
     if (!selectedPaperId) {
       setVerificationSummary(null);
@@ -2332,6 +2478,30 @@ export default function Home() {
     setVerificationView('reproducibility');
     refreshVerificationSummary();
   }, [selectedPaperId, refreshVerificationSummary]);
+
+  useEffect(() => {
+    if (communityReviewStatus === 'sending') {
+      return;
+    }
+
+    if (!user) {
+      if (communityReviewStatus !== 'idle') {
+        setCommunityReviewStatus('idle');
+        setCommunityReviewError('');
+      }
+      return;
+    }
+
+    if (hasCommunityReviewRequest) {
+      if (communityReviewStatus !== 'success') {
+        setCommunityReviewStatus('success');
+        setCommunityReviewError('');
+      }
+    } else if (communityReviewStatus === 'success') {
+      setCommunityReviewStatus('idle');
+      setCommunityReviewError('');
+    }
+  }, [communityReviewStatus, hasCommunityReviewRequest, user]);
 
   const getVerificationButtonClasses = (track: VerificationTrack) => {
     if (shouldDisableVerification) {
@@ -3460,10 +3630,28 @@ export default function Home() {
                         : reproducibilityReport ?? fallbackReport;
 
                       if (activeReport) {
+                        const communityReviewHandler = user
+                          ? handleCommunityReviewRequest
+                          : (_track: VerificationTrack) => {
+                              authModal.openSignup();
+                            };
+
                         return verificationView === 'claims' ? (
-                          <ClaimsReportPreview report={activeReport} onRequestReview={authModal.openSignup} />
+                          <ClaimsReportPreview
+                            report={activeReport}
+                            onRequestReview={communityReviewHandler}
+                            communityReviewStatus={communityReviewStatus}
+                            communityReviewRequested={hasCommunityReviewRequest}
+                            communityReviewError={communityReviewError}
+                          />
                         ) : (
-                          <StaticReproReport report={activeReport} onRequestReview={authModal.openSignup} />
+                          <StaticReproReport
+                            report={activeReport}
+                            onRequestReview={communityReviewHandler}
+                            communityReviewStatus={communityReviewStatus}
+                            communityReviewRequested={hasCommunityReviewRequest}
+                            communityReviewError={communityReviewError}
+                          />
                         );
                       }
 
