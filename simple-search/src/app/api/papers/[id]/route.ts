@@ -1,6 +1,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-server'
+import { createClient, supabaseAdmin } from '@/lib/supabase-server'
 import { TABLES } from '@/lib/supabase'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
@@ -452,9 +452,19 @@ export async function GET(
 ) {
   const resolvedParams = await params
   const paperId = resolvedParams.id
+  const isSamplePaper = Boolean(SAMPLE_PAPERS[paperId])
 
   if (!paperId) {
     return NextResponse.json({ error: 'Paper ID is required' }, { status: 400 })
+  }
+
+  if (!isSamplePaper) {
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
   }
 
   console.log(`=== Papers API called with ID: ${paperId} ===`)
@@ -463,7 +473,7 @@ export async function GET(
   let paper: any
 
   // 1. Check if this is a sample paper first
-  if (SAMPLE_PAPERS[paperId]) {
+  if (isSamplePaper) {
     paper = SAMPLE_PAPERS[paperId]
     console.log(`✅ Using sample paper: ${paperId}`)
   } else {

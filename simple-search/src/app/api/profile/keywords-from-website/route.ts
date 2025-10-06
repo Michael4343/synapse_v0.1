@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { scrapeWebsite } from '@/lib/website-scraper'
+import { createClient } from '@/lib/supabase-server'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 interface RequestBody {
   websiteUrl: string
@@ -209,6 +211,13 @@ function extractKeywordsFallback(text: string): string[] {
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const body: RequestBody = await request.json()
     const { websiteUrl } = body
 
@@ -221,6 +230,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         error: 'Invalid URL format. Please enter a valid website URL.'
       }, { status: 400 })
+    }
+
+    const rateKey = `profile-website:${user.id}`
+    const rateResult = checkRateLimit(rateKey, 5 * 60 * 1000, 5)
+
+    if (!rateResult.allowed) {
+      const retrySeconds = rateResult.retryAfterMs ? Math.ceil(rateResult.retryAfterMs / 1000) : 60
+      return NextResponse.json(
+        { error: 'Rate limit exceeded. Please try again later.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(retrySeconds)
+          }
+        }
+      )
     }
 
     // Scrape the website

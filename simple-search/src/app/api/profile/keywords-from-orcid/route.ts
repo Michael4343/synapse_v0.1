@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchOrcidWorks } from '@/lib/profile-enrichment'
+import { createClient } from '@/lib/supabase-server'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 interface RequestBody {
   orcidId: string
@@ -235,11 +237,34 @@ function extractKeywordsFallback(works: OrcidWork[]): string[] {
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const body: RequestBody = await request.json()
     const { orcidId } = body
 
     if (!orcidId || typeof orcidId !== 'string') {
       return NextResponse.json({ error: 'ORCID ID is required' }, { status: 400 })
+    }
+
+    const rateKey = `profile-orcid:${user.id}`
+    const rateResult = checkRateLimit(rateKey, 5 * 60 * 1000, 5)
+
+    if (!rateResult.allowed) {
+      const retrySeconds = rateResult.retryAfterMs ? Math.ceil(rateResult.retryAfterMs / 1000) : 60
+      return NextResponse.json(
+        { error: 'Rate limit exceeded. Please try again later.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(retrySeconds)
+          }
+        }
+      )
     }
 
     // Fetch ORCID works

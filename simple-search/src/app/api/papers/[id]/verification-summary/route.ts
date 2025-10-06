@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-server'
+import { createClient, supabaseAdmin } from '@/lib/supabase-server'
 import { TABLES } from '@/lib/supabase'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -77,10 +77,18 @@ export async function GET(
       return NextResponse.json(payload)
     }
 
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { data: requestsData, error: requestsError } = await supabaseAdmin
       .from(TABLES.VERIFICATION_REQUESTS)
       .select('id, paper_id, paper_lookup_id, user_id, verification_type, status, created_at, updated_at, completed_at, result_summary, request_payload')
       .eq('paper_lookup_id', id)
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
     if (requestsError) {
@@ -92,6 +100,7 @@ export async function GET(
       .from(TABLES.COMMUNITY_REVIEW_REQUESTS)
       .select('id, paper_id, paper_lookup_id, user_id, status, request_payload, created_at, updated_at')
       .eq('paper_lookup_id', id)
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
     if (communityReviewError) {

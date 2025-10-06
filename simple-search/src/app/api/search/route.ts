@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { supabaseAdmin } from '@/lib/supabase-server'
+import { createClient, supabaseAdmin } from '@/lib/supabase-server'
 import { TABLES } from '@/lib/supabase'
 import { hydrateSemanticScholarAbstracts } from '@/lib/semantic-scholar-abstract'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 const SEMANTIC_SCHOLAR_ENDPOINT = 'https://api.semanticscholar.org/graph/v1/paper/search'
 const SEMANTIC_SCHOLAR_FIELDS = [
@@ -26,6 +27,9 @@ const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000 // 5 minutes
 const RATE_LIMIT_WITHOUT_KEY = 950 // Leave buffer from 1000 requests/5min shared limit
 const RATE_LIMIT_WITH_KEY = 90 // Leave buffer from 100 requests/5min personal limit
 const MIN_REQUEST_INTERVAL_MS = 1000 // Minimum 1 second between requests
+
+const USER_RATE_LIMIT_WINDOW_MS = 60 * 1000 // per-user 1 minute window
+const USER_RATE_LIMIT_MAX_REQUESTS = 8 // Max 8 searches per minute per user
 
 // Rate limiting state (in-memory for simplicity)
 const requestTimestamps: number[] = []
@@ -499,6 +503,22 @@ function buildResponsePayload(results: StoredSearchResult[]) {
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const rateResult = checkRateLimit(`search:${user.id}`, USER_RATE_LIMIT_WINDOW_MS, USER_RATE_LIMIT_MAX_REQUESTS)
+    if (!rateResult.allowed) {
+      const retrySeconds = rateResult.retryAfterMs ? Math.ceil(rateResult.retryAfterMs / 1000) : 60
+      return NextResponse.json(
+        { error: 'Rate limit exceeded. Please slow down.' },
+        { status: 429, headers: { 'Retry-After': String(retrySeconds) } }
+      )
+    }
+
     // Development: Clear stale rate limit state on first request after restart
     if (process.env.NODE_ENV === 'development' && requestTimestamps.length > 0) {
       const oldestTimestamp = requestTimestamps[0] || 0
