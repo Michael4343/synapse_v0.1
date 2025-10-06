@@ -858,8 +858,29 @@ const VERIFICATION_DATA: Record<string, ResearchPaperAnalysis> = {
   }
 };
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function toStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter(isNonEmptyString);
+  }
+  if (isNonEmptyString(value)) {
+    return [value];
+  }
+  return [];
+}
+
 function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperAnalysis; onRequestReview?: () => void }) {
-  const questions = report.feasibilityQuestions;
+  const questions = useMemo(
+    () => (Array.isArray(report.feasibilityQuestions) ? report.feasibilityQuestions : []),
+    [report.feasibilityQuestions]
+  );
+  const criticalPhases = useMemo(
+    () => (Array.isArray(report.criticalPath) ? report.criticalPath : []),
+    [report.criticalPath]
+  );
 
   const [answers, setAnswers] = useState<Record<string, 'yes' | 'no' | null>>(() => {
     const initial: Record<string, 'yes' | 'no' | null> = {};
@@ -886,7 +907,7 @@ function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperA
     }));
   }
 
-  const isPlaceholder = questions.length === 0 && report.criticalPath.length === 0;
+  const isPlaceholder = questions.length === 0 && criticalPhases.length === 0;
 
   const blockerSeverityTone: Record<string, string> = {
     critical: 'border border-red-200 bg-red-50 text-red-600',
@@ -981,11 +1002,13 @@ function StaticReproReport({ report, onRequestReview }: { report: ResearchPaperA
           </div>
         </div>
         <div className="mt-6 space-y-5">
-          {report.criticalPath.map((phase) => {
-            const checklist = phase.checklist.slice(0, 3);
-            const totalChecklist = phase.checklist.length;
-            const primaryBlocker = phase.primaryRisk;
-            const severityLabel = primaryBlocker
+          {criticalPhases.map((phase) => {
+            const checklistItems = toStringArray(phase.checklist);
+            const checklist = checklistItems.slice(0, 3);
+            const totalChecklist = checklistItems.length;
+            const primaryBlocker =
+              phase.primaryRisk && typeof phase.primaryRisk === 'object' ? phase.primaryRisk : null;
+            const severityLabel = primaryBlocker && typeof primaryBlocker.severity === 'string'
               ? primaryBlocker.severity.charAt(0).toUpperCase() + primaryBlocker.severity.slice(1)
               : 'No major risk';
 
@@ -2115,7 +2138,14 @@ export default function Home() {
     ['pending', 'in_progress'].includes(request.status)
   );
   const latestVerificationRequest = verificationRequests.length > 0 ? verificationRequests[0] : null;
+  const claimsReport = (verificationSummary?.claimsReport as ResearchPaperAnalysis | null) ?? null;
+  const reproducibilityReport = (verificationSummary?.reproducibilityReport as ResearchPaperAnalysis | null) ?? null;
+  const hasClaimsReport = Boolean(claimsReport);
+  const hasReproReport = Boolean(reproducibilityReport);
   const shouldDisableVerification = !hasSelectedPaper || isVerificationSending;
+
+  const isTrackReportAvailable = (track: VerificationTrack) =>
+    track === 'claims' ? hasClaimsReport : hasReproReport;
 
   const refreshVerificationSummary = useCallback(async () => {
     if (!selectedPaperId) {
@@ -2159,6 +2189,14 @@ export default function Home() {
     }
 
     setVerificationView(track);
+
+    if (isTrackReportAvailable(track)) {
+      setVerificationModalOpen(false);
+      setActiveVerificationRequestType(null);
+      setVerificationRequestStatus('idle');
+      setVerificationRequestError('');
+      return;
+    }
 
     if (shouldDisableVerification) {
       return;
@@ -2293,24 +2331,28 @@ export default function Home() {
     const classes = [DETAIL_REPRO_BUTTON_CLASSES];
     if (verificationView === track) {
       classes.push(DETAIL_VERIFY_BUTTON_ACTIVE_CLASSES);
-    } else if (hasActiveVerificationRequest) {
-      classes.push('opacity-80');
     }
     return classes.join(' ');
+  };
+
+  const BASE_LABELS: Record<VerificationTrack, string> = {
+    reproducibility: 'VERIFY REPRODUCIBILITY',
+    claims: 'VERIFY CLAIMS'
+  };
+
+  const VIEW_LABELS: Record<VerificationTrack, string> = {
+    reproducibility: 'VIEW REPRODUCIBILITY BRIEFING',
+    claims: 'VIEW CLAIMS BRIEFING'
   };
 
   const getVerificationButtonLabel = (track: VerificationTrack): string => {
     if (isVerificationSending) {
       return 'Sending request…';
     }
-    if (hasActiveVerificationRequest) {
-      return verificationView === track
-        ? 'Agent is searching'
-        : track === 'reproducibility'
-          ? 'Reproducibility view'
-          : 'Claims view';
+    if (isTrackReportAvailable(track)) {
+      return VIEW_LABELS[track];
     }
-    return track === 'reproducibility' ? 'Verify reproducibility' : 'Verify claims';
+    return BASE_LABELS[track];
   };
 
   const getVerificationButtonTitle = (track: VerificationTrack): string => {
@@ -2322,6 +2364,11 @@ export default function Home() {
     }
     if (isSamplePaper) {
       return 'Preview the example briefing for this sample paper.';
+    }
+    if (isTrackReportAvailable(track)) {
+      return track === 'reproducibility'
+        ? 'View the latest reproducibility briefing for this paper.'
+        : 'View the latest claims briefing for this paper.';
     }
     if (hasActiveVerificationRequest) {
       return 'Our agent is already processing this paper — switch views to review progress.';
@@ -3399,8 +3446,8 @@ export default function Home() {
                           : null;
 
                       const activeReport = verificationView === 'claims'
-                        ? (verificationSummary?.claimsReport as ResearchPaperAnalysis | null) ?? fallbackReport
-                        : (verificationSummary?.reproducibilityReport as ResearchPaperAnalysis | null) ?? fallbackReport;
+                        ? claimsReport ?? fallbackReport
+                        : reproducibilityReport ?? fallbackReport;
 
                       if (activeReport) {
                         return verificationView === 'claims' ? (

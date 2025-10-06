@@ -62,60 +62,107 @@ function isUuid(value) {
 }
 
 async function selectRequest(requests) {
-  console.log('\nOpen verification requests:')
+  console.log('\n═══════════════════════════════════════════════════════════')
+  console.log('  PENDING VERIFICATION REQUESTS')
+  console.log('═══════════════════════════════════════════════════════════\n')
+
   requests.forEach((request, index) => {
-    const paperRef = request.paper_id ? `paper ${request.paper_id}` : `lookup ${request.paper_lookup_id}`
-    console.log(`  [${index}] ${request.verification_type.toUpperCase()} • ${paperRef} • status ${request.status} • created ${request.created_at}`)
+    const number = index + 1
+    const type = request.verification_type.toUpperCase()
+    const paperRef = request.paper_id ? request.paper_id.substring(0, 8) : request.paper_lookup_id.substring(0, 40)
+    const date = new Date(request.created_at).toLocaleDateString()
+
+    console.log(`  ${number}. ${type} verification`)
+    console.log(`     Paper: ${paperRef}...`)
+    console.log(`     Created: ${date}`)
+    console.log('')
   })
 
-  const input = (await rl.question('\nSelect a request by number or paste a request UUID: ')).trim()
+  console.log('───────────────────────────────────────────────────────────')
+  const input = (await rl.question('Enter request number (1-' + requests.length + '): ')).trim()
+
   if (!input) {
     return null
   }
 
-  const index = Number.parseInt(input, 10)
-  if (!Number.isNaN(index) && index >= 0 && index < requests.length) {
+  const number = Number.parseInt(input, 10)
+  const index = number - 1
+
+  if (!Number.isNaN(number) && index >= 0 && index < requests.length) {
     return requests[index]
   }
 
-  const match = requests.find((request) => request.id === input)
-  if (match) {
-    return match
-  }
-
-  console.error('No request matched that selection.')
+  console.error('Invalid number. Please try again.')
   return null
 }
 
-async function promptForStatus(defaultStatus) {
-  const input = (await rl.question(`Set status [${defaultStatus}]: `)).trim()
-  if (!input) {
-    return defaultStatus
+async function promptForJsonData() {
+  console.log('\n═══════════════════════════════════════════════════════════')
+  console.log('  PASTE VERIFICATION JSON')
+  console.log('═══════════════════════════════════════════════════════════\n')
+  console.log('Paste your formatted JSON below, then press Enter twice.\n')
+
+  const lines = []
+  while (true) {
+    const line = await rl.question('')
+    if (line.trim().toLowerCase() === 'cancel') {
+      return null
+    }
+    if (line.trim() === '' && lines.length > 0) {
+      break
+    }
+    if (line.trim() !== '') {
+      lines.push(line)
+    }
   }
-  if (!VALID_STATUSES.includes(input)) {
-    console.error(`Invalid status. Use one of: ${VALID_STATUSES.join(', ')}`)
-    return promptForStatus(defaultStatus)
+
+  if (lines.length === 0) {
+    console.error('\n❌ No data provided. Please paste JSON and try again.\n')
+    return promptForJsonData()
   }
-  return input
+
+  const raw = lines.join('\n')
+  try {
+    const parsed = JSON.parse(raw)
+    return parsed
+  } catch (error) {
+    console.error('\n❌ Invalid JSON:', error.message)
+    console.error('Please check your formatting and try again.\n')
+    return promptForJsonData()
+  }
 }
 
-async function promptForReport() {
-  const input = (await rl.question('Path to JSON analysis (leave blank to skip): ')).trim()
-  if (!input) {
-    return null
+function validateVerificationJson(data) {
+  const errors = []
+
+  // Check required top-level fields
+  if (!data.stage) errors.push('Missing required field: stage')
+  if (!data.lastUpdated) errors.push('Missing required field: lastUpdated')
+  if (!data.reviewers || !Array.isArray(data.reviewers)) errors.push('Missing or invalid field: reviewers (must be array)')
+  if (!data.summary) errors.push('Missing required field: summary')
+  if (!data.paper) errors.push('Missing required field: paper')
+  if (!data.feasibilityQuestions || !Array.isArray(data.feasibilityQuestions)) {
+    errors.push('Missing or invalid field: feasibilityQuestions (must be array)')
   }
-  const resolvedPath = path.resolve(input)
-  if (!fs.existsSync(resolvedPath)) {
-    console.error('File not found. Please try again.')
-    return promptForReport()
+  if (!data.criticalPath || !Array.isArray(data.criticalPath)) {
+    errors.push('Missing or invalid field: criticalPath (must be array)')
   }
-  const raw = fs.readFileSync(resolvedPath, 'utf8')
-  try {
-    return JSON.parse(raw)
-  } catch (error) {
-    console.error('Could not parse JSON file:', error.message)
-    return promptForReport()
+  if (!data.evidence) errors.push('Missing required field: evidence')
+
+  // Check paper object
+  if (data.paper) {
+    if (!data.paper.title) errors.push('Missing required field: paper.title')
+    if (!data.paper.authors) errors.push('Missing required field: paper.authors')
   }
+
+  // Check evidence object
+  if (data.evidence) {
+    if (!Array.isArray(data.evidence.strong)) errors.push('Missing or invalid field: evidence.strong (must be array)')
+    if (!Array.isArray(data.evidence.gaps)) errors.push('Missing or invalid field: evidence.gaps (must be array)')
+    if (!Array.isArray(data.evidence.assumptions)) errors.push('Missing or invalid field: evidence.assumptions (must be array)')
+  }
+
+  return errors
 }
 
 async function main() {
@@ -133,13 +180,16 @@ async function main() {
   }
 
   if (!requests || requests.length === 0) {
-    console.log('No pending verification requests found.')
+    console.log('\n═══════════════════════════════════════════════════════════')
+    console.log('  NO PENDING REQUESTS')
+    console.log('═══════════════════════════════════════════════════════════\n')
+    console.log('All verification requests have been completed.\n')
     exit(0)
   }
 
   const selected = await selectRequest(requests)
   if (!selected) {
-    console.log('No request selected. Exiting.')
+    console.log('\nNo request selected. Exiting.\n')
     exit(0)
   }
 
@@ -179,63 +229,86 @@ async function main() {
     }
   }
 
+  console.log('\n═══════════════════════════════════════════════════════════')
+  console.log('  SELECTED REQUEST')
+  console.log('═══════════════════════════════════════════════════════════\n')
+
   if (paperMetadata) {
-    console.log(`\nPaper: ${paperMetadata.title}`)
+    console.log(`Title: ${paperMetadata.title}`)
     if (paperMetadata.doi) {
-      console.log(`DOI: ${paperMetadata.doi}`)
+      console.log(`DOI:   ${paperMetadata.doi}`)
     }
     if (paperMetadata.url) {
-      console.log(`URL: ${paperMetadata.url}`)
-    }
-    if (metadataSource && metadataSource !== 'paper_id') {
-      console.log(`(Resolved via ${metadataSource})`)
+      console.log(`URL:   ${paperMetadata.url}`)
     }
   } else {
     if (!candidateIds.some((candidate) => isUuid(candidate.id))) {
-      console.log('\nNo matching search_results record (paper reference is an external lookup).')
+      console.log('Paper: External lookup (not yet in database)')
+      console.log(`ID:    ${selected.paper_lookup_id.substring(0, 60)}...`)
     } else {
-      console.warn('\nWarning: Could not resolve paper metadata in search_results.')
+      console.log('⚠️  Warning: Paper not found in database')
     }
   }
 
-  const nextStatus = await promptForStatus('completed')
-  const reportData = await promptForReport()
-  const now = new Date().toISOString()
+  console.log('')
 
-  const updatePayload = {
-    status: nextStatus,
-    updated_at: now,
-    completed_at: nextStatus === 'completed' ? now : null
+  // Require JSON data input
+  const reportData = await promptForJsonData()
+  if (reportData === null) {
+    console.log('\nCancelled. No changes made.\n')
+    exit(0)
   }
 
-  if (reportData !== null) {
-    updatePayload.result_summary = reportData
-  }
-
-  const { error: updateError } = await supabase
-    .from('paper_verification_requests')
-    .update(updatePayload)
-    .eq('id', selected.id)
-
-  if (updateError) {
-    console.error('Failed to update verification request:', updateError.message)
+  // Validate JSON structure
+  const validationErrors = validateVerificationJson(reportData)
+  if (validationErrors.length > 0) {
+    console.error('\n❌ JSON validation failed:')
+    validationErrors.forEach((error) => console.error(`  - ${error}`))
+    console.error('\nPlease fix these issues and run the script again.')
     exit(1)
   }
 
+  console.log('✓ JSON validation passed\n')
+  console.log('───────────────────────────────────────────────────────────')
+  console.log('Saving to database...\n')
+
+  const now = new Date().toISOString()
+  let allSavesSucceeded = true
+  const saveErrors = []
+
+  // Try to update verification request with data
+  try {
+    const updatePayload = {
+      status: 'in_progress', // Set to in_progress first
+      updated_at: now,
+      result_summary: reportData
+    }
+
+    const { error: updateError } = await supabase
+      .from('paper_verification_requests')
+      .update(updatePayload)
+      .eq('id', selected.id)
+
+    if (updateError) {
+      throw new Error(`Failed to update verification request: ${updateError.message}`)
+    }
+    console.log('✓ Saved data to paper_verification_requests')
+  } catch (error) {
+    allSavesSucceeded = false
+    saveErrors.push(error.message)
+  }
+
+  // Try to update search_results if paper exists
   const searchUpdate = {}
 
   const applyClaimsUpdate = () => {
-    searchUpdate.claims_status = nextStatus
-    if (reportData !== null) {
-      searchUpdate.claims_verified = reportData
-    }
+    searchUpdate.claims_status = 'in_progress'
+    searchUpdate.claims_verified = reportData
   }
 
   const applyReproUpdate = () => {
-    searchUpdate.reproducibility_status = nextStatus
-    if (reportData !== null) {
-      searchUpdate.reproducibility_data = reportData
-    }
+    searchUpdate.reproducibility_status = 'in_progress'
+    searchUpdate.reproducibility_data = reportData
   }
 
   switch (selected.verification_type) {
@@ -254,33 +327,97 @@ async function main() {
   }
 
   if (Object.keys(searchUpdate).length > 0 && paperForUpdateId) {
-    const { error: searchError } = await supabase
-      .from('search_results')
-      .update(searchUpdate)
-      .eq('id', paperForUpdateId)
+    try {
+      const { error: searchError } = await supabase
+        .from('search_results')
+        .update(searchUpdate)
+        .eq('id', paperForUpdateId)
 
-    if (searchError) {
-      console.error('Failed to update paper record:', searchError.message)
-      exit(1)
+      if (searchError) {
+        throw new Error(`Failed to update search_results: ${searchError.message}`)
+      }
+      console.log('✓ Saved data to search_results')
+    } catch (error) {
+      allSavesSucceeded = false
+      saveErrors.push(error.message)
     }
   } else if (Object.keys(searchUpdate).length > 0 && !paperForUpdateId) {
-    console.warn('Skipped search_results update because no matching record was found for this request.')
+    console.log('ℹ Skipped search_results update (no matching record found)')
   }
 
-  console.log(
-    `\n✔ Updated ${selected.verification_type} request ${selected.id} to status "${nextStatus}".`
-  )
-  if (paperForUpdateId && Object.keys(searchUpdate).length > 0) {
-    console.log(`✔ Applied verification data to search_results record ${paperForUpdateId}.`)
-  }
-  if (reportData !== null) {
-    console.log('✔ Attached analysis payload to verification request record.')
+  // If all saves succeeded, mark as completed
+  if (allSavesSucceeded) {
+    try {
+      const completePayload = {
+        status: 'completed',
+        completed_at: now,
+        updated_at: now
+      }
+
+      const { error: completeError } = await supabase
+        .from('paper_verification_requests')
+        .update(completePayload)
+        .eq('id', selected.id)
+
+      if (completeError) {
+        throw new Error(`Failed to mark as completed: ${completeError.message}`)
+      }
+
+      // Also update search_results status to completed
+      if (Object.keys(searchUpdate).length > 0 && paperForUpdateId) {
+        const finalSearchUpdate = {}
+        if (searchUpdate.claims_status) {
+          finalSearchUpdate.claims_status = 'completed'
+        }
+        if (searchUpdate.reproducibility_status) {
+          finalSearchUpdate.reproducibility_status = 'completed'
+        }
+
+        const { error: finalSearchError } = await supabase
+          .from('search_results')
+          .update(finalSearchUpdate)
+          .eq('id', paperForUpdateId)
+
+        if (finalSearchError) {
+          throw new Error(`Failed to update search_results status to completed: ${finalSearchError.message}`)
+        }
+      }
+
+      console.log('\n═══════════════════════════════════════════════════════════')
+      console.log('  ✅ SUCCESS')
+      console.log('═══════════════════════════════════════════════════════════\n')
+      console.log(`Verification request marked as COMPLETED`)
+      console.log(`Request ID: ${selected.id}\n`)
+      if (paperForUpdateId) {
+        console.log(`Paper record updated with verification data`)
+        console.log(`Paper ID: ${paperForUpdateId}\n`)
+      }
+    } catch (error) {
+      console.error('\n═══════════════════════════════════════════════════════════')
+      console.error('  ⚠️  PARTIAL SUCCESS')
+      console.error('═══════════════════════════════════════════════════════════\n')
+      console.error(`Data saved but could not mark as completed: ${error.message}`)
+      console.error('Request remains in "in_progress" state.')
+      console.error('You can manually update it in Supabase.\n')
+    }
+  } else {
+    console.error('\n═══════════════════════════════════════════════════════════')
+    console.error('  ❌ SAVE FAILED')
+    console.error('═══════════════════════════════════════════════════════════\n')
+    console.error('Could not save verification data:\n')
+    saveErrors.forEach((error) => console.error(`  • ${error}`))
+    console.error('\nPlease fix the issues above and try again.\n')
+    exit(1)
   }
 }
 
 main()
   .catch((error) => {
-    console.error('Unexpected error:', error)
+    console.error('\n═══════════════════════════════════════════════════════════')
+    console.error('  ❌ UNEXPECTED ERROR')
+    console.error('═══════════════════════════════════════════════════════════\n')
+    console.error(error.message || error)
+    console.error('\nPlease check your database connection and try again.\n')
     exit(1)
   })
   .finally(() => {
