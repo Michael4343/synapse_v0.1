@@ -3689,18 +3689,18 @@ export default function Home() {
             {selectedPaper ? (
               <>
                 {/* Share Discovery */}
-                <div className="sticky top-0 z-10 -mx-2 px-2 pt-2 pb-3 xl:-mx-6 xl:px-6 bg-slate-50/95 backdrop-blur">
-                  <div className="relative flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm opacity-60">
+                <div className="sticky top-0 z-10 bg-white/95 backdrop-blur">
+                  <div className="flex w-full items-center gap-3 border-y border-slate-200 px-4 py-2 text-slate-400">
                     <input
                       type="text"
                       disabled
                       placeholder="Share your wisdom to help science"
-                      className="w-full bg-transparent px-5 py-3.5 text-sm text-slate-400 placeholder:text-slate-400 focus:outline-none cursor-not-allowed"
+                      className="flex-1 bg-transparent text-sm placeholder:text-slate-400 focus:outline-none cursor-not-allowed"
                     />
                     <button
                       type="button"
                       disabled
-                      className="mr-2 inline-flex items-center rounded-xl bg-slate-400 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white cursor-not-allowed"
+                      className="inline-flex items-center rounded-md bg-slate-400 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white cursor-not-allowed"
                     >
                       Share
                     </button>
