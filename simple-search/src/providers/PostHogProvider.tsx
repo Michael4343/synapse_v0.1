@@ -22,9 +22,13 @@ type PostHogWithSessionRecording = PostHog & {
 
 interface PostHogContextType {
   posthog: PostHog | null
+  restartSessionRecording: (() => void) | null
 }
 
-const PostHogContext = createContext<PostHogContextType>({ posthog: null })
+const PostHogContext = createContext<PostHogContextType>({
+  posthog: null,
+  restartSessionRecording: null,
+})
 
 export function usePostHog() {
   return useContext(PostHogContext)
@@ -45,15 +49,32 @@ export function PostHogProvider({ children }: PostHogProviderProps) {
 
   const [posthogInstance, setPosthogInstance] = useState<PostHogWithSessionRecording | null>(null)
 
+  const startSessionRecording = (instance: PostHogWithSessionRecording) => {
+    if (typeof instance.sessionRecording?.stopRecording === 'function') {
+      instance.sessionRecording.stopRecording()
+    }
+
+    if (typeof instance.sessionRecording?.startRecording === 'function') {
+      instance.sessionRecording.startRecording()
+    } else if (typeof instance.startSessionRecording === 'function') {
+      instance.startSessionRecording()
+    }
+  }
+
   useEffect(() => {
     if (typeof window === 'undefined') return
 
     const apiKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
     const apiHost = process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com'
-    const allowedHosts = ['research.evidentia.bio']
+    const allowedHosts = (process.env.NEXT_PUBLIC_POSTHOG_ALLOWED_HOSTS || 'research.evidentia.bio')
+      .split(',')
+      .map(host => host.trim())
+      .filter(Boolean)
     const currentHost = window.location.hostname
 
-    if (!allowedHosts.includes(currentHost)) {
+    const isHostAllowed = allowedHosts.length === 0 || allowedHosts.includes(currentHost)
+
+    if (!isHostAllowed) {
       console.info(`PostHog disabled on host: ${currentHost}`)
       return
     }
@@ -74,7 +95,7 @@ export function PostHogProvider({ children }: PostHogProviderProps) {
 
       ph.init(apiKey, {
         api_host: apiHost,
-        autocapture: true,
+        autocapture: false,
         capture_pageview: false,
         person_profiles: 'identified_only',
         session_recording: {
@@ -83,11 +104,7 @@ export function PostHogProvider({ children }: PostHogProviderProps) {
         },
       })
 
-      if (typeof ph.startSessionRecording === 'function') {
-        ph.startSessionRecording()
-      } else if (ph.sessionRecording?.startRecording) {
-        ph.sessionRecording.startRecording()
-      }
+      startSessionRecording(ph)
 
       if (process.env.NODE_ENV === 'development') {
         ph.debug()
@@ -120,9 +137,15 @@ export function PostHogProvider({ children }: PostHogProviderProps) {
     })
   }, [posthogInstance, pageKey, pathname, search])
 
+  const restartSessionRecording = useMemo<(() => void) | null>(() => {
+    if (!posthogInstance) return null
+    return () => startSessionRecording(posthogInstance)
+  }, [posthogInstance])
+
   const value = useMemo(() => ({
     posthog: posthogInstance,
-  }), [posthogInstance])
+    restartSessionRecording,
+  }), [posthogInstance, restartSessionRecording])
 
   return (
     <PostHogContext.Provider value={value}>

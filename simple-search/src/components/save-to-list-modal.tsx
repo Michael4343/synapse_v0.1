@@ -48,7 +48,7 @@ const BUTTON_PRIMARY_CLASSES = 'inline-flex items-center justify-center rounded-
 const BUTTON_SECONDARY_CLASSES = 'inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900'
 
 export function SaveToListModal({ isOpen, paper, onClose, onSaved, userLists, setUserLists }: SaveToListModalProps) {
-  const tracking = usePostHogTracking()
+  const { trackEvent, trackError } = usePostHogTracking()
 
   const [selectedListId, setSelectedListId] = useState<number | null>(null)
   const [isCreatingNew, setIsCreatingNew] = useState(false)
@@ -118,16 +118,13 @@ export function SaveToListModal({ isOpen, paper, onClose, onSaved, userLists, se
           const errorData = await createResponse.json().catch(() => ({}))
           const errorMessage = errorData.error || 'Failed to create list'
           setError(errorMessage)
-          tracking.trackError('list_creation_error', errorMessage, 'create_list_api')
+          trackError('list_creation', errorMessage, 'create_list_api')
           setLoading(false)
           return
         }
 
         const { list } = await createResponse.json()
         targetListId = list.id
-
-        // Track list creation
-        tracking.trackListCreated(list.id.toString(), list.name)
 
         // Add the new list to the userLists state
         setUserLists(prevLists => [...prevLists, {
@@ -155,19 +152,23 @@ export function SaveToListModal({ isOpen, paper, onClose, onSaved, userLists, se
         const errorData = await saveResponse.json().catch(() => ({}))
         const errorMessage = errorData.error || 'Failed to save paper'
         setError(errorMessage)
-        tracking.trackError('save_paper_error', errorMessage, 'save_paper_api')
+        trackError('save_paper', errorMessage, 'save_paper_api')
         setLoading(false)
         return
       }
 
       // Track paper saved to list
       const targetList = userLists.find(list => list.id === targetListId)
-      tracking.trackPaperSavedToList(
-        paper.id,
-        paper.title,
-        targetListId.toString(),
-        targetList?.name || 'Unknown List'
-      )
+      trackEvent({
+        name: 'paper_saved',
+        properties: {
+          paper_id: paper.id,
+          paper_title: paper.title,
+          list_id: targetListId.toString(),
+          list_name: targetList?.name || (isCreatingNew ? newListName.trim() : 'Unknown List'),
+          created_list: Boolean(isCreatingNew),
+        },
+      })
 
       // Update the list count
       setUserLists(prevLists => prevLists.map(list =>
@@ -185,7 +186,7 @@ export function SaveToListModal({ isOpen, paper, onClose, onSaved, userLists, se
     } catch (error) {
       console.error('Save failed:', error)
       setError('Something went wrong. Please try again.')
-      tracking.trackError('save_to_list_exception', (error as Error).message, 'save_to_list_modal')
+      trackError('save_to_list', (error as Error).message, 'save_to_list_modal')
     } finally {
       setLoading(false)
     }

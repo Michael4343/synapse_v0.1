@@ -1,213 +1,159 @@
 'use client'
 
+import { useCallback, useMemo } from 'react'
 import { usePostHog } from '../providers/PostHogProvider'
-import { useMemo, useCallback } from 'react'
 
-export interface TrackingProperties {
-  [key: string]: any
-}
+type AuthMethod = 'email' | 'google'
 
-export interface AuthenticationProperties {
-  signup_method?: 'email' | 'google'
-  login_method?: 'email' | 'google'
-  user_id?: string
-}
-
-export interface SearchProperties {
-  query?: string
-  query_length?: number
-  results_count?: number
-  search_duration_ms?: number
-}
-
-export interface ListProperties {
-  list_id?: string
-  list_name?: string
-  list_item_count?: number
-  paper_id?: string
-  paper_title?: string
-}
-
-export interface ErrorProperties {
-  error_type?: string
-  error_message?: string
-  context?: string
-  stack_trace?: string
-}
-
-export interface PaperInteractionProperties {
-  paper_id?: string
-  paper_title?: string
-  paper_source?: string
-  paper_year?: number
-  action_type?: 'view' | 'click' | 'save'
-}
-
-export function usePostHogTracking() {
-  const { posthog } = usePostHog()
-
-  // Helper function to safely track events
-  const track = useCallback((eventName: string, properties?: TrackingProperties) => {
-    if (posthog && typeof window !== 'undefined') {
-      try {
-        posthog.capture(eventName, properties)
-      } catch (error) {
-        console.warn('PostHog tracking failed:', error)
+type AppEvent =
+  | {
+      name: 'auth_signup_started'
+      properties: {
+        method: AuthMethod
       }
     }
-  }, [posthog])
-
-  // Authentication Events
-  const trackSignupAttempted = useCallback((method: 'email' | 'google') => {
-    track('user_signup_attempted', { signup_method: method })
-  }, [track])
-
-  const trackSignupCompleted = useCallback((userId: string, method: 'email' | 'google') => {
-    track('user_signup_completed', { user_id: userId, signup_method: method })
-    if (posthog) {
-      posthog.identify(userId)
+  | {
+      name: 'auth_signup_completed'
+      properties: {
+        method: AuthMethod
+        user_id: string
+      }
     }
-  }, [track, posthog])
-
-  const trackLoginAttempted = useCallback((method: 'email' | 'google') => {
-    track('user_login_attempted', { login_method: method })
-  }, [track])
-
-  const trackLoginCompleted = useCallback((userId: string, method: 'email' | 'google') => {
-    track('user_login_completed', { user_id: userId, login_method: method })
-    if (posthog) {
-      posthog.identify(userId)
+  | {
+      name: 'auth_login_started'
+      properties: {
+        method: AuthMethod
+      }
     }
-  }, [track, posthog])
-
-  const trackLogoutCompleted = useCallback(() => {
-    track('user_logout_completed')
-    if (posthog) {
-      posthog.reset()
+  | {
+      name: 'auth_login_completed'
+      properties: {
+        method: AuthMethod
+        user_id: string
+      }
     }
-  }, [track, posthog])
+  | {
+      name: 'auth_logout_completed'
+      properties?: {
+        user_id?: string | null
+      }
+    }
+  | {
+      name: 'profile_keywords_saved'
+      properties: {
+        keyword_count: number
+        first_save: boolean
+      }
+    }
+  | {
+      name: 'search_performed'
+      properties: {
+        query: string
+        results_count: number
+        duration_ms?: number
+        sources: ('research' | 'patents')[]
+        year_filter?: number | null
+      }
+    }
+  | {
+      name: 'personal_feed_loaded'
+      properties: {
+        results_count: number
+        load_more: boolean
+      }
+    }
+  | {
+      name: 'paper_viewed'
+      properties: {
+        paper_id: string
+        paper_title: string
+        source?: string | null
+        via: 'search_result' | 'list' | 'personal_feed'
+      }
+    }
+  | {
+      name: 'paper_saved'
+      properties: {
+        paper_id: string
+        paper_title: string
+        list_id: string
+        list_name: string
+        created_list: boolean
+      }
+    }
+  | {
+      name: 'verification_requested'
+      properties: {
+        paper_id: string
+        verification_type: string
+        source?: string | null
+      }
+    }
+  | {
+      name: 'error_occurred'
+      properties: {
+        domain: string
+        message: string
+        context?: string
+      }
+    }
 
-  // Search Events
-  const trackSearchQuery = useCallback((query: string, resultsCount?: number) => {
-    track('search_query_submitted', {
-      query,
-      query_length: query.length,
-      results_count: resultsCount
-    })
-  }, [track])
+export function usePostHogTracking() {
+  const { posthog, restartSessionRecording } = usePostHog()
 
-  const trackSearchResults = useCallback((query: string, resultsCount: number, duration?: number) => {
-    track('search_results_viewed', {
-      query,
-      results_count: resultsCount,
-      search_duration_ms: duration
-    })
-  }, [track])
+  const trackEvent = useCallback(
+    (event: AppEvent) => {
+      if (!posthog || typeof window === 'undefined') {
+        return
+      }
 
-  // List Management Events
-  const trackListCreated = useCallback((listId: string, listName: string) => {
-    track('list_created', {
-      list_id: listId,
-      list_name: listName
-    })
-  }, [track])
+      try {
+        posthog.capture(event.name, event.properties)
+      } catch (error) {
+        console.warn('PostHog track failed', error)
+      }
+    },
+    [posthog]
+  )
 
-  const trackPaperSavedToList = useCallback((
-    paperId: string,
-    paperTitle: string,
-    listId: string,
-    listName: string
-  ) => {
-    track('paper_saved_to_list', {
-      paper_id: paperId,
-      paper_title: paperTitle,
-      list_id: listId,
-      list_name: listName
-    })
-  }, [track])
-
-  // Paper Interaction Events
-  const trackPaperClicked = useCallback((paperId: string, paperTitle: string, source?: string) => {
-    track('paper_clicked', {
-      paper_id: paperId,
-      paper_title: paperTitle,
-      paper_source: source,
-      action_type: 'click'
-    })
-  }, [track])
-
-  // Research Events
-  const trackResearchCompiled = useCallback((query: string, paperCount: number) => {
-    track('research_compiled', {
-      query,
-      paper_count: paperCount
-    })
-  }, [track])
-
-  const trackProfileEnriched = useCallback((method: string, success: boolean) => {
-    track('profile_enriched', {
-      enrichment_method: method,
-      success
-    })
-  }, [track])
-
-  // Error Tracking
-  const trackError = useCallback((errorType: string, errorMessage: string, context?: string) => {
-    track('error_occurred', {
-      error_type: errorType,
-      error_message: errorMessage,
-      context,
-      timestamp: new Date().toISOString()
-    })
-  }, [track])
-
-  // Page Tracking
-  const trackPageView = useCallback((pageName: string, pageProperties?: TrackingProperties) => {
-    if (posthog) {
-      posthog.capture('$pageview', {
-        $current_url: window.location.href,
-        page_name: pageName,
-        ...pageProperties
+  const trackError = useCallback(
+    (domain: string, message: string, context?: string) => {
+      trackEvent({
+        name: 'error_occurred',
+        properties: {
+          domain,
+          message,
+          context,
+        },
       })
-    }
-  }, [posthog])
+    },
+    [trackEvent]
+  )
 
-  // User Properties
-  const setUserProperties = useCallback((properties: TrackingProperties) => {
-    if (posthog) {
-      posthog.people.set(properties)
-    }
-  }, [posthog])
+  const identifyUser = useCallback(
+    (userId: string) => {
+      if (!posthog) return
 
-  return useMemo(() => ({
-    // Core tracking
-    track,
-    trackPageView,
-    setUserProperties,
+      posthog.identify(userId)
+      restartSessionRecording?.()
+    },
+    [posthog, restartSessionRecording]
+  )
 
-    // Authentication
-    trackSignupAttempted,
-    trackSignupCompleted,
-    trackLoginAttempted,
-    trackLoginCompleted,
-    trackLogoutCompleted,
+  const resetUser = useCallback(() => {
+    if (!posthog) return
 
-    // Search
-    trackSearchQuery,
-    trackSearchResults,
+    posthog.reset()
+    restartSessionRecording?.()
+  }, [posthog, restartSessionRecording])
 
-    // Lists
-    trackListCreated,
-    trackPaperSavedToList,
-
-    // Paper interactions
-    trackPaperClicked,
-
-    // Research
-    trackResearchCompiled,
-    trackProfileEnriched,
-
-    // Error tracking
-    trackError
-  }), [track, trackPageView, setUserProperties, trackSignupAttempted, trackSignupCompleted, trackLoginAttempted, trackLoginCompleted, trackLogoutCompleted, trackSearchQuery, trackSearchResults, trackListCreated, trackPaperSavedToList, trackPaperClicked, trackResearchCompiled, trackProfileEnriched, trackError])
+  return useMemo(
+    () => ({
+      trackEvent,
+      trackError,
+      identifyUser,
+      resetUser,
+    }),
+    [identifyUser, resetUser, trackError, trackEvent]
+  )
 }

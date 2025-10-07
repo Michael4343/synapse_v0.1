@@ -11,10 +11,10 @@ This document outlines the comprehensive PostHog analytics and session recording
 - **Custom Hook** (`src/hooks/usePostHogTracking.ts`): Typed tracking methods for all user interactions
 
 ### Configuration Features
-- **2025 Defaults**: Latest PostHog configuration snapshot (`defaults: '2025-05-24'`)
-- **Full Session Recording**: Complete user session capture for prototype insights
-- **Autocapture Events**: Comprehensive DOM interaction tracking
-- **Manual Pageview Control**: Strategic pageview capture with page type categorisation
+- **Session Replays Enabled**: Session recording starts on load and restarts after identify/reset so every authenticated session is captured
+- **Manual Event Catalog**: Autocapture is disabled; only the curated events below are emitted
+- **Host Allowlist**: `NEXT_PUBLIC_POSTHOG_ALLOWED_HOSTS` gates uploads to production domains
+- **Manual Pageview Control**: Pageviews are captured explicitly inside the provider
 
 ## Environment Variables
 
@@ -22,74 +22,105 @@ This document outlines the comprehensive PostHog analytics and session recording
 # PostHog Analytics Configuration
 NEXT_PUBLIC_POSTHOG_KEY=your-posthog-project-api-key
 NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com
+NEXT_PUBLIC_POSTHOG_ALLOWED_HOSTS=research.evidentia.bio
 ```
 
 ## Tracked Events
 
-### Authentication Flow
-- `user_signup_attempted` - User initiates signup process
-- `user_signup_completed` - Successful account creation with user identification
-- `user_login_attempted` - User initiates login process
-- `user_login_completed` - Successful authentication with user identification
-- `user_logout_completed` - User logout with session reset
+### Authentication Lifecycle
+- `auth_signup_started` – Email or Google signup initiated
+- `auth_signup_completed` – Signup succeeds (records provisional `user_id`)
+- `auth_login_started` – Sign-in attempt begins
+- `auth_login_completed` – Sign-in succeeds and session recording is re-bound to the Supabase user id
+- `auth_logout_completed` – User logs out and identity resets
 
-### Onboarding Journey
-- `onboarding_started` - User enters onboarding flow
-- `onboarding_url_submitted` - Profile URL submission with type classification
-- `profile_generation_started` - AI profile generation initiated
-- `profile_generation_completed` - Profile generation completed with duration metrics
-- `onboarding_completed` - Full onboarding process completion
+### Profile Personalization
+- `profile_keywords_saved` – Research keywords saved or refreshed (flags first-time saves)
 
-### Feed Interactions
-- `feed_refresh_clicked` - Manual feed regeneration triggered
-- `feed_refresh_completed` - Feed refresh completed with performance metrics
-- `feed_item_clicked` - User clicks on feed item with content metadata
-- `feed_category_viewed` - Category interaction with item count metrics
+### Discovery Flows
+- `search_performed` – Manual search executed with result count, duration, sources, and year filter
+- `personal_feed_loaded` – Personalized feed (initial or pagination) loaded with result count
 
-### Research Analytics
-- `research_discovery_identified` - Discovery of breakthrough content
-- `content_engagement` - Deep content interaction tracking
+### Paper Engagement
+- `paper_viewed` – Paper selected from search results, saved lists, or the personal feed
+- `paper_saved` – Paper stored in a list (includes list id/name and whether the list was newly created)
 
-### Error Tracking
-- `error_occurred` - Comprehensive error capture with context
+### Verification
+- `verification_requested` – Verification workflow kicked off for the active paper
+
+### Reliability
+- `error_occurred` – User-facing failure with a scoped `domain` and optional context payload
 
 ## Event Properties Schema
 
-### User Events
+### Authentication Events
 ```typescript
-// Authentication
 {
-  signup_method: 'email' | 'google',
-  login_method: 'email' | 'google',
-  user_id: string
-}
-
-// URL Submission
-{
-  submitted_url: string,
-  url_type: 'linkedin' | 'google_scholar' | 'orcid' | 'other',
-  url_domain: string
-}
-
-// Performance Metrics
-{
-  generation_duration_ms: number,
-  profile_text_length: number,
-  feed_item_count: number,
-  feed_categories: string[]
+  method: 'email' | 'google',
+  user_id?: string
 }
 ```
 
-### Content Tracking
+### Search & Feed
 ```typescript
-// Feed Interactions
+// search_performed
 {
-  item_id: string,
-  item_type: 'breakthrough_publications' | 'emerging_technologies' | 'strategic_funding' | 'field_intelligence',
-  item_title: string,
-  item_source: string,
-  category_type: string,
-  category_item_count: number
+  query: string,
+  results_count: number,
+  duration_ms?: number,
+  sources: Array<'research' | 'patents'>,
+  year_filter?: number | null
+}
+
+// personal_feed_loaded
+{
+  results_count: number,
+  load_more: boolean
+}
+```
+
+### Paper Interaction
+```typescript
+// paper_viewed
+{
+  paper_id: string,
+  paper_title: string,
+  source?: string | null,
+  via: 'search_result' | 'list' | 'personal_feed'
+}
+
+// paper_saved
+{
+  paper_id: string,
+  paper_title: string,
+  list_id: string,
+  list_name: string,
+  created_list: boolean
+}
+```
+
+### Personalization & Verification
+```typescript
+// profile_keywords_saved
+{
+  keyword_count: number,
+  first_save: boolean
+}
+
+// verification_requested
+{
+  paper_id: string,
+  verification_type: string,
+  source?: string | null
+}
+```
+
+### Error Reporting
+```typescript
+{
+  domain: string,
+  message: string,
+  context?: string
 }
 ```
 
@@ -105,12 +136,13 @@ session_recording: {
 
 ### User Identification Strategy
 - **PostHog Identity**: Supabase user ID used for cross-session tracking
-- **Session Management**: Automatic identity reset on logout
+- **Session Recording Refresh**: Recording restarts after `identify` and `reset` so replays span each real session
 - **Privacy Compliance**: No sensitive data captured in events
 
 ### Performance Optimisations
 - **Client-Side Only**: All tracking happens in browser components
 - **Lazy Loading**: PostHog initialised after component mount
+- **Manual Instrumentation**: Autocapture disabled; only the events above are emitted
 - **Error Boundaries**: Tracking failures don't impact app functionality
 
 ## Usage Examples
@@ -119,28 +151,19 @@ session_recording: {
 ```typescript
 import { usePostHogTracking } from '@/hooks/usePostHogTracking'
 
-const tracking = usePostHogTracking()
+const { trackEvent, trackError } = usePostHogTracking()
 
-// Track user action
-tracking.trackFeedItemClicked(itemId, itemType, title, source)
-
-// Track performance
-tracking.trackProfileGenerationCompleted(durationMs, profileLength)
-
-// Track errors
-tracking.trackError('api_failure', errorMessage, { context: 'feed_generation' })
-```
-
-### Advanced Research Analytics
-```typescript
-// Research discovery tracking
-tracking.trackResearchDiscovery('breakthrough_paper')
-
-// Content engagement depth
-tracking.trackContentEngagement('time_spent', {
-  duration_seconds: 45,
-  item_type: 'publication'
+trackEvent({
+  name: 'search_performed',
+  properties: {
+    query: 'gene therapy manufacturing',
+    results_count: 18,
+    duration_ms: 420,
+    sources: ['research'],
+  }
 })
+
+trackError('search', 'LLM enrichment failed', 'handleKeywordSearch')
 ```
 
 ## Data Privacy & Compliance
@@ -173,7 +196,7 @@ tracking.trackContentEngagement('time_spent', {
 
 ### 2025 PostHog Features Used
 - **Latest Configuration Defaults**: Optimised for modern web applications
-- **Enhanced Autocapture**: Improved DOM event detection
+- **Session Replay Enhancements**: Utilises the 2025 recording pipeline with cross-origin support
 - **Performance Monitoring**: Built-in web vitals tracking
 - **React 18+ Support**: Full compatibility with React concurrent features
 

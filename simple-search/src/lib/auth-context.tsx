@@ -37,7 +37,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [loading, setLoading] = useState(true)
   const router = useRouter()
   const supabase = createClient()
-  const tracking = usePostHogTracking()
+  const { trackEvent, trackError, identifyUser, resetUser } = usePostHogTracking()
 
   useEffect(() => {
     // Get initial session
@@ -71,7 +71,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (event === 'SIGNED_IN' && session?.user) {
           const provider = session.user.app_metadata?.provider
           const method = provider === 'google' ? 'google' : 'email'
-          tracking.trackLoginCompleted(session.user.id, method)
+          trackEvent({
+            name: 'auth_login_completed',
+            properties: {
+              method,
+              user_id: session.user.id,
+            },
+          })
+          identifyUser(session.user.id)
         }
 
         // Handle sign out
@@ -79,18 +86,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
           setUser(null)
           setSession(null)
           router.push('/')
+          resetUser()
         }
       }
     )
 
     return () => subscription.unsubscribe()
-  }, [router, supabase.auth, tracking])
+  }, [identifyUser, resetUser, router, supabase.auth, trackEvent])
 
   const signUp = async (email: string, password: string) => {
-    tracking.trackSignupAttempted('email')
+    trackEvent({
+      name: 'auth_signup_started',
+      properties: { method: 'email' },
+    })
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -99,22 +110,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
       })
 
       if (!error) {
-        // Note: User ID will be available after email confirmation
-        tracking.trackSignupCompleted(email, 'email')
+        const userId = data?.user?.id ?? email
+        trackEvent({
+          name: 'auth_signup_completed',
+          properties: { method: 'email', user_id: userId },
+        })
+        if (data?.user?.id) {
+          identifyUser(data.user.id)
+        }
       } else {
-        tracking.trackError('signup_error', error.message, 'email_signup')
+        trackError('auth_signup', error.message, 'email_signup')
       }
 
       return { error }
     } catch (error) {
       console.error('Sign up error:', error)
-      tracking.trackError('signup_exception', (error as Error).message, 'email_signup')
+      trackError('auth_signup', (error as Error).message, 'email_signup')
       return { error: error as AuthError }
     }
   }
 
   const signIn = async (email: string, password: string) => {
-    tracking.trackLoginAttempted('email')
+    trackEvent({
+      name: 'auth_login_started',
+      properties: { method: 'email' },
+    })
 
     try {
       const { error, data } = await supabase.auth.signInWithPassword({
@@ -123,21 +143,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
       })
 
       if (!error && data.user) {
-        tracking.trackLoginCompleted(data.user.id, 'email')
+        trackEvent({
+          name: 'auth_login_completed',
+          properties: { method: 'email', user_id: data.user.id },
+        })
+        identifyUser(data.user.id)
       } else if (error) {
-        tracking.trackError('login_error', error.message, 'email_login')
+        trackError('auth_login', error.message, 'email_login')
       }
 
       return { error }
     } catch (error) {
       console.error('Sign in error:', error)
-      tracking.trackError('login_exception', (error as Error).message, 'email_login')
+      trackError('auth_login', (error as Error).message, 'email_login')
       return { error: error as AuthError }
     }
   }
 
   const signInWithGoogle = async () => {
-    tracking.trackLoginAttempted('google')
+    trackEvent({
+      name: 'auth_login_started',
+      properties: { method: 'google' },
+    })
 
     try {
       const { error } = await supabase.auth.signInWithOAuth({
@@ -148,14 +175,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
       })
 
       if (error) {
-        tracking.trackError('google_login_error', error.message, 'google_oauth')
+        trackError('auth_login', error.message, 'google_oauth')
       }
       // Note: Success tracking will happen in the auth state change handler
 
       return { error }
     } catch (error) {
       console.error('Google sign in error:', error)
-      tracking.trackError('google_login_exception', (error as Error).message, 'google_oauth')
+      trackError('auth_login', (error as Error).message, 'google_oauth')
       return { error: error as AuthError }
     }
   }
@@ -165,15 +192,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const { error } = await supabase.auth.signOut()
 
       if (!error) {
-        tracking.trackLogoutCompleted()
+        trackEvent({ name: 'auth_logout_completed' })
+        resetUser()
       } else {
-        tracking.trackError('logout_error', error.message, 'signout')
+        trackError('auth_logout', error.message, 'signout')
       }
 
       return { error }
     } catch (error) {
       console.error('Sign out error:', error)
-      tracking.trackError('logout_exception', (error as Error).message, 'signout')
+      trackError('auth_logout', (error as Error).message, 'signout')
       return { error: error as AuthError }
     }
   }

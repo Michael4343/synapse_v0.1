@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { LogOut, Rss, User, UserCog, X, AlertTriangle, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../lib/auth-context';
+import { usePostHogTracking } from '../hooks/usePostHogTracking';
 import { useAuthModal, getUserDisplayName } from '../lib/auth-hooks';
 import { createClient } from '../lib/supabase';
 import { AuthModal } from '../components/auth-modal';
@@ -1316,6 +1317,7 @@ function ClaimsReportPreview({
 export default function Home() {
   const { user, signOut } = useAuth();
   const authModal = useAuthModal();
+  const { trackEvent, trackError } = usePostHogTracking();
 
   const [keywordQuery, setKeywordQuery] = useState('');
   const [yearQuery, setYearQuery] = useState('');
@@ -1667,6 +1669,8 @@ export default function Home() {
         return;
       }
 
+      const hadManualKeywords = Boolean(profile?.profile_personalization?.manual_keywords?.length);
+
       setProfileEnrichmentLoading(true);
       setProfileEnrichmentError('');
 
@@ -1691,6 +1695,14 @@ export default function Home() {
 
         const result = await response.json();
 
+        trackEvent({
+          name: 'profile_keywords_saved',
+          properties: {
+            keyword_count: parsedManualKeywords.length,
+            first_save: !hadManualKeywords,
+          },
+        });
+
         // Update local state with the enriched profile
         setProfile((prev) => {
           if (!prev) {
@@ -1714,6 +1726,7 @@ export default function Home() {
       } catch (error) {
         console.error('Profile enrichment request failed', error);
         setProfileEnrichmentError(error instanceof Error ? error.message : 'We could not refresh your personalization. Please try again.');
+        trackError('profile_enrichment', error instanceof Error ? error.message : 'Unknown error', 'runProfileEnrichment');
       } finally {
         setProfileEnrichmentLoading(false);
       }
@@ -1723,6 +1736,9 @@ export default function Home() {
       profileEnrichmentLoading,
       profileManualKeywords,
       user,
+      profile?.profile_personalization?.manual_keywords?.length,
+      trackEvent,
+      trackError,
     ]);
 
   const handleRefreshPersonalFeed = useCallback(async (loadMore = false) => {
@@ -1781,11 +1797,20 @@ export default function Home() {
       }
 
       setHasMoreResults(hasMore);
+
+      trackEvent({
+        name: 'personal_feed_loaded',
+        properties: {
+          results_count: results.length,
+          load_more: loadMore,
+        },
+      });
     } catch (error) {
       console.error('Personal feed error:', error);
       if (!loadMore) {
         setKeywordError('Could not load your personal feed. Please try again.');
       }
+      trackError('personal_feed', error instanceof Error ? error.message : 'Unknown error', 'handleRefreshPersonalFeed');
     } finally {
       if (loadMore) {
         setLoadingMore(false);
@@ -1793,7 +1818,7 @@ export default function Home() {
         setKeywordLoading(false);
       }
     }
-  }, [profile, resultOffset]);
+  }, [profile, resultOffset, trackEvent, trackError]);
 
   const handleKeywordSearch = useCallback(async (e: React.FormEvent, loadMore = false) => {
     e.preventDefault();
@@ -1852,6 +1877,8 @@ export default function Home() {
       setResultOffset(0);
     }
 
+    const startTime = typeof performance !== 'undefined' ? performance.now() : null;
+
     try {
       const response = await fetch('/api/search', {
         method: 'POST',
@@ -1896,6 +1923,21 @@ export default function Home() {
       }
 
       setHasMoreResults(hasMore);
+
+      const sources: ('research' | 'patents')[] = [];
+      if (researchChecked) sources.push('research');
+      if (patentsChecked) sources.push('patents');
+
+      trackEvent({
+        name: 'search_performed',
+        properties: {
+          query: trimmed,
+          results_count: results.length,
+          duration_ms: startTime ? Math.round(performance.now() - startTime) : undefined,
+          sources,
+          year_filter: validYear ?? null,
+        },
+      });
     } catch (error) {
       console.error('Keyword search failed', error);
       setKeywordError('We could not reach the search service. Please try again.');
@@ -1903,6 +1945,7 @@ export default function Home() {
         setKeywordResults([]);
         setSelectedPaper(!user ? SAMPLE_PAPERS[0] : null);
       }
+      trackError('search', error instanceof Error ? error.message : 'Unknown error', 'handleKeywordSearch');
     } finally {
       if (loadMore) {
         setLoadingMore(false);
@@ -1910,7 +1953,7 @@ export default function Home() {
         setKeywordLoading(false);
       }
     }
-  }, [keywordQuery, yearQuery, researchChecked, patentsChecked, user, resultOffset]);
+  }, [keywordQuery, yearQuery, researchChecked, patentsChecked, user, resultOffset, trackEvent, trackError]);
 
   const handleLoadMore = useCallback(async () => {
     const isPersonalFeedActive = lastKeywordQuery === PERSONAL_FEED_LABEL;
@@ -2145,7 +2188,26 @@ export default function Home() {
       </div>
     );
   };
-  const renderResultList = (results: ApiSearchResult[], contextLabel: string) => {
+  const handleSelectPaper = useCallback(
+    (paper: ApiSearchResult, via: 'search_result' | 'list' | 'personal_feed') => {
+      if (selectedPaper?.id !== paper.id) {
+        trackEvent({
+          name: 'paper_viewed',
+          properties: {
+            paper_id: paper.id,
+            paper_title: paper.title,
+            source: paper.source,
+            via,
+          },
+        });
+      }
+
+      setSelectedPaper(paper);
+    },
+    [selectedPaper?.id, trackEvent]
+  );
+
+  const renderResultList = (results: ApiSearchResult[], contextLabel: string, selectionSource: 'search_result' | 'list' | 'personal_feed') => {
     const seenIds = new Set<string>();
     const uniqueResults: ApiSearchResult[] = [];
 
@@ -2168,11 +2230,11 @@ export default function Home() {
               key={result.id}
               role="button"
               tabIndex={0}
-              onClick={() => setSelectedPaper(result)}
+              onClick={() => handleSelectPaper(result, selectionSource)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault();
-                  setSelectedPaper(result);
+                  handleSelectPaper(result, selectionSource);
                 }
               }}
               className={`${TILE_BASE_CLASSES} ${isSelected ? TILE_SELECTED_CLASSES : ''}`}
@@ -2325,7 +2387,7 @@ export default function Home() {
         <h2 className="text-lg font-semibold text-slate-900">
           {userLists.find((list) => list.id === selectedListId)?.name || 'Selected List'}
         </h2>
-        {renderResultList(listItems, 'Saved paper')}
+        {renderResultList(listItems, 'Saved paper', 'list')}
       </div>
     );
   } else if (isListViewActive) {
@@ -2354,7 +2416,7 @@ export default function Home() {
             </span>
           )}
         </div>
-        {renderResultList(keywordResults, 'Search result')}
+        {renderResultList(keywordResults, 'Search result', 'search_result')}
         {hasMoreResults && !keywordLoading && !loadingMore && !feedPopulating && (
           <div className="flex justify-center mt-4">
             <button
@@ -2403,7 +2465,7 @@ export default function Home() {
       </div>
     );
   } else if (!user) {
-    mainFeedContent = renderResultList(SAMPLE_PAPERS, 'Featured pick');
+    mainFeedContent = renderResultList(SAMPLE_PAPERS, 'Featured pick', 'search_result');
   } else {
     mainFeedContent = (
       <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">
@@ -2594,6 +2656,14 @@ export default function Home() {
 
       setVerificationRequestStatus('success');
       await refreshVerificationSummary();
+      trackEvent({
+        name: 'verification_requested',
+        properties: {
+          paper_id: selectedPaper.id,
+          verification_type: 'combined',
+          source: selectedPaper.source,
+        },
+      });
     } catch (requestError) {
       console.error('Verification request failed:', requestError);
       setVerificationRequestError(
@@ -2602,6 +2672,11 @@ export default function Home() {
           : 'Unexpected error submitting verification request.'
       );
       setVerificationRequestStatus('error');
+      trackError(
+        'verification_request',
+        requestError instanceof Error ? requestError.message : 'Unknown error',
+        'handleVerificationRequest'
+      );
     } finally {
       requestAnimationFrame(() => {
         document.getElementById('verification-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
