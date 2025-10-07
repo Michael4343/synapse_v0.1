@@ -3893,9 +3893,9 @@ export default function Home() {
                         const statusLabel = status.replace('_', ' ');
                         let statusMessage = 'The request is recorded. We will follow up with the full briefing shortly.';
                         if (status === 'pending' || status === 'in_progress') {
-                          statusMessage = 'Agent is searching this now. Expect the briefing after the next feed refresh.';
+                          statusMessage = 'Agent is searching this now. We will email you once the search is complete.';
                         } else if (status === 'completed') {
-                          statusMessage = 'The analysis is complete. The briefing will appear after the next feed refresh.';
+                          statusMessage = 'The analysis is complete.';
                         } else if (status === 'cancelled') {
                           statusMessage = 'This request was cancelled. Re-run the briefing if you need a fresh analysis.';
                         }

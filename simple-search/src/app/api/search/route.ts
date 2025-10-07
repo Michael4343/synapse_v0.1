@@ -191,7 +191,10 @@ function normaliseQuery(query: string) {
   return query.trim()
 }
 
-async function getCachedResults(query: string, year: number | null): Promise<{ results: StoredSearchResult[]; fresh: boolean } | null> {
+async function getCachedResults(
+  query: string,
+  year: number | null
+): Promise<{ results: StoredSearchResult[]; fresh: boolean; resultsCount: number } | null> {
   // Create cache key that includes year to avoid wrong cache hits
   const cacheKey = year ? `${query}|year:${year}` : query
   const { data: queryRow, error: queryError } = await supabaseAdmin
@@ -253,6 +256,7 @@ async function getCachedResults(query: string, year: number | null): Promise<{ r
   return {
     results: orderedResults,
     fresh: isFresh,
+    resultsCount: typeof queryRow.results_count === 'number' ? queryRow.results_count : orderedResults.length,
   }
 }
 async function fetchSemanticScholar(query: string, year: number | null, offset: number, limit: number): Promise<SemanticScholarPaper[]> {
@@ -542,14 +546,20 @@ export async function POST(request: NextRequest) {
       ? Math.min(Math.max(1, body.limit), MAX_LIMIT)
       : DEFAULT_LIMIT
     const query = normaliseQuery(rawQuery)
+    const isFirstPage = offset === 0
 
     if (!query) {
       return NextResponse.json({ error: 'Query is required.' }, { status: 400 })
     }
 
-    const cacheHit = await getCachedResults(query, year)
+    const cacheHit = isFirstPage ? await getCachedResults(query, year) : null
     if (cacheHit?.fresh && cacheHit.results.length) {
-      return NextResponse.json({ results: buildResponsePayload(cacheHit.results), cached: true })
+      const cachedHasMore = cacheHit.resultsCount >= limit
+      return NextResponse.json({
+        results: buildResponsePayload(cacheHit.results),
+        cached: true,
+        hasMore: cachedHasMore,
+      })
     }
 
     let papers: SemanticScholarPaper[] = []
@@ -559,11 +569,12 @@ export async function POST(request: NextRequest) {
     } catch (apiError) {
       console.error('Semantic Scholar fetch failed', apiError)
 
-      if (cacheHit?.results?.length) {
+      if (isFirstPage && cacheHit?.results?.length) {
+        const cachedHasMore = cacheHit.resultsCount >= limit
         return NextResponse.json({
           results: buildResponsePayload(cacheHit.results),
           cached: true,
-          hasMore: false
+          hasMore: cachedHasMore
         })
       }
 
