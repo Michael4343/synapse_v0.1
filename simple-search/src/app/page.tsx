@@ -3684,12 +3684,12 @@ export default function Home() {
           </section>
 
           <aside
-            className={`min-h-0 min-w-0 transition-all duration-300 ${DETAIL_SHELL_CLASSES} xl:basis-[38%] xl:h-full xl:overflow-hidden xl:pl-2 xl:border-l xl:border-slate-200/70 2xl:basis-[40%]`}
+            className={`min-h-0 min-w-0 transition-all duration-300 ${DETAIL_SHELL_CLASSES} xl:basis-[38%] xl:h-full xl:overflow-y-auto xl:pl-2 xl:border-l xl:border-slate-200/70 2xl:basis-[40%]`}
           >
             {selectedPaper ? (
-              <div className="flex flex-col min-h-0 xl:flex-1 xl:overflow-y-auto">
+              <>
                 {/* Share Discovery */}
-                <div className="sticky top-0 z-20 bg-white px-4 pt-4 pb-3">
+                <div className="px-4 pb-3">
                   <div className="relative flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                     <input
                       type="text"
@@ -3708,7 +3708,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="flex flex-col space-y-6 min-h-0 px-4 pb-6 xl:flex-1">
+                <div className="flex flex-col space-y-6 px-4 pb-6 flex-1 min-h-0">
                   <div className={`${DETAIL_HERO_CLASSES} flex flex-col gap-4`}>
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-sky-600">Paper details</p>
@@ -3918,7 +3918,7 @@ export default function Home() {
                 )}
               </section>
             </div>
-          </div>
+          </>
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-slate-500">
               <h2 className="text-lg font-semibold text-slate-700">No paper selected</h2>
