@@ -3684,7 +3684,7 @@ export default function Home() {
           </section>
 
           <aside
-            className={`min-h-0 min-w-0 transition-all duration-300 ${DETAIL_SHELL_CLASSES} xl:basis-[38%] xl:h-full xl:overflow-y-auto xl:overflow-x-hidden xl:pl-2 xl:border-l xl:border-slate-200/70 2xl:basis-[40%]`}
+            className={`min-h-0 min-w-0 transition-all duration-300 ${DETAIL_SHELL_CLASSES} xl:basis-[38%] xl:h-full xl:overflow-hidden xl:pl-2 xl:border-l xl:border-slate-200/70 2xl:basis-[40%]`}
           >
             {selectedPaper ? (
               <>
@@ -3707,97 +3707,98 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className={`${DETAIL_HERO_CLASSES} flex flex-col gap-4`}>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-sky-600">Paper details</p>
-                    <button
-                      type="button"
-                      onClick={handleSaveSelectedPaper}
-                      className={DETAIL_SAVE_BUTTON_CLASSES}
-                    >
-                      Save to List
-                    </button>
-                  </div>
-                  <h2 className="text-2xl font-semibold text-slate-900">{selectedPaper.title}</h2>
-                  {metaSummary ? (
+                <div className="flex flex-col space-y-6 min-h-0 xl:flex-1 xl:overflow-y-auto">
+                  <div className={`${DETAIL_HERO_CLASSES} flex flex-col gap-4`}>
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                      <p className="text-xs text-slate-600">{metaSummary}</p>
-                      {verificationButtons}
-                    </div>
-                  ) : (
-                    <div className="flex justify-end">
-                      {verificationButtons}
-                    </div>
-                  )}
-                </div>
-
-              <section className="space-y-4">
-                <div>
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Authors</h3>
-                  <p className="mt-2 text-sm text-slate-700">
-                    {selectedPaper.authors.length ? selectedPaper.authors.join(', ') : 'Author information unavailable.'}
-                  </p>
-                </div>
-
-                <div>
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Abstract</h3>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
-                    {selectedPaper.abstract ?? 'Abstract not available for this entry.'}
-                  </p>
-                </div>
-
-                {/* DOI/External links for non-sample papers */}
-                {!isSamplePaperId(selectedPaper.id) && selectedPaperPrimaryLink && (
-                  <div className={DETAIL_METADATA_CLASSES}>
-                    <p>
-                      <a
-                        href={selectedPaperPrimaryLink.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={DETAIL_LINK_CLASSES}
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-sky-600">Paper details</p>
+                      <button
+                        type="button"
+                        onClick={handleSaveSelectedPaper}
+                        className={DETAIL_SAVE_BUTTON_CLASSES}
                       >
-                        {selectedPaperPrimaryLink.label}
-                      </a>
-                    </p>
+                        Save to List
+                      </button>
+                    </div>
+                    <h2 className="text-2xl font-semibold text-slate-900">{selectedPaper.title}</h2>
+                    {metaSummary ? (
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                        <p className="text-xs text-slate-600">{metaSummary}</p>
+                        {verificationButtons}
+                      </div>
+                    ) : (
+                      <div className="flex justify-end">
+                        {verificationButtons}
+                      </div>
+                    )}
                   </div>
-                )}
 
-                <div id="verification-panel" className="space-y-4">
-                  {hasSelectedPaper ? (
-                    verificationRequestStatus === 'error' ? (
-                      <div className="rounded-2xl border border-rose-200 bg-rose-50 px-6 py-5 text-sm text-rose-600">
-                        <p className="text-sm font-semibold text-rose-700">We could not send this request</p>
-                        <p className="mt-2 leading-relaxed">
-                          {verificationRequestError || 'Please try again in a moment.'}
+                  <section className="space-y-4">
+                    <div>
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Authors</h3>
+                      <p className="mt-2 text-sm text-slate-700">
+                        {selectedPaper.authors.length ? selectedPaper.authors.join(', ') : 'Author information unavailable.'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Abstract</h3>
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
+                        {selectedPaper.abstract ?? 'Abstract not available for this entry.'}
+                      </p>
+                    </div>
+
+                    {/* DOI/External links for non-sample papers */}
+                    {!isSamplePaperId(selectedPaper.id) && selectedPaperPrimaryLink && (
+                      <div className={DETAIL_METADATA_CLASSES}>
+                        <p>
+                          <a
+                            href={selectedPaperPrimaryLink.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={DETAIL_LINK_CLASSES}
+                          >
+                            {selectedPaperPrimaryLink.label}
+                          </a>
                         </p>
                       </div>
-                    ) : verificationRequestStatus === 'sending' || verificationSummaryLoading ? (
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-6 py-5 text-center text-sm text-slate-600">
-                        {verificationRequestStatus === 'sending' ? 'Sending your request…' : 'Checking verification status…'}
-                      </div>
-                    ) : (() => {
-                      const fallbackReport =
-                        latestVerificationRequest && latestVerificationRequest.result_summary && typeof latestVerificationRequest.result_summary === 'object'
-                          ? (latestVerificationRequest.result_summary as ResearchPaperAnalysis)
-                          : null;
+                    )}
 
-                      const activeReport = verificationView === 'claims'
-                        ? claimsReport ?? fallbackReport
-                        : reproducibilityReport ?? fallbackReport;
+                    <div id="verification-panel" className="space-y-4">
+                      {hasSelectedPaper ? (
+                        verificationRequestStatus === 'error' ? (
+                          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-6 py-5 text-sm text-rose-600">
+                            <p className="text-sm font-semibold text-rose-700">We could not send this request</p>
+                            <p className="mt-2 leading-relaxed">
+                              {verificationRequestError || 'Please try again in a moment.'}
+                            </p>
+                          </div>
+                        ) : verificationRequestStatus === 'sending' || verificationSummaryLoading ? (
+                          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-6 py-5 text-center text-sm text-slate-600">
+                            {verificationRequestStatus === 'sending' ? 'Sending your request…' : 'Checking verification status…'}
+                          </div>
+                        ) : (() => {
+                          const fallbackReport =
+                            latestVerificationRequest && latestVerificationRequest.result_summary && typeof latestVerificationRequest.result_summary === 'object'
+                              ? (latestVerificationRequest.result_summary as ResearchPaperAnalysis)
+                              : null;
 
-                      if (activeReport) {
-                        const communityReviewHandler = user
-                          ? handleCommunityReviewRequest
-                          : (_track: VerificationTrack) => {
-                              authModal.openSignup();
-                            };
+                          const activeReport = verificationView === 'claims'
+                            ? claimsReport ?? fallbackReport
+                            : reproducibilityReport ?? fallbackReport;
 
-                        return verificationView === 'claims' ? (
-                          <ClaimsReportPreview
-                            report={activeReport}
-                            onRequestReview={communityReviewHandler}
-                            communityReviewStatus={communityReviewStatus}
-                            communityReviewRequested={hasCommunityReviewRequest}
+                          if (activeReport) {
+                            const communityReviewHandler = user
+                              ? handleCommunityReviewRequest
+                              : (_track: VerificationTrack) => {
+                                  authModal.openSignup();
+                                };
+
+                            return verificationView === 'claims' ? (
+                              <ClaimsReportPreview
+                                report={activeReport}
+                                onRequestReview={communityReviewHandler}
+                                communityReviewStatus={communityReviewStatus}
+                                communityReviewRequested={hasCommunityReviewRequest}
                             communityReviewError={communityReviewError}
                           />
                         ) : (
@@ -3915,6 +3916,7 @@ export default function Home() {
                   </div>
                 )}
               </section>
+            </div>
             </>
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-slate-500">
