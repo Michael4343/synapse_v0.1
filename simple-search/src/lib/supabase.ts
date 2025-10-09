@@ -37,5 +37,6 @@ export const TABLES = {
   EMAIL_LOGS: 'email_logs',
   PAPER_FEEDBACK: 'paper_feedback',
   VERIFICATION_REQUESTS: 'paper_verification_requests',
-  COMMUNITY_REVIEW_REQUESTS: 'paper_community_review_requests'
+  COMMUNITY_REVIEW_REQUESTS: 'paper_community_review_requests',
+  PAPER_DISCUSSIONS: 'paper_discussions'
 } as const
