@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react'
 import { User, Session, AuthError } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
 import { createClient } from './supabase'
@@ -38,6 +38,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const router = useRouter()
   const supabase = createClient()
   const { trackEvent, trackError, identifyUser, resetUser } = usePostHogTracking()
+
+  // Helper to identify user with person properties
+  const identifyUserWithProperties = useCallback(async (userId: string) => {
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('orcid_id, profile_personalization, created_at')
+        .eq('user_id', userId)
+        .single()
+
+      const personalization = profile?.profile_personalization as any
+      const manualKeywords = personalization?.manual_keywords || []
+
+      const userProperties = {
+        keyword_count: manualKeywords.length,
+        has_orcid: !!profile?.orcid_id,
+        signup_date: profile?.created_at || new Date().toISOString()
+      }
+
+      identifyUser(userId, userProperties)
+    } catch (error) {
+      // Fallback to basic identification if profile fetch fails
+      identifyUser(userId)
+    }
+  }, [identifyUser, supabase])
 
   useEffect(() => {
     // Get initial session
@@ -78,7 +103,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
               user_id: session.user.id,
             },
           })
-          identifyUser(session.user.id)
+          identifyUserWithProperties(session.user.id)
         }
 
         // Handle sign out
@@ -92,7 +117,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     )
 
     return () => subscription.unsubscribe()
-  }, [identifyUser, resetUser, router, supabase.auth, trackEvent])
+  }, [identifyUser, identifyUserWithProperties, resetUser, router, supabase, trackEvent])
 
   const signUp = async (email: string, password: string) => {
     trackEvent({
@@ -116,7 +141,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           properties: { method: 'email', user_id: userId },
         })
         if (data?.user?.id) {
-          identifyUser(data.user.id)
+          identifyUserWithProperties(data.user.id)
         }
       } else {
         trackError('auth_signup', error.message, 'email_signup')
@@ -147,7 +172,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           name: 'auth_login_completed',
           properties: { method: 'email', user_id: data.user.id },
         })
-        identifyUser(data.user.id)
+        identifyUserWithProperties(data.user.id)
       } else if (error) {
         trackError('auth_login', error.message, 'email_login')
       }

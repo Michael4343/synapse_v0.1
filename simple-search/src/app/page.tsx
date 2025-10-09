@@ -1385,6 +1385,8 @@ export default function Home() {
   const hasSetFirstPaperRef = useRef(false);
   const feedObservedChangeRef = useRef(false);
   const feedLastUpdatedRef = useRef<string | null>(null);
+  const paperViewStartTimeRef = useRef<number | null>(null);
+  const previousPaperRef = useRef<ApiSearchResult | null>(null);
   const feedBaselineRecordedRef = useRef(false);
   const personalFeedInitializedRef = useRef(false);
 
@@ -1428,6 +1430,35 @@ export default function Home() {
       isMountedRef.current = false;
     };
   }, []);
+
+  // Track time spent viewing papers
+  useEffect(() => {
+    const previousPaper = previousPaperRef.current;
+    const currentPaper = selectedPaper;
+
+    // If we had a previous paper and it's different from current, track time spent
+    if (previousPaper && previousPaper.id !== currentPaper?.id && paperViewStartTimeRef.current) {
+      const durationMs = Date.now() - paperViewStartTimeRef.current;
+      const durationSeconds = Math.round(durationMs / 1000);
+
+      // Only track if user spent at least 3 seconds viewing the paper
+      if (durationSeconds >= 3) {
+        trackEvent({
+          name: 'paper_time_spent',
+          properties: {
+            duration_seconds: durationSeconds,
+            paper_id: previousPaper.id,
+            paper_title: previousPaper.title,
+            source: previousPaper.source,
+          },
+        });
+      }
+    }
+
+    // Update refs for next change
+    previousPaperRef.current = currentPaper;
+    paperViewStartTimeRef.current = currentPaper ? Date.now() : null;
+  }, [selectedPaper, trackEvent]);
 
   const fetchUserLists = useCallback(async (force = false) => {
     if (!user) return;
@@ -1703,6 +1734,16 @@ export default function Home() {
           },
         });
 
+        // Track onboarding completion on first keyword save
+        if (!hadManualKeywords) {
+          trackEvent({
+            name: 'onboarding_completed',
+            properties: {
+              keyword_count: parsedManualKeywords.length,
+            },
+          });
+        }
+
         // Update local state with the enriched profile
         setProfile((prev) => {
           if (!prev) {
@@ -1828,6 +1869,11 @@ export default function Home() {
     const validYear = parsedYear && parsedYear >= 1900 && parsedYear <= new Date().getFullYear() + 2 ? parsedYear : null;
     const atLeastOneFilter = researchChecked || patentsChecked;
 
+    if (!user && !loadMore) {
+      authModal.openSignup();
+      return;
+    }
+
     // Clear list selection when searching (but not when loading more)
     if (!loadMore) {
       setSelectedListId(null);
@@ -1835,7 +1881,11 @@ export default function Home() {
     }
 
     if (!trimmed) {
-      setKeywordError('Enter keywords to explore the literature feed.');
+      if (user) {
+        setKeywordError('Enter keywords to explore the literature feed.');
+      } else {
+        setKeywordError('');
+      }
       setKeywordResults([]);
       setSelectedPaper(!user ? SAMPLE_PAPERS[0] : null);
       setLastKeywordQuery('');
@@ -1953,7 +2003,7 @@ export default function Home() {
         setKeywordLoading(false);
       }
     }
-  }, [keywordQuery, yearQuery, researchChecked, patentsChecked, user, resultOffset, trackEvent, trackError]);
+  }, [keywordQuery, yearQuery, researchChecked, patentsChecked, user, resultOffset, trackEvent, trackError, authModal]);
 
   const handleLoadMore = useCallback(async () => {
     const isPersonalFeedActive = lastKeywordQuery === PERSONAL_FEED_LABEL;
@@ -2661,6 +2711,14 @@ export default function Home() {
         properties: {
           paper_id: selectedPaper.id,
           verification_type: 'combined',
+          source: selectedPaper.source,
+        },
+      });
+      trackEvent({
+        name: 'research_compile_requested',
+        properties: {
+          paper_id: selectedPaper.id,
+          paper_title: selectedPaper.title,
           source: selectedPaper.source,
         },
       });

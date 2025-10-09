@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//mnt/c/Users/mickl/Desktop/synapse v0.1/**)",
+      "WebFetch(domain:posthog.com)",
+      "WebSearch"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

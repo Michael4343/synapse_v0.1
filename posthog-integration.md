@@ -36,6 +36,7 @@ NEXT_PUBLIC_POSTHOG_ALLOWED_HOSTS=research.evidentia.bio
 
 ### Profile Personalization
 - `profile_keywords_saved` – Research keywords saved or refreshed (flags first-time saves)
+- `onboarding_completed` – User completes onboarding by saving their first keywords (activation metric)
 
 ### Discovery Flows
 - `search_performed` – Manual search executed with result count, duration, sources, and year filter
@@ -44,6 +45,8 @@ NEXT_PUBLIC_POSTHOG_ALLOWED_HOSTS=research.evidentia.bio
 ### Paper Engagement
 - `paper_viewed` – Paper selected from search results, saved lists, or the personal feed
 - `paper_saved` – Paper stored in a list (includes list id/name and whether the list was newly created)
+- `paper_time_spent` – Time spent reviewing paper details (tracked when switching papers or closing, min 3 seconds)
+- `research_compile_requested` – User requests research compilation/verification for a paper (high-intent action)
 
 ### Verification
 - `verification_requested` – Verification workflow kicked off for the active paper
@@ -107,6 +110,27 @@ NEXT_PUBLIC_POSTHOG_ALLOWED_HOSTS=research.evidentia.bio
   first_save: boolean
 }
 
+// onboarding_completed
+{
+  keyword_count: number,
+  time_to_complete_seconds?: number
+}
+
+// research_compile_requested
+{
+  paper_id: string,
+  paper_title: string,
+  source?: string | null
+}
+
+// paper_time_spent
+{
+  duration_seconds: number,
+  paper_id: string,
+  paper_title: string,
+  source?: string | null
+}
+
 // verification_requested
 {
   paper_id: string,
@@ -123,6 +147,26 @@ NEXT_PUBLIC_POSTHOG_ALLOWED_HOSTS=research.evidentia.bio
   context?: string
 }
 ```
+
+## Person Properties (User Attributes)
+
+Person properties are set when a user is identified (login/signup) and provide context for analyzing user behavior:
+
+```typescript
+{
+  keyword_count: number,      // Number of research keywords saved
+  has_orcid: boolean,         // Whether user has connected ORCID
+  signup_date: string         // ISO timestamp of account creation
+}
+```
+
+These properties allow you to:
+- **Segment users** by engagement level (keyword_count)
+- **Analyze cohorts** by signup date
+- **Track feature adoption** (has_orcid)
+- **Correlate behavior** with profile completeness
+
+Person properties persist across sessions and are automatically included in all event analytics.
 
 ## Implementation Details
 
@@ -181,16 +225,40 @@ trackError('search', 'LLM enrichment failed', 'handleKeywordSearch')
 
 ## Dashboard & Analytics
 
-### Key Metrics Tracked
-1. **User Acquisition**: Signup conversion rates and authentication patterns
-2. **Onboarding Efficiency**: Profile generation completion rates and duration
-3. **Content Discovery**: Feed interaction patterns and research breakthrough identification
-4. **Technical Performance**: API response times and error rates
+### North Star Metric 🎯
+**Papers viewed from personal feed per week** - Measures if users get value from AI-powered personalization
+
+#### How to Track in PostHog:
+1. **Insights** → **Trends** → Select `paper_viewed` event
+2. **Filter by:** `via = personal_feed`
+3. **Time:** Set to "Weekly"
+4. **Math:** Count unique users or total events
+5. **Save as:** "Papers Viewed from Feed (Weekly)"
+
+### Key Dashboards to Create
+
+#### 1. Activation Dashboard
+- **Funnel:** `auth_signup_completed` → `onboarding_completed` → `personal_feed_loaded`
+- **Time to Convert:** Signup → onboarding completion
+- **Completion Rate:** % users completing onboarding
+
+#### 2. Engagement Dashboard
+- **Papers Viewed:** Filter by source (`personal_feed` vs `search_result` vs `list`)
+- **Searches per Week:** Trend of `search_performed` events
+- **Paper Saves:** Trend of `paper_saved` events
+- **Research Compiles:** Count of `research_compile_requested` (power user metric)
+- **Time Spent:** Average `duration_seconds` from `paper_time_spent` events
+
+#### 3. Retention Dashboard
+- **Weekly Active Users (WAU):** Unique users per week
+- **User Retention Cohorts:** By signup date
+- **Segment by Properties:** Filter by `keyword_count` to compare engaged vs casual users
 
 ### Research-Specific Insights
 - **Content Relevance**: Which research categories drive highest engagement
 - **Discovery Patterns**: How users interact with breakthrough vs routine content
 - **Profile Quality Impact**: Correlation between profile completeness and feed engagement
+- **Power Users**: Who requests research compilations (high-value users)
 
 ## Development Notes
 
@@ -237,6 +305,6 @@ tracking.trackError('test_event', 'Testing PostHog integration')
 
 ---
 
-*Last Updated: September 15, 2025*
+*Last Updated: October 9, 2025*
 *PostHog Version: 1.266.0*
-*Configuration: 2025-05-24 defaults*
+*Configuration: Enhanced with Person Properties and Engagement Metrics*

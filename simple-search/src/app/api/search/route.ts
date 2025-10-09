@@ -512,11 +512,27 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const isSessionMissingError =
+      authError &&
+      typeof authError === 'object' &&
+      'status' in authError &&
+      (authError as { status?: number }).status === 400
+
+    if (authError && !isSessionMissingError) {
+      console.error('Search API: failed to verify auth state', authError)
     }
 
-    const rateResult = checkRateLimit(`search:${user.id}`, USER_RATE_LIMIT_WINDOW_MS, USER_RATE_LIMIT_MAX_REQUESTS)
+    const forwardedFor = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    const clientIdentifier =
+      user?.id ||
+      request.ip ||
+      forwardedFor ||
+      request.headers.get('x-real-ip') ||
+      'anonymous'
+
+    const rateLimitKey = user ? `search:user:${clientIdentifier}` : `search:anon:${clientIdentifier}`
+
+    const rateResult = checkRateLimit(rateLimitKey, USER_RATE_LIMIT_WINDOW_MS, USER_RATE_LIMIT_MAX_REQUESTS)
     if (!rateResult.allowed) {
       const retrySeconds = rateResult.retryAfterMs ? Math.ceil(rateResult.retryAfterMs / 1000) : 60
       return NextResponse.json(

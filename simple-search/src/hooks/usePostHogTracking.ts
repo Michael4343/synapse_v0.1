@@ -97,6 +97,30 @@ type AppEvent =
         context?: string
       }
     }
+  | {
+      name: 'onboarding_completed'
+      properties: {
+        keyword_count: number
+        time_to_complete_seconds?: number
+      }
+    }
+  | {
+      name: 'research_compile_requested'
+      properties: {
+        paper_id: string
+        paper_title: string
+        source?: string | null
+      }
+    }
+  | {
+      name: 'paper_time_spent'
+      properties: {
+        duration_seconds: number
+        paper_id: string
+        paper_title: string
+        source?: string | null
+      }
+    }
 
 export function usePostHogTracking() {
   const { posthog, restartSessionRecording } = usePostHog()
@@ -131,10 +155,10 @@ export function usePostHogTracking() {
   )
 
   const identifyUser = useCallback(
-    (userId: string) => {
+    (userId: string, userProperties?: Record<string, any>) => {
       if (!posthog) return
 
-      posthog.identify(userId)
+      posthog.identify(userId, userProperties)
       restartSessionRecording?.()
     },
     [posthog, restartSessionRecording]
