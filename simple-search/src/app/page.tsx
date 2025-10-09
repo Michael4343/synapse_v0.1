@@ -3084,7 +3084,7 @@ export default function Home() {
   };
 
   const handleTutorialSignUp = () => {
-    authModal.openRegister();
+    authModal.openSignup();
   };
 
   const handleTutorialStepChange = (step: number) => {

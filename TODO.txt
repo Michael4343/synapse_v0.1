@@ -1,6 +1,11 @@
 TODO
 overhaul UI paper details
 compile similar literature
+automate ORCID fill and search user for keywords
+
+
+
+
 compile similar patents
 optimise user tracking
 
