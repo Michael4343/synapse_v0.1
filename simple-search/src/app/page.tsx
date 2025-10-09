@@ -64,8 +64,20 @@ interface ProcessedContent {
   }
 }
 
+interface MockSimilarPaper {
+  id: string
+  title: string
+  authors: string
+  venue: string
+  year: string
+  summary: string
+  highlight: string
+  methods: string[]
+  findings: string[]
+}
+
 type VerificationRequestType = 'combined';
-type VerificationTrack = 'claims' | 'reproducibility' | 'paper';
+type VerificationTrack = 'claims' | 'reproducibility' | 'paper' | 'similar';
 
 interface ResearchPaperAnalysis {
   stage: string;
@@ -374,7 +386,9 @@ const SIDEBAR_SECONDARY_BUTTON_CLASSES = 'flex items-center justify-center round
 const SEARCH_SPINNER_CLASSES = 'inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent';
 const DETAIL_SAVE_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 sm:px-8 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50';
 const DETAIL_REPRO_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-lg border border-sky-200 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50';
+const DETAIL_SIMILAR_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-lg border border-emerald-200 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-emerald-700 transition hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50';
 const DETAIL_VERIFY_BUTTON_ACTIVE_CLASSES = 'border-sky-400 bg-sky-50 text-sky-900 shadow-[0_12px_28px_rgba(56,189,248,0.25)] ring-2 ring-offset-2 ring-sky-200';
+const DETAIL_SIMILAR_BUTTON_ACTIVE_CLASSES = 'border-emerald-400 bg-emerald-50 text-emerald-900 shadow-[0_12px_28px_rgba(16,185,129,0.25)] ring-2 ring-offset-2 ring-emerald-200';
 const PROFILE_CARD_CLASSES = 'rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
 const ACCOUNT_ICON_BUTTON_CLASSES = 'inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-900';
 const PROFILE_LABEL_CLASSES = 'text-sm font-medium text-slate-700';
@@ -2575,6 +2589,93 @@ export default function Home() {
   const isTrackReportAvailable = (track: VerificationTrack) =>
     track === 'claims' ? hasClaimsReport : track === 'reproducibility' ? hasReproReport : false;
 
+  const compiledSimilarPapers = useMemo<MockSimilarPaper[]>(() => {
+    if (!selectedPaper) {
+      return [];
+    }
+
+    const leadAuthor = selectedPaper.authors[0] ?? 'Lead research team';
+    const venueLabel = selectedPaper.venue ?? 'leading venues';
+    const publicationWindow = selectedPaper.year ? selectedPaper.year.toString() : 'recent years';
+    const focusAreaRaw = selectedPaper.title.split(/[–—:\-]/)[0]?.trim() ?? selectedPaper.title;
+    const focusArea = focusAreaRaw.length > 0 ? focusAreaRaw : selectedPaper.title;
+    const conciseFocusArea = focusArea.length > 80 ? `${focusArea.slice(0, 77)}…` : focusArea;
+    const displayFocusArea = conciseFocusArea.length > 0 ? conciseFocusArea : 'this study';
+    const abstractContext = selectedPaper.abstract
+      ? selectedPaper.abstract.length > 140
+        ? `${selectedPaper.abstract.slice(0, 137)}…`
+        : selectedPaper.abstract
+      : '';
+    const contextLine = abstractContext
+      ? `Signal extracted from abstract: ${abstractContext}`
+      : `Signal extracted from editorial summaries in ${venueLabel}.`;
+
+    return [
+      {
+        id: `${selectedPaper.id}-methodology-cluster`,
+        title: `${displayFocusArea} — methodology echoes`,
+        authors: `${leadAuthor} et al.`,
+        venue: venueLabel,
+        year: publicationWindow,
+        summary:
+          'Focuses on teams mirroring the experimental setup to stress-test reproducibility across laboratories and instrumentation.',
+        highlight:
+          'Pay attention to calibration notes and cohort selection—they show how peers reconcile small deviations from the original protocol.',
+        methods: [
+          'Factorial design sweeps for lipid ratios and charge-balancing excipients',
+          'High-throughput nebuliser stress rigs to profile aerosol stability',
+          'Cryogenic TEM paired with dynamic light scattering for particle morphology'
+        ],
+        findings: [
+          'Identified optimal helper lipid blend that preserved >85% encapsulation efficiency.',
+          'Documented protocol for aligning aerosol pressure curves across lab hardware.',
+          'Shared calibration worksheet to standardise nebuliser plume density checks.'
+        ]
+      },
+      {
+        id: `${selectedPaper.id}-application-bridge`,
+        title: `Translational takes on ${displayFocusArea}`,
+        authors: `Applied research groups referencing ${leadAuthor}`,
+        venue: 'Translational cohorts',
+        year: 'Field deployments',
+        summary:
+          'Tracked for practitioners adapting the core method to production-scale datasets, instrumentation upgrades, and cross-domain collaborations.',
+        highlight:
+          'Use this cluster when drafting collaboration briefs or benchmarking how the approach behaves under real-world constraints.',
+        methods: [
+          'Scaled spray-drying with inline particle sizing and humidity control',
+          'Process analytical technology (PAT) dashboards for lot release',
+          'Real-world respiratory deposition modelling coupled with patient monitoring'
+        ],
+        findings: [
+          'Demonstrated 20% faster turnaround for GMP-compatible batches without potency loss.',
+          'Outlined QA checkpoints that caught shear-induced RNA degradation early.',
+          'Reported adherence data showing strong patient tolerance in clinical pilots.'
+        ]
+      },
+      {
+        id: `${selectedPaper.id}-theory-thread`,
+        title: `Conceptual framings aligned with ${displayFocusArea}`,
+        authors: 'Theory & methods consortiums',
+        venue: 'Conceptual frameworks',
+        year: 'Insight primers',
+        summary:
+          'Highlights the theoretical through-lines that anchor the study, surfacing foundational citations and interpretability discussions.',
+        highlight: contextLine,
+        methods: [
+          'Computational fluid dynamics exploring nozzle-plume harmonics',
+          'Statistical design of experiments for multi-factor stability envelopes',
+          'Comparative modelling of lipid polymorphism under thermal stress'
+        ],
+        findings: [
+          'Provides intuition for why specific lipid polymorphs unlock longer airway residence.',
+          'Summarises cross-study consensus on robustness thresholds for nebulised RNA payloads.',
+          'Includes quick-look decision tree for selecting DOE templates by formulation goal.'
+        ]
+      }
+    ];
+  }, [selectedPaper]);
+
   const refreshVerificationSummary = useCallback(async () => {
     if (!selectedPaperId) {
       setVerificationSummary(null);
@@ -2907,8 +3008,16 @@ export default function Home() {
   }, [communityReviewStatus, hasCommunityReviewRequest, user]);
 
   const getVerificationButtonClasses = (track: VerificationTrack) => {
-    if (track !== 'paper' && shouldDisableVerification) {
+    if ((track === 'claims' || track === 'reproducibility') && shouldDisableVerification) {
       return 'inline-flex items-center justify-center rounded-lg border border-slate-200 bg-slate-100 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400 cursor-not-allowed opacity-60';
+    }
+
+    if (track === 'similar') {
+      const classes = [DETAIL_SIMILAR_BUTTON_CLASSES];
+      if (verificationView === 'similar') {
+        classes.push(DETAIL_SIMILAR_BUTTON_ACTIVE_CLASSES);
+      }
+      return classes.join(' ');
     }
 
     const classes = [DETAIL_REPRO_BUTTON_CLASSES];
@@ -2919,20 +3028,25 @@ export default function Home() {
   };
 
   const BASE_LABELS: Record<VerificationTrack, string> = {
-    reproducibility: 'VERIFY REPRODUCIBILITY',
-    claims: 'VERIFY CLAIMS',
-    paper: 'SHOW PAPER'
+    reproducibility: 'CAN I REPRODUCE THIS?',
+    claims: 'PAPER CLAIMS',
+    paper: 'SHOW THIS PAPER',
+    similar: 'COMPILE SIMILAR PAPERS'
   };
 
   const VIEW_LABELS: Record<VerificationTrack, string> = {
-    reproducibility: 'VERIFIED REPRODUCIBILITY',
-    claims: 'VERIFIED CLAIMS',
-    paper: 'SHOW PAPER'
+    reproducibility: 'CAN I REPRODUCE THIS?',
+    claims: 'PAPER CLAIMS',
+    paper: 'SHOW THIS PAPER',
+    similar: 'COMPILE SIMILAR PAPERS'
   };
 
   const getVerificationButtonLabel = (track: VerificationTrack): string => {
     if (track === 'paper') {
       return 'SHOW PAPER';
+    }
+    if (track === 'similar') {
+      return verificationView === 'similar' ? VIEW_LABELS.similar : BASE_LABELS.similar;
     }
     if (isVerificationSending) {
       return 'Sending request…';
@@ -2946,6 +3060,11 @@ export default function Home() {
   const getVerificationButtonTitle = (track: VerificationTrack): string => {
     if (track === 'paper') {
       return 'View paper details (authors and abstract)';
+    }
+    if (track === 'similar') {
+      return hasSelectedPaper
+        ? 'Explore curated clusters of adjacent literature that echo this study.'
+        : 'Select a paper to explore similar work.';
     }
     if (!hasSelectedPaper) {
       return 'Select a paper to request a verification briefing.';
@@ -2986,6 +3105,23 @@ export default function Home() {
         </button>
         <span
           className={`h-1 w-full rounded-full bg-gradient-to-r from-slate-400 via-slate-500 to-slate-600 transition-all duration-200 ease-out ${verificationView === 'paper' ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
+        />
+      </div>
+      <div className="flex flex-col items-center gap-1">
+        <button
+          type="button"
+          onClick={() => updateVerificationView('similar')}
+          className={getVerificationButtonClasses('similar')}
+          aria-pressed={verificationView === 'similar'}
+          title={getVerificationButtonTitle('similar')}
+          data-tutorial="similar-papers-button"
+        >
+          <span className="flex items-center gap-2">
+            {getVerificationButtonLabel('similar')}
+          </span>
+        </button>
+        <span
+          className={`h-1 w-full rounded-full bg-gradient-to-r from-emerald-400 via-teal-500 to-sky-500 transition-all duration-200 ease-out ${verificationView === 'similar' ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
         />
       </div>
       <div className="flex flex-col items-center gap-1">
@@ -3984,7 +4120,106 @@ export default function Home() {
                       </div>
                     )}
 
-                    {verificationView !== 'paper' && (
+                    {verificationView === 'similar' && (
+                      <div className="space-y-6" data-tutorial="similar-papers-panel">
+                        {compiledSimilarPapers.length > 0 ? (
+                          <div className="space-y-6">
+                            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white/90 shadow-sm">
+                              <div className="border-b border-slate-200 bg-emerald-50/70 px-6 py-4">
+                                <h4 className="text-sm font-semibold uppercase tracking-[0.3em] text-emerald-700">
+                                  Method & finding crosswalk
+                                </h4>
+                              </div>
+                              <div className="overflow-x-auto">
+                                <table className="min-w-full divide-y divide-slate-100">
+                                  <thead className="bg-white">
+                                    <tr>
+                                      <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                        Paper thread
+                                      </th>
+                                      <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                        Key methods
+                                      </th>
+                                      <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                        Standout findings
+                                      </th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100 bg-white/80">
+                                    {compiledSimilarPapers.map(paper => (
+                                      <tr key={`${paper.id}-table`}>
+                                        <td className="align-top px-6 py-4 text-sm text-slate-700">
+                                          <div className="font-semibold text-slate-900">{paper.title}</div>
+                                          <div className="mt-1 text-xs text-slate-500">{paper.authors}</div>
+                                        </td>
+                                        <td className="align-top px-6 py-4 text-sm text-slate-600">
+                                          <ul className="space-y-1">
+                                            {paper.methods.map((method, index) => (
+                                              <li key={`${paper.id}-method-${index}`}>{method}</li>
+                                            ))}
+                                          </ul>
+                                        </td>
+                                        <td className="align-top px-6 py-4 text-sm text-slate-600">
+                                          <ul className="space-y-1">
+                                            {paper.findings.map((finding, index) => (
+                                              <li key={`${paper.id}-finding-${index}`}>{finding}</li>
+                                            ))}
+                                          </ul>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+
+                            <div className="space-y-4">
+                              {compiledSimilarPapers.map(paper => (
+                                <article
+                                  key={paper.id}
+                                  className="rounded-2xl border border-slate-200/70 bg-white/80 p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
+                                >
+                                  <div className="space-y-2">
+                                    <h4 className="text-lg font-semibold text-slate-900">{paper.title}</h4>
+                                    <p className="text-sm text-slate-600">{paper.authors}</p>
+                                    <p className="text-xs font-medium uppercase tracking-[0.3em] text-slate-400">
+                                      {paper.year}
+                                    </p>
+                                  </div>
+                                  <p className="mt-4 text-sm leading-relaxed text-slate-600">{paper.summary}</p>
+                                  <div className="mt-4 rounded-2xl bg-emerald-50/70 p-4 text-sm text-emerald-800 shadow-inner">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Why it matters</p>
+                                    <p className="mt-2 leading-relaxed">{paper.highlight}</p>
+                                  </div>
+                                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                                    <button
+                                      type="button"
+                                      className="inline-flex items-center justify-center rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-70"
+                                      disabled
+                                    >
+                                      Preview summary
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="inline-flex items-center justify-center rounded-lg border border-transparent bg-emerald-500 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white opacity-70"
+                                      disabled
+                                    >
+                                      Save to reading list
+                                    </button>
+                                  </div>
+                                </article>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="rounded-3xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-600 shadow-sm">
+                            We will surface adjacent literature here once the compilation finishes.
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {verificationView !== 'paper' && verificationView !== 'similar' && (
                       <div id="verification-panel" className="space-y-4">
                         {hasSelectedPaper ? (
                         verificationRequestStatus === 'error' ? (
