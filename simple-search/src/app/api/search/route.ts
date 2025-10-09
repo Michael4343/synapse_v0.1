@@ -24,9 +24,9 @@ const MAX_LIMIT = 100 // Maximum results per request
 const CACHE_TTL_MS = 1000 * 60 * 60 * 6 // 6 hours
 
 // Rate limiting configuration
-const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000 // 5 minutes
-const RATE_LIMIT_WITHOUT_KEY = 950 // Leave buffer from 1000 requests/5min shared limit
-const RATE_LIMIT_WITH_KEY = 90 // Leave buffer from 100 requests/5min personal limit
+const RATE_LIMIT_WINDOW_MS = 60 * 1000 // 1 minute (API is 1 req/second)
+const RATE_LIMIT_WITHOUT_KEY = 100 // Conservative limit for shared pool (actual: 1000 req/sec shared)
+const RATE_LIMIT_WITH_KEY = 60 // 1 request per second = 60 per minute
 const MIN_REQUEST_INTERVAL_MS = 1000 // Minimum 1 second between requests
 
 const USER_RATE_LIMIT_WINDOW_MS = 60 * 1000 // per-user 1 minute window

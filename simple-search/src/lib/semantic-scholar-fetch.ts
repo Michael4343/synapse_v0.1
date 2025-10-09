@@ -80,8 +80,16 @@ function extractArxivId(candidate: PerplexityPaperCandidate): string | null {
 }
 
 async function fetchSemanticScholarPaperById(id: string): Promise<SemanticScholarPaper | null> {
+  const apiKey = process.env.SEMANTIC_SCHOLAR_API_KEY
+
   const response = await fetch(
-    `${SEMANTIC_SCHOLAR_BASE}/paper/${encodeURIComponent(id)}?fields=${SEMANTIC_SCHOLAR_FIELDS}`
+    `${SEMANTIC_SCHOLAR_BASE}/paper/${encodeURIComponent(id)}?fields=${SEMANTIC_SCHOLAR_FIELDS}`,
+    {
+      headers: {
+        ...(apiKey ? { 'x-api-key': apiKey } : {}),
+        'Accept': 'application/json',
+      }
+    }
   )
 
   if (!response.ok) {
@@ -97,13 +105,20 @@ async function fetchSemanticScholarPaperById(id: string): Promise<SemanticSchola
 }
 
 async function searchSemanticScholarByTitle(title: string): Promise<SemanticScholarPaper | null> {
+  const apiKey = process.env.SEMANTIC_SCHOLAR_API_KEY
+
   const params = new URLSearchParams({
     query: title,
     fields: SEMANTIC_SCHOLAR_FIELDS,
     limit: '1',
   })
 
-  const response = await fetch(`${SEMANTIC_SCHOLAR_BASE}/paper/search?${params.toString()}`)
+  const response = await fetch(`${SEMANTIC_SCHOLAR_BASE}/paper/search?${params.toString()}`, {
+    headers: {
+      ...(apiKey ? { 'x-api-key': apiKey } : {}),
+      'Accept': 'application/json',
+    }
+  })
 
   if (!response.ok) {
     return null
