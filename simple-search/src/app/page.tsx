@@ -10,6 +10,7 @@ import { useAuthModal, getUserDisplayName } from '../lib/auth-hooks';
 import { createClient } from '../lib/supabase';
 import { AuthModal } from '../components/auth-modal';
 import { VerificationModal } from '../components/verification-modal';
+import { OnboardingTutorial } from '../components/onboarding-tutorial';
 import type { ProfilePersonalization, UserProfile } from '../lib/profile-types';
 import { SaveToListModal } from '../components/save-to-list-modal';
 import { buildVerifyListName, savePaperToNamedList } from '../lib/list-actions';
@@ -1375,6 +1376,7 @@ export default function Home() {
   const [activeVerificationRequestType, setActiveVerificationRequestType] = useState<VerificationRequestType | null>(null);
   const [communityReviewStatus, setCommunityReviewStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [communityReviewError, setCommunityReviewError] = useState('');
+  const [tutorialOpen, setTutorialOpen] = useState(false);
 
   const profileManualKeywordsRef = useRef('');
   const isMountedRef = useRef(true);
@@ -1439,6 +1441,20 @@ export default function Home() {
       isMountedRef.current = false;
     };
   }, []);
+
+  // Show tutorial for first-time visitors
+  useEffect(() => {
+    const tutorialCompleted = localStorage.getItem('evidentia_tutorial_completed');
+    if (!tutorialCompleted && !user) {
+      // Auto-select CRISPR paper for demo
+      setSelectedPaper(SAMPLE_PAPERS[0]);
+      setVerificationView('paper');
+      // Delay showing tutorial to allow UI to render
+      setTimeout(() => {
+        setTutorialOpen(true);
+      }, 500);
+    }
+  }, [user]);
 
   // Track time spent viewing papers
   useEffect(() => {
@@ -2962,6 +2978,7 @@ export default function Home() {
           className={getVerificationButtonClasses('paper')}
           aria-pressed={verificationView === 'paper'}
           title={getVerificationButtonTitle('paper')}
+          data-tutorial="show-paper-button"
         >
           <span className="flex items-center gap-2">
             SHOW PAPER
@@ -2979,6 +2996,7 @@ export default function Home() {
           aria-pressed={verificationView === 'reproducibility'}
           disabled={shouldDisableVerification}
           title={getVerificationButtonTitle('reproducibility')}
+          data-tutorial="reproducibility-button"
         >
           <span className="flex items-center gap-2">
             {getVerificationButtonLabel('reproducibility')}
@@ -2996,6 +3014,7 @@ export default function Home() {
           aria-pressed={verificationView === 'claims'}
           disabled={shouldDisableVerification}
           title={getVerificationButtonTitle('claims')}
+          data-tutorial="claims-button"
         >
           <span className="flex items-center gap-2">
             {getVerificationButtonLabel('claims')}
@@ -3059,6 +3078,25 @@ export default function Home() {
 
 
 
+
+  const handleTutorialClose = () => {
+    setTutorialOpen(false);
+  };
+
+  const handleTutorialSignUp = () => {
+    authModal.openRegister();
+  };
+
+  const handleTutorialStepChange = (step: number) => {
+    // Control verification view based on tutorial step
+    if (step === 0 || step === 1) {
+      setVerificationView('paper');
+    } else if (step === 2 || step === 3) {
+      setVerificationView('reproducibility');
+    } else if (step === 4 || step === 5) {
+      setVerificationView('claims');
+    }
+  };
 
   const handleViewFullPaper = async () => {
     if (!selectedPaper || !selectedPaper.id.startsWith('sample-')) {
@@ -3900,7 +3938,7 @@ export default function Home() {
                         Save to List
                       </button>
                     </div>
-                    <h2 className="text-2xl font-semibold text-slate-900">{selectedPaper.title}</h2>
+                    <h2 className="text-2xl font-semibold text-slate-900" data-tutorial="paper-title">{selectedPaper.title}</h2>
                     <div className="flex justify-end">
                       {verificationButtons}
                     </div>
@@ -3942,7 +3980,7 @@ export default function Home() {
                     )}
 
                     {verificationView !== 'paper' && (
-                      <div id="verification-panel" className="space-y-4">
+                      <div id="verification-panel" className="space-y-4" data-tutorial="verification-content">
                         {hasSelectedPaper ? (
                         verificationRequestStatus === 'error' ? (
                           <div className="rounded-2xl border border-rose-200 bg-rose-50 px-6 py-5 text-sm text-rose-600">
@@ -4182,6 +4220,13 @@ export default function Home() {
           </div>
         </div>
       )}
+      {/* Onboarding Tutorial */}
+      <OnboardingTutorial
+        isOpen={tutorialOpen}
+        onClose={handleTutorialClose}
+        onSignUp={handleTutorialSignUp}
+        onStepChange={handleTutorialStepChange}
+      />
     </div>
   )
 }

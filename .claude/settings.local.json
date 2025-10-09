@@ -32,7 +32,8 @@
       "WebFetch(domain:stackoverflow.com)",
       "Read(//tmp/**)",
       "WebFetch(domain:scholar.google.com)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []
