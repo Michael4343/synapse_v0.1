@@ -83,7 +83,7 @@ export function AuthModal({ isOpen, mode, onClose, onSwitchMode }: AuthModalProp
         {/* Form */}
         <div className="mt-6">
           {mode === 'login' ? (
-            <LoginForm onSuccess={onClose} />
+            <LoginForm onSuccess={onClose} onSwitchToSignup={onSwitchMode} />
           ) : (
             <RegisterForm onSuccess={onClose} />
           )}

@@ -10,15 +10,16 @@ interface UseAuthFormState {
   loading: boolean
   error: string
   success: string
-  isPasswordResetMode?: boolean
+  errorType: 'none' | 'invalid-password' | 'no-account' | 'generic'
+  successType: 'none' | 'login' | 'signup' | 'password-reset' | 'generic'
 }
 
 interface UseAuthFormActions {
   setEmail: (email: string) => void
   setPassword: (password: string) => void
   setConfirmPassword?: (password: string) => void
-  setError: (error: string) => void
-  setSuccess: (success: string) => void
+  setError: (error: string, type?: 'invalid-password' | 'no-account' | 'generic') => void
+  setSuccess: (success: string, type?: 'login' | 'signup' | 'password-reset' | 'generic') => void
   clearError: () => void
   clearSuccess: () => void
   clearMessages: () => void
@@ -35,14 +36,37 @@ export function useAuthForm(mode: 'login' | 'signup' = 'login'): [UseAuthFormSta
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  const [error, setErrorMessage] = useState('')
+  const [success, setSuccessMessage] = useState('')
+  const [errorType, setErrorType] = useState<'none' | 'invalid-password' | 'no-account' | 'generic'>('none')
+  const [successType, setSuccessType] = useState<'none' | 'login' | 'signup' | 'password-reset' | 'generic'>('none')
 
-  const clearError = () => setError('')
-  const clearSuccess = () => setSuccess('')
+  const setError = (message: string, type: 'invalid-password' | 'no-account' | 'generic' = 'generic') => {
+    setErrorMessage(message)
+    setErrorType(type)
+    setSuccessType('none')
+  }
+
+  const clearError = () => {
+    setErrorMessage('')
+    setErrorType('none')
+  }
+
+  const setSuccess = (message: string, type: 'login' | 'signup' | 'password-reset' | 'generic' = 'generic') => {
+    setSuccessMessage(message)
+    setErrorType('none')
+    setSuccessType(type)
+  }
+
+  const clearSuccess = () => {
+    setSuccessMessage('')
+    setSuccessType('none')
+  }
   const clearMessages = () => {
-    setError('')
-    setSuccess('')
+    setErrorMessage('')
+    setSuccessMessage('')
+    setErrorType('none')
+    setSuccessType('none')
   }
 
   // Helper function to create user-friendly error messages
@@ -57,7 +81,7 @@ export function useAuthForm(mode: 'login' | 'signup' = 'login'): [UseAuthFormSta
       return 'Please check your email and click the confirmation link before signing in.'
     }
     if (message.includes('User already registered')) {
-      return 'An account with this email already exists. Try signing in instead.'
+      return 'An account with this email already exists. Sign in or reset your password instead.'
     }
     if (message.includes('Password should be at least')) {
       return 'Password must be at least 6 characters long.'
@@ -75,30 +99,78 @@ export function useAuthForm(mode: 'login' | 'signup' = 'login'): [UseAuthFormSta
     return message
   }
 
+  const checkAccountExists = async (emailToCheck: string): Promise<boolean | null> => {
+    try {
+      const response = await fetch('/api/auth/check-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email: emailToCheck })
+      })
+
+      if (!response.ok) {
+        return null
+      }
+
+      const data: { exists?: boolean } = await response.json()
+
+      return typeof data.exists === 'boolean' ? data.exists : null
+    } catch (error) {
+      console.warn('Unable to verify account existence:', error)
+      return null
+    }
+  }
+
   const handleEmailPasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email || !password) {
-      setError('Please fill in all fields')
+    const trimmedEmail = email.trim()
+
+    if (trimmedEmail !== email) {
+      setEmail(trimmedEmail)
+    }
+
+    if (!trimmedEmail || !password) {
+    setError('Please fill in all fields')
+    return
+  }
+
+  setLoading(true)
+  clearMessages()
+
+  const { error: authError } = await signIn(trimmedEmail, password)
+
+  if (authError) {
+    if (authError.message?.includes('Invalid login credentials')) {
+      const accountExists = await checkAccountExists(trimmedEmail)
+
+        if (accountExists === false) {
+          setError('No account found for this email.', 'no-account')
+        } else if (accountExists === true) {
+          setError('Incorrect password.', 'invalid-password')
+        } else {
+          setError('We could not confirm your account right now. Try again or reset your password.', 'generic')
+        }
+      } else {
+        setError(getErrorMessage(authError))
+      }
+      setLoading(false)
       return
     }
 
-    setLoading(true)
-    clearMessages()
-
-    const { error: authError } = await signIn(email, password)
-
-    if (authError) {
-      setError(getErrorMessage(authError))
-      setLoading(false)
-    } else {
-      setSuccess('Successfully signed in!')
-      setLoading(false)
-    }
+    setSuccess('Successfully signed in!', 'login')
+    setLoading(false)
   }
 
   const handleEmailPasswordSignup = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email || !password) {
+    const trimmedEmail = email.trim()
+
+    if (trimmedEmail !== email) {
+      setEmail(trimmedEmail)
+    }
+
+    if (!trimmedEmail || !password) {
       setError('Please fill in all fields')
       return
     }
@@ -116,12 +188,12 @@ export function useAuthForm(mode: 'login' | 'signup' = 'login'): [UseAuthFormSta
     setLoading(true)
     clearMessages()
 
-    const { error: authError } = await signUp(email, password)
+    const { error: authError } = await signUp(trimmedEmail, password)
 
     if (authError) {
       setError(getErrorMessage(authError))
     } else {
-      setSuccess('Account created! You are signed in and your personal feed is ready to set up.')
+      setSuccess('Account created! You are signed in and your personal feed is ready to set up.', 'signup')
     }
 
     setLoading(false)
@@ -141,7 +213,13 @@ export function useAuthForm(mode: 'login' | 'signup' = 'login'): [UseAuthFormSta
   }
 
   const handlePasswordReset = async () => {
-    if (!email) {
+    const trimmedEmail = email.trim()
+
+    if (trimmedEmail !== email) {
+      setEmail(trimmedEmail)
+    }
+
+    if (!trimmedEmail) {
       setError('Please enter your email address')
       return
     }
@@ -149,12 +227,12 @@ export function useAuthForm(mode: 'login' | 'signup' = 'login'): [UseAuthFormSta
     setLoading(true)
     clearMessages()
 
-    const { error: authError } = await resetPassword(email)
+    const { error: authError } = await resetPassword(trimmedEmail)
 
     if (authError) {
       setError(getErrorMessage(authError))
     } else {
-      setSuccess(`Password reset link sent to ${email}. Please check your inbox and spam folder.`)
+      setSuccess(`Password reset link sent to ${trimmedEmail}. Please check your inbox and spam folder.`, 'password-reset')
     }
 
     setLoading(false)
@@ -168,7 +246,9 @@ export function useAuthForm(mode: 'login' | 'signup' = 'login'): [UseAuthFormSta
     }),
     loading,
     error,
-    success
+    success,
+    errorType,
+    successType
   }
 
   const actions: UseAuthFormActions = {

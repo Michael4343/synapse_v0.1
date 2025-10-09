@@ -21,12 +21,12 @@ const TERMS_CLASSES = 'text-xs text-slate-500'
 export function RegisterForm({ onSuccess }: RegisterFormProps) {
   const [formState, formActions] = useAuthForm('signup')
 
-  // Watch for success state changes and close modal
+  // Close modal only when the signup flow finishes successfully
   useEffect(() => {
-    if (formState.success && onSuccess) {
+    if (formState.successType === 'signup' && onSuccess) {
       onSuccess()
     }
-  }, [formState.success, onSuccess])
+  }, [formState.successType, onSuccess])
 
   const handleSubmit = async (e: React.FormEvent) => {
     await formActions.handleEmailPasswordSignup(e)

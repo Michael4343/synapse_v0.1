@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import { useAuthForm } from '../lib/auth-hooks'
 import { SuccessMessage, ErrorMessage, LoadingSpinner } from './ui/message'
 
 interface LoginFormProps {
   onSuccess?: () => void
+  onSwitchToSignup?: () => void
 }
 
 const FORM_CLASSES = 'space-y-4'
@@ -17,18 +18,16 @@ const GOOGLE_BUTTON_CLASSES = 'w-full rounded-xl border border-slate-200 bg-whit
 const DIVIDER_CLASSES = 'relative flex items-center justify-center'
 const DIVIDER_LINE_CLASSES = 'absolute inset-x-0 h-px bg-slate-200'
 const DIVIDER_TEXT_CLASSES = 'relative bg-white px-4 text-xs font-semibold text-slate-500'
-const FORGOT_PASSWORD_CLASSES = 'text-xs text-slate-500 hover:text-slate-700'
 
-export function LoginForm({ onSuccess }: LoginFormProps) {
+export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
   const [formState, formActions] = useAuthForm('login')
-  const [showForgotPassword, setShowForgotPassword] = useState(false)
 
-  // Watch for success state changes and close modal
+  // Close modal only after a successful login, keep it open for password reset confirmation
   useEffect(() => {
-    if (formState.success && onSuccess) {
+    if (formState.successType === 'login' && onSuccess) {
       onSuccess()
     }
-  }, [formState.success, onSuccess])
+  }, [formState.successType, onSuccess])
 
   const handleSubmit = async (e: React.FormEvent) => {
     await formActions.handleEmailPasswordLogin(e)
@@ -40,9 +39,15 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
   }
 
   const handleForgotPassword = async () => {
+    if (!formState.email || formState.loading) return
     await formActions.handlePasswordReset()
-    if (formState.success) {
-      setShowForgotPassword(false)
+  }
+
+  const handleSignupRedirect = () => {
+    if (onSwitchToSignup) {
+      onSwitchToSignup()
+    } else if (typeof window !== 'undefined') {
+      window.location.href = '/signup'
     }
   }
 
@@ -125,7 +130,32 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         {/* Messages */}
         {formState.error && (
           <ErrorMessage>
-            {formState.error}
+            {formState.errorType === 'invalid-password' ? (
+              <span>
+                Incorrect password.{' '}
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  className="font-semibold underline hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60 disabled:no-underline"
+                  disabled={formState.loading || !formState.email}
+                >
+                  Reset it here.
+                </button>
+              </span>
+            ) : formState.errorType === 'no-account' ? (
+              <span>
+                No account found for this email.{' '}
+                <button
+                  type="button"
+                  onClick={handleSignupRedirect}
+                  className="font-semibold underline hover:opacity-80"
+                >
+                  You can sign up here.
+                </button>
+              </span>
+            ) : (
+              formState.error
+            )}
           </ErrorMessage>
         )}
 
@@ -146,43 +176,6 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
             {formState.loading ? 'Signing in...' : 'Sign in'}
           </div>
         </button>
-
-        {/* Forgot Password */}
-        <div className="text-center">
-          {showForgotPassword ? (
-            <div className="space-y-2">
-              <p className="text-xs text-slate-600">
-                Enter your email above and click the button below to receive a password reset link.
-              </p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowForgotPassword(false)}
-                  className="text-xs text-slate-500 hover:text-slate-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleForgotPassword}
-                  disabled={formState.loading || !formState.email}
-                  className="text-xs font-semibold text-sky-600 hover:text-sky-700 disabled:text-slate-400 flex items-center gap-1"
-                >
-                  {formState.loading && <LoadingSpinner size="sm" />}
-                  Send reset link
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowForgotPassword(true)}
-              className={FORGOT_PASSWORD_CLASSES}
-            >
-              Forgot your password?
-            </button>
-          )}
-        </div>
       </form>
     </div>
   )

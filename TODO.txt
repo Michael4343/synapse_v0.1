@@ -1,5 +1,8 @@
 TODO
-load more button in search and personal feed to load 10 more (make default 10 optoins)
+overhaul UI paper details
+compile similar literature
+compile similar patents
+optimise user tracking
 
 make ask a questoin feature in paper details page
 add upload button next to checkboxes for user to upload pdf - public or private and implement info details incentivise with deep research on topic

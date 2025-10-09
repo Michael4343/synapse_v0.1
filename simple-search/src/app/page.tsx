@@ -64,7 +64,7 @@ interface ProcessedContent {
 }
 
 type VerificationRequestType = 'combined';
-type VerificationTrack = 'claims' | 'reproducibility';
+type VerificationTrack = 'claims' | 'reproducibility' | 'paper';
 
 interface ResearchPaperAnalysis {
   stage: string;
@@ -1364,7 +1364,8 @@ export default function Home() {
   const [scrapedContentLoading, setScrapedContentLoading] = useState(false);
   const [scrapedContentError, setScrapedContentError] = useState('');
   const [scrapedContentIsStructured, setScrapedContentIsStructured] = useState(false);
-  const [verificationView, setVerificationView] = useState<VerificationTrack>('reproducibility');
+  const [verificationView, setVerificationView] = useState<VerificationTrack>('paper');
+  const [paperViewMemory, setPaperViewMemory] = useState<Map<string, VerificationTrack>>(new Map());
   const [feedPopulating, setFeedPopulating] = useState(false);
   const [verificationSummary, setVerificationSummary] = useState<VerificationSummaryPayload | null>(null);
   const [verificationSummaryLoading, setVerificationSummaryLoading] = useState(false);
@@ -1414,6 +1415,14 @@ export default function Home() {
   useEffect(() => {
     profileManualKeywordsRef.current = profileManualKeywords;
   }, [profileManualKeywords]);
+
+  useEffect(() => {
+    if (selectedPaper) {
+      const savedView = paperViewMemory.get(selectedPaper.id);
+      setVerificationView(savedView || 'paper');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPaper]);
 
   useEffect(() => {
     if (!user) {
@@ -2548,7 +2557,7 @@ export default function Home() {
   const shouldDisableVerification = !hasSelectedPaper || isVerificationSending || verificationSummaryLoading;
 
   const isTrackReportAvailable = (track: VerificationTrack) =>
-    track === 'claims' ? hasClaimsReport : hasReproReport;
+    track === 'claims' ? hasClaimsReport : track === 'reproducibility' ? hasReproReport : false;
 
   const refreshVerificationSummary = useCallback(async () => {
     if (!selectedPaperId) {
@@ -2590,12 +2599,24 @@ export default function Home() {
     }
   }, [selectedPaperId]);
 
+  const updateVerificationView = (track: VerificationTrack) => {
+    if (selectedPaper) {
+      setPaperViewMemory(prev => new Map(prev).set(selectedPaper.id, track));
+    }
+    setVerificationView(track);
+  };
+
   const handleVerificationRequest = async (track: VerificationTrack) => {
     if (!selectedPaper) {
       return;
     }
 
-    setVerificationView(track);
+    if (track === 'paper') {
+      updateVerificationView('paper');
+      return;
+    }
+
+    updateVerificationView(track);
 
     if (isTrackReportAvailable(track)) {
       setVerificationModalOpen(false);
@@ -2613,7 +2634,6 @@ export default function Home() {
       setActiveVerificationRequestType('combined');
       setVerificationRequestError('');
       setVerificationRequestStatus('success');
-      setVerificationModalOpen(true);
       requestAnimationFrame(() => {
         document.getElementById('verification-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
@@ -2623,7 +2643,6 @@ export default function Home() {
     if (isSamplePaper) {
       const sampleReport = VERIFICATION_DATA[selectedPaper.id] ?? null;
       const now = new Date().toISOString();
-      setVerificationView(track);
       setActiveVerificationRequestType('combined');
       setVerificationRequestError('');
       setVerificationRequestStatus('success');
@@ -2844,7 +2863,6 @@ export default function Home() {
       return;
     }
 
-    setVerificationView('reproducibility');
     refreshVerificationSummary();
   }, [selectedPaperId, refreshVerificationSummary]);
 
@@ -2873,7 +2891,7 @@ export default function Home() {
   }, [communityReviewStatus, hasCommunityReviewRequest, user]);
 
   const getVerificationButtonClasses = (track: VerificationTrack) => {
-    if (shouldDisableVerification) {
+    if (track !== 'paper' && shouldDisableVerification) {
       return 'inline-flex items-center justify-center rounded-lg border border-slate-200 bg-slate-100 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400 cursor-not-allowed opacity-60';
     }
 
@@ -2886,15 +2904,20 @@ export default function Home() {
 
   const BASE_LABELS: Record<VerificationTrack, string> = {
     reproducibility: 'VERIFY REPRODUCIBILITY',
-    claims: 'VERIFY CLAIMS'
+    claims: 'VERIFY CLAIMS',
+    paper: 'SHOW PAPER'
   };
 
   const VIEW_LABELS: Record<VerificationTrack, string> = {
     reproducibility: 'VERIFIED REPRODUCIBILITY',
-    claims: 'VERIFIED CLAIMS'
+    claims: 'VERIFIED CLAIMS',
+    paper: 'SHOW PAPER'
   };
 
   const getVerificationButtonLabel = (track: VerificationTrack): string => {
+    if (track === 'paper') {
+      return 'SHOW PAPER';
+    }
     if (isVerificationSending) {
       return 'Sending request…';
     }
@@ -2905,6 +2928,9 @@ export default function Home() {
   };
 
   const getVerificationButtonTitle = (track: VerificationTrack): string => {
+    if (track === 'paper') {
+      return 'View paper details (authors and abstract)';
+    }
     if (!hasSelectedPaper) {
       return 'Select a paper to request a verification briefing.';
     }
@@ -2929,6 +2955,22 @@ export default function Home() {
 
   const verificationButtons = (
     <div className="flex items-center gap-3 sm:gap-4">
+      <div className="flex flex-col items-center gap-1">
+        <button
+          type="button"
+          onClick={() => updateVerificationView('paper')}
+          className={getVerificationButtonClasses('paper')}
+          aria-pressed={verificationView === 'paper'}
+          title={getVerificationButtonTitle('paper')}
+        >
+          <span className="flex items-center gap-2">
+            SHOW PAPER
+          </span>
+        </button>
+        <span
+          className={`h-1 w-full rounded-full bg-gradient-to-r from-slate-400 via-slate-500 to-slate-600 transition-all duration-200 ease-out ${verificationView === 'paper' ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
+        />
+      </div>
       <div className="flex flex-col items-center gap-1">
         <button
           type="button"
@@ -3844,7 +3886,12 @@ export default function Home() {
                 <div className="flex flex-col space-y-6 px-4 pb-6 flex-1 min-h-0">
                   <div className={`${DETAIL_HERO_CLASSES} flex flex-col gap-4`}>
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-sky-600">Paper details</p>
+                      <div className="flex items-center gap-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-sky-600">Paper details</p>
+                        {metaSummary && (
+                          <p className="text-xs text-slate-600">{metaSummary}</p>
+                        )}
+                      </div>
                       <button
                         type="button"
                         onClick={handleSaveSelectedPaper}
@@ -3854,51 +3901,49 @@ export default function Home() {
                       </button>
                     </div>
                     <h2 className="text-2xl font-semibold text-slate-900">{selectedPaper.title}</h2>
-                    {metaSummary ? (
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                        <p className="text-xs text-slate-600">{metaSummary}</p>
-                        {verificationButtons}
-                      </div>
-                    ) : (
-                      <div className="flex justify-end">
-                        {verificationButtons}
-                      </div>
-                    )}
+                    <div className="flex justify-end">
+                      {verificationButtons}
+                    </div>
                   </div>
 
                   <section className="space-y-4">
-                    <div>
-                      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Authors</h3>
-                      <p className="mt-2 text-sm text-slate-700">
-                        {selectedPaper.authors.length ? selectedPaper.authors.join(', ') : 'Author information unavailable.'}
-                      </p>
-                    </div>
+                    {verificationView === 'paper' && (
+                      <>
+                        {/* DOI/External links for non-sample papers */}
+                        {!isSamplePaperId(selectedPaper.id) && selectedPaperPrimaryLink && (
+                          <div className={DETAIL_METADATA_CLASSES}>
+                            <p>
+                              <a
+                                href={selectedPaperPrimaryLink.href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={DETAIL_LINK_CLASSES}
+                              >
+                                {selectedPaperPrimaryLink.label}
+                              </a>
+                            </p>
+                          </div>
+                        )}
 
-                    <div>
-                      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Abstract</h3>
-                      <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
-                        {selectedPaper.abstract ?? 'Abstract not available for this entry.'}
-                      </p>
-                    </div>
+                        <div>
+                          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Authors</h3>
+                          <p className="mt-2 text-sm text-slate-700">
+                            {selectedPaper.authors.length ? selectedPaper.authors.join(', ') : 'Author information unavailable.'}
+                          </p>
+                        </div>
 
-                    {/* DOI/External links for non-sample papers */}
-                    {!isSamplePaperId(selectedPaper.id) && selectedPaperPrimaryLink && (
-                      <div className={DETAIL_METADATA_CLASSES}>
-                        <p>
-                          <a
-                            href={selectedPaperPrimaryLink.href}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={DETAIL_LINK_CLASSES}
-                          >
-                            {selectedPaperPrimaryLink.label}
-                          </a>
-                        </p>
-                      </div>
+                        <div>
+                          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Abstract</h3>
+                          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
+                            {selectedPaper.abstract ?? 'Abstract not available for this entry.'}
+                          </p>
+                        </div>
+                      </>
                     )}
 
-                    <div id="verification-panel" className="space-y-4">
-                      {hasSelectedPaper ? (
+                    {verificationView !== 'paper' && (
+                      <div id="verification-panel" className="space-y-4">
+                        {hasSelectedPaper ? (
                         verificationRequestStatus === 'error' ? (
                           <div className="rounded-2xl border border-rose-200 bg-rose-50 px-6 py-5 text-sm text-rose-600">
                             <p className="text-sm font-semibold text-rose-700">We could not send this request</p>
@@ -3987,7 +4032,8 @@ export default function Home() {
                       Select a paper from the feed to generate its reproducibility briefing.
                     </div>
                   )}
-                </div>
+                      </div>
+                    )}
 
                 {/* Action buttons - moved above scraped content */}
                 {selectedPaper.id.startsWith('sample-') && (
