@@ -1005,7 +1005,7 @@ function StaticReproReport({
 
   if (isPlaceholder) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6" data-tutorial="repro-overview">
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div>
             <h3 className="text-lg font-semibold text-slate-900">{report.summary}</h3>
@@ -1030,7 +1030,7 @@ function StaticReproReport({
   const buttonLabel = isSending ? 'Sending…' : isComplete ? 'Request Received' : 'Request Community Review';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-tutorial="repro-overview">
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div>
           <h3 className="text-lg font-semibold text-slate-900">{report.summary}</h3>
@@ -1214,7 +1214,7 @@ function ClaimsReportPreview({
   const buttonLabel = isSending ? 'Sending…' : isComplete ? 'Request Received' : 'Request Community Review';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-tutorial="claims-overview">
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -3087,16 +3087,21 @@ export default function Home() {
     authModal.openSignup();
   };
 
-  const handleTutorialStepChange = (step: number) => {
-    // Control verification view based on tutorial step
-    if (step === 0 || step === 1) {
+  const handleTutorialStepChange = useCallback((step: number) => {
+    const demoPaper = SAMPLE_PAPERS[0];
+
+    if (!selectedPaper || selectedPaper.id !== demoPaper.id) {
+      setSelectedPaper(demoPaper);
+    }
+
+    if (step <= 1) {
       setVerificationView('paper');
-    } else if (step === 2 || step === 3) {
+    } else if (step <= 3) {
       setVerificationView('reproducibility');
-    } else if (step === 4 || step === 5) {
+    } else {
       setVerificationView('claims');
     }
-  };
+  }, [selectedPaper, setSelectedPaper, setVerificationView]);
 
   const handleViewFullPaper = async () => {
     if (!selectedPaper || !selectedPaper.id.startsWith('sample-')) {
@@ -3922,7 +3927,7 @@ export default function Home() {
                 </div>
 
                 <div className="flex flex-col space-y-6 px-4 pb-6 flex-1 min-h-0">
-                  <div className={`${DETAIL_HERO_CLASSES} flex flex-col gap-4`}>
+                  <div className={`${DETAIL_HERO_CLASSES} flex flex-col gap-4`} data-tutorial="paper-hero">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                       <div className="flex items-center gap-3">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-sky-600">Paper details</p>
@@ -3946,7 +3951,7 @@ export default function Home() {
 
                   <section className="space-y-4">
                     {verificationView === 'paper' && (
-                      <>
+                      <div className="space-y-4" data-tutorial="paper-overview">
                         {/* DOI/External links for non-sample papers */}
                         {!isSamplePaperId(selectedPaper.id) && selectedPaperPrimaryLink && (
                           <div className={DETAIL_METADATA_CLASSES}>
@@ -3976,11 +3981,11 @@ export default function Home() {
                             {selectedPaper.abstract ?? 'Abstract not available for this entry.'}
                           </p>
                         </div>
-                      </>
+                      </div>
                     )}
 
                     {verificationView !== 'paper' && (
-                      <div id="verification-panel" className="space-y-4" data-tutorial="verification-content">
+                      <div id="verification-panel" className="space-y-4">
                         {hasSelectedPaper ? (
                         verificationRequestStatus === 'error' ? (
                           <div className="rounded-2xl border border-rose-200 bg-rose-50 px-6 py-5 text-sm text-rose-600">

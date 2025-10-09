@@ -14,39 +14,45 @@ interface TutorialStep {
 const TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: 0,
-    title: 'Welcome to Evidentia!',
-    description: "This is the breakthrough CRISPR Cas9 paper. Let's explore what Evidentia can do for your research.",
-    highlightSelector: '[data-tutorial="paper-title"]'
+    title: 'See the iconic Nobel Prize-winning CRISPR-Cas9 paper.',
+    description: '',
+    highlightSelector: '[data-tutorial="paper-hero"]'
   },
   {
     id: 1,
-    title: 'View Full Research Papers',
-    description: 'Click to view the full research paper with AI-structured sections.',
-    highlightSelector: '[data-tutorial="show-paper-button"]',
+    title: 'Explore the paper overview',
+    description: 'Scan the authors and abstract for A Programmable Dual-RNA–Guided DNA Endonuclease in Adaptive Bacterial Immunity.',
+    highlightSelector: '[data-tutorial="paper-overview"]',
     action: 'show-paper'
   },
   {
     id: 2,
-    title: 'Verify Reproducibility',
-    description: 'See if this research can be replicated in your lab with feasibility analysis.',
+    title: 'Verify reproducibility',
+    description: 'Open the reproducibility briefing to see feasibility and lab-readiness guidance.',
     highlightSelector: '[data-tutorial="reproducibility-button"]',
     action: 'show-reproducibility'
   },
   {
     id: 3,
-    title: 'Reproducibility Analysis',
-    description: 'Feasibility questions, critical paths, and evidence gaps - everything you need to assess reproducibility.',
-    highlightSelector: '[data-tutorial="verification-content"]'
+    title: 'Review feasibility insights',
+    description: 'Walk through the feasibility snapshot, critical path, and blockers for this experiment.',
+    highlightSelector: '[data-tutorial="repro-overview"]'
   },
   {
     id: 4,
-    title: 'Verify Scientific Claims',
-    description: 'Verify scientific claims with confidence scores and evidence mapping.',
+    title: 'Check scientific claims',
+    description: 'Switch to the claims briefing to assess headline findings and evidence strength.',
     highlightSelector: '[data-tutorial="claims-button"]',
     action: 'show-claims'
   },
   {
     id: 5,
+    title: 'Inspect evidence & gaps',
+    description: 'Study supporting evidence, gaps, and assumptions captured for the key claims.',
+    highlightSelector: '[data-tutorial="claims-overview"]'
+  },
+  {
+    id: 6,
     title: 'Ready to verify your own papers?',
     description: '',
     action: 'cta'
@@ -63,8 +69,10 @@ interface OnboardingTutorialProps {
 export function OnboardingTutorial({ isOpen, onClose, onSignUp, onStepChange }: OnboardingTutorialProps) {
   const [currentStep, setCurrentStep] = React.useState(0)
   const [highlightElement, setHighlightElement] = React.useState<HTMLElement | null>(null)
+  const previousHighlightRef = React.useRef<HTMLElement | null>(null)
 
   const step = TUTORIAL_STEPS[currentStep]
+  const isFirstStep = step.id === 0
 
   // Update highlighted element when step changes
   React.useEffect(() => {
@@ -73,10 +81,9 @@ export function OnboardingTutorial({ isOpen, onClose, onSignUp, onStepChange }: 
       return
     }
 
-    const element = document.querySelector(step.highlightSelector) as HTMLElement
+    const element = document.querySelector(step.highlightSelector) as HTMLElement | null
     setHighlightElement(element)
 
-    // Scroll element into view
     if (element) {
       setTimeout(() => {
         element.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -84,14 +91,44 @@ export function OnboardingTutorial({ isOpen, onClose, onSignUp, onStepChange }: 
     }
   }, [currentStep, isOpen, step.highlightSelector])
 
-  // Trigger action callbacks
+  // Apply visual treatment to highlighted element
   React.useEffect(() => {
-    if (!isOpen) return
-
-    if (onStepChange && step.action) {
-      onStepChange(currentStep)
+    if (!isOpen) {
+      const previous = previousHighlightRef.current
+      if (previous) {
+        previous.classList.remove('tutorial-highlight-ring')
+        previousHighlightRef.current = null
+      }
+      return
     }
-  }, [currentStep, isOpen, step.action, onStepChange])
+
+    const previous = previousHighlightRef.current
+
+    if (previous && previous !== highlightElement) {
+      previous.classList.remove('tutorial-highlight-ring')
+    }
+
+    if (highlightElement) {
+      highlightElement.classList.add('tutorial-highlight-ring')
+      previousHighlightRef.current = highlightElement
+    } else if (previous) {
+      previous.classList.remove('tutorial-highlight-ring')
+      previousHighlightRef.current = null
+    }
+
+    return () => {
+      if (highlightElement) {
+        highlightElement.classList.remove('tutorial-highlight-ring')
+      }
+    }
+  }, [highlightElement, isOpen])
+
+  // Notify parent when the step changes so it can sync the UI state
+  React.useEffect(() => {
+    if (!isOpen || !onStepChange) return
+
+    onStepChange(currentStep)
+  }, [currentStep, isOpen, onStepChange])
 
   const handleNext = () => {
     if (currentStep < TUTORIAL_STEPS.length - 1) {
@@ -123,121 +160,6 @@ export function OnboardingTutorial({ isOpen, onClose, onSignUp, onStepChange }: 
 
   if (!isOpen) return null
 
-  // Calculate spotlight position
-  const getSpotlightStyle = (): React.CSSProperties => {
-    if (!highlightElement) return {}
-
-    const rect = highlightElement.getBoundingClientRect()
-    const padding = 16
-
-    return {
-      position: 'fixed',
-      top: `${rect.top - padding}px`,
-      left: `${rect.left - padding}px`,
-      width: `${rect.width + padding * 2}px`,
-      height: `${rect.height + padding * 2}px`,
-      borderRadius: '16px',
-      boxShadow: '0 0 0 9999px rgba(15, 23, 42, 0.85)',
-      pointerEvents: 'none',
-      zIndex: 60,
-      transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
-    }
-  }
-
-  // Smart tooltip positioning - prefers side placement
-  const getTooltipStyle = (): React.CSSProperties => {
-    // CTA step always centered
-    if (step.action === 'cta') {
-      return {
-        position: 'fixed',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        maxWidth: '400px',
-        width: '90%'
-      }
-    }
-
-    if (!highlightElement) {
-      return {
-        position: 'fixed',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        maxWidth: '320px',
-        width: '90%'
-      }
-    }
-
-    const rect = highlightElement.getBoundingClientRect()
-    const tooltipWidth = 320
-    const gap = 24
-    const padding = 16
-
-    // Check available space on all sides
-    const spaceRight = window.innerWidth - rect.right
-    const spaceLeft = rect.left
-    const spaceBottom = window.innerHeight - rect.bottom
-    const spaceTop = rect.top
-
-    // Prefer right side if there's enough space
-    if (spaceRight > tooltipWidth + gap + padding) {
-      return {
-        position: 'fixed',
-        top: `${rect.top + rect.height / 2}px`,
-        left: `${rect.right + gap}px`,
-        transform: 'translateY(-50%)',
-        maxWidth: `${tooltipWidth}px`,
-        width: '90%'
-      }
-    }
-
-    // Try left side
-    if (spaceLeft > tooltipWidth + gap + padding) {
-      return {
-        position: 'fixed',
-        top: `${rect.top + rect.height / 2}px`,
-        right: `${window.innerWidth - rect.left + gap}px`,
-        transform: 'translateY(-50%)',
-        maxWidth: `${tooltipWidth}px`,
-        width: '90%'
-      }
-    }
-
-    // Try bottom
-    if (spaceBottom > 200) {
-      return {
-        position: 'fixed',
-        top: `${rect.bottom + gap}px`,
-        left: `${rect.left + rect.width / 2}px`,
-        transform: 'translateX(-50%)',
-        maxWidth: `${tooltipWidth}px`,
-        width: '90%'
-      }
-    }
-
-    // Try top
-    if (spaceTop > 200) {
-      return {
-        position: 'fixed',
-        bottom: `${window.innerHeight - rect.top + gap}px`,
-        left: `${rect.left + rect.width / 2}px`,
-        transform: 'translateX(-50%)',
-        maxWidth: `${tooltipWidth}px`,
-        width: '90%'
-      }
-    }
-
-    // Fallback to bottom-right corner
-    return {
-      position: 'fixed',
-      bottom: '24px',
-      right: '24px',
-      maxWidth: `${tooltipWidth}px`,
-      width: '90%'
-    }
-  }
-
   // Progress dots
   const renderProgressDots = () => {
     return (
@@ -258,108 +180,69 @@ export function OnboardingTutorial({ isOpen, onClose, onSignUp, onStepChange }: 
     )
   }
 
+  const isFinalStep = currentStep === TUTORIAL_STEPS.length - 1
+  const primaryActionLabel = isFinalStep ? 'Close tour' : currentStep === 0 ? 'Next' : 'Next'
+  const primaryActionHandler = isFinalStep ? handleMaybeLater : handleNext
+
   return (
-    <div className="fixed inset-0 z-50 pointer-events-none">
-      {/* Backdrop */}
-      <div className="fixed inset-0 bg-slate-900/85 backdrop-blur-sm transition-opacity pointer-events-auto" />
-
-      {/* Spotlight */}
-      {highlightElement && (
-        <div style={getSpotlightStyle()} />
-      )}
-
-      {/* Skip button - always visible in top right */}
+    <div className="pointer-events-none fixed inset-0 z-50">
+      {/* Skip button */}
       <button
         onClick={handleSkip}
-        className="fixed top-4 right-4 z-[70] flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-700 shadow-lg transition hover:bg-slate-50 pointer-events-auto"
+        className="pointer-events-auto fixed top-6 right-6 z-[60] flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-4 py-1.5 text-xs font-medium text-slate-600 shadow-lg transition hover:bg-white"
       >
         <X className="h-3.5 w-3.5" />
-        Skip
+        Skip tour
       </button>
 
-      {/* Tutorial Card */}
-      <div
-        style={getTooltipStyle()}
-        className="z-[65] rounded-xl border border-slate-200 bg-white shadow-2xl transition-all duration-300 pointer-events-auto"
-      >
-        {step.action === 'cta' ? (
-          // Final CTA Step
-          <div className="p-6 text-center">
-            <div className="mb-4 flex justify-center">
-              <div className="rounded-full bg-sky-100 p-3">
-                <CheckCircle2 className="h-6 w-6 text-sky-600" />
-              </div>
-            </div>
-            <h2 className="mb-2 text-xl font-bold text-slate-900">
-              {step.title}
-            </h2>
-            <p className="mb-4 text-sm text-slate-600">
-              Sign up free to unlock the full platform
-            </p>
-            <div className="mb-5 space-y-2 text-left">
-              <div className="flex items-start gap-2 text-sm text-slate-700">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-500" />
-                <span>Request verification for any research paper</span>
-              </div>
-              <div className="flex items-start gap-2 text-sm text-slate-700">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-500" />
-                <span>Save papers to custom lists</span>
-              </div>
-              <div className="flex items-start gap-2 text-sm text-slate-700">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-500" />
-                <span>Get personalized research feeds</span>
-              </div>
-            </div>
-            <div className="flex flex-col gap-2">
-              <button
-                onClick={handleSignUp}
-                className="flex items-center justify-center gap-2 rounded-lg bg-sky-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-400"
-              >
-                Sign Up Now
-                <ArrowRight className="h-4 w-4" />
-              </button>
-              <button
-                onClick={handleMaybeLater}
-                className="text-xs font-medium text-slate-500 transition hover:text-slate-700"
-              >
-                Maybe Later
-              </button>
-            </div>
+      {/* Guidance panel */}
+      <div className="pointer-events-auto fixed inset-x-0 bottom-8 z-[55] flex justify-center px-4">
+        <div className={`w-full max-w-xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.18)] ${isFirstStep ? 'translate-y-0' : ''}`}>
+          <div className="border-b border-slate-100 bg-slate-900/90 px-6 py-4 text-center text-white">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-sky-300">Welcome to Evidentia</p>
+            <h2 className="mt-2 text-xl font-semibold">Personalised literature in minutes</h2>
           </div>
-        ) : (
-          // Regular Tutorial Steps - Smaller, less intrusive
-          <>
-            <div className="px-4 py-3 border-b border-slate-200">
-              <div className="flex items-start justify-between gap-3 mb-2">
-                <h3 className="text-base font-semibold text-slate-900 leading-tight">{step.title}</h3>
-                <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-700 flex-shrink-0">
-                  Demo
-                </span>
+          <div className="px-6 py-5 text-center">
+            <h3 className="text-base font-semibold text-slate-900">{step.title}</h3>
+            {step.description ? (
+              <p className="mt-2 text-sm leading-relaxed text-slate-600">{step.description}</p>
+            ) : null}
+            {step.action === 'cta' && (
+              <div className="mt-5 flex flex-col gap-2">
+                <button
+                  onClick={handleSignUp}
+                  className="flex items-center justify-center gap-2 rounded-lg bg-sky-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-400"
+                >
+                  Sign up now
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={handleMaybeLater}
+                  className="text-xs font-medium text-slate-500 transition hover:text-slate-700"
+                >
+                  Maybe later
+                </button>
               </div>
-              <p className="text-sm leading-relaxed text-slate-600">
-                {step.description}
-              </p>
-            </div>
-            <div className="flex items-center justify-between px-4 py-3">
-              <button
-                onClick={handleBack}
-                disabled={currentStep === 0}
-                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" />
-                Back
-              </button>
-              {renderProgressDots()}
-              <button
-                onClick={handleNext}
-                className="flex items-center gap-1.5 rounded-lg bg-sky-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-sky-400"
-              >
-                Next
-                <ArrowRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </>
-        )}
+            )}
+          </div>
+          <div className="flex items-center justify-between bg-slate-50/80 px-6 py-3">
+            <button
+              onClick={handleBack}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-white ${isFirstStep ? 'invisible pointer-events-none' : ''}`}
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back
+            </button>
+            {renderProgressDots()}
+            <button
+              onClick={primaryActionHandler}
+              className="flex items-center gap-1.5 rounded-lg bg-sky-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-sky-400"
+            >
+              {primaryActionLabel}
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )
