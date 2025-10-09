@@ -25,6 +25,85 @@ function escapeHtml(value: string | null | undefined): string {
     .replace(/'/g, '&#39;')
 }
 
+async function sendReminderEmail(
+  researcher: Researcher,
+  resendClient: Resend | null
+) {
+  const resendFromEmail = process.env.RESEND_FROM_EMAIL
+  const feedUrl = process.env.RESEARCH_FEED_URL
+
+  if (!resendClient || !resendFromEmail) {
+    console.log(`[daily-scholar-feed] ❌ REMINDER SKIPPED: ${researcher.display_name} - Resend not configured`)
+    return false
+  }
+
+  const recipient = (researcher.contact_email || '').trim()
+  if (!recipient) {
+    console.log(`[daily-scholar-feed] ❌ REMINDER SKIPPED: ${researcher.display_name} - No contact email`)
+    return false
+  }
+
+  const displayName = (researcher.display_name || '').trim()
+  const firstName = displayName ? displayName.split(' ')[0] : 'there'
+
+  const subject = 'Set up your research feed preferences'
+
+  console.log(`[daily-scholar-feed] 📧 SENDING REMINDER EMAIL:`)
+  console.log(`   → To: ${researcher.display_name} <${recipient}>`)
+  console.log(`   → Subject: ${subject}`)
+  console.log(`   → Reason: No keywords saved`)
+
+  const htmlParts = [
+    `<p>Hi ${escapeHtml(firstName)},</p>`,
+    `<p>You're currently missing out on personalized research updates because you haven't saved your research interests yet.</p>`,
+    `<p>Add a few keywords to your profile to start receiving daily updates about the latest papers in your field.</p>`
+  ]
+
+  if (feedUrl) {
+    htmlParts.push(`<p><a href="${escapeHtml(feedUrl)}">Update your profile preferences</a> to get started.</p>`)
+  } else {
+    htmlParts.push('<p>Sign in and update your profile preferences to get started.</p>')
+  }
+
+  htmlParts.push('<p>— Evidentia</p>')
+
+  const textParts = [
+    `Hi ${firstName},`,
+    '',
+    `You're currently missing out on personalized research updates because you haven't saved your research interests yet.`,
+    '',
+    'Add a few keywords to your profile to start receiving daily updates about the latest papers in your field.',
+    '',
+    feedUrl ? `Update your profile preferences: ${feedUrl}` : 'Sign in and update your profile preferences to get started.',
+    '',
+    '— Evidentia'
+  ]
+
+  try {
+    const { data, error } = await resendClient.emails.send({
+      from: resendFromEmail,
+      to: recipient,
+      subject,
+      html: htmlParts.join('\n'),
+      text: textParts.join('\n')
+    })
+
+    if (error) {
+      console.error(`[daily-scholar-feed] ❌ REMINDER FAILED: ${recipient} - ${error.message}`)
+      return false
+    }
+
+    const id = data?.id || 'unknown'
+    console.log(`[daily-scholar-feed] ✅ REMINDER SENT: ${recipient} (Resend ID: ${id})`)
+    return true
+  } catch (error) {
+    console.error(
+      `[daily-scholar-feed] ❌ REMINDER ERROR: ${recipient} - ${error instanceof Error ? error.message : 'Unknown error'}`
+    )
+    return false
+  }
+}
+
 async function sendEmailSummary(
   researcher: Researcher,
   queryCounts: Map<string, number>,
@@ -34,23 +113,25 @@ async function sendEmailSummary(
   const feedUrl = process.env.RESEARCH_FEED_URL
 
   if (!resendClient || !resendFromEmail) {
-    console.log(`[daily-scholar-feed] Skipping email for ${researcher.display_name}: Resend not configured`)
+    console.log(`[daily-scholar-feed] ❌ SUMMARY SKIPPED: ${researcher.display_name} - Resend not configured`)
     return
   }
 
   const recipient = (researcher.contact_email || '').trim()
   if (!recipient) {
-    console.log(`[daily-scholar-feed] Skipping email for ${researcher.display_name}: No contact email`)
+    console.log(`[daily-scholar-feed] ❌ SUMMARY SKIPPED: ${researcher.display_name} - No contact email`)
     return
   }
 
   const entries = Array.from(queryCounts.entries())
   if (entries.length === 0) {
+    console.log(`[daily-scholar-feed] ⏭️  SUMMARY SKIPPED: ${researcher.display_name} - No query results`)
     return
   }
 
   const totalNew = entries.reduce((sum, [, count]) => sum + (count || 0), 0)
   if (totalNew === 0) {
+    console.log(`[daily-scholar-feed] ⏭️  SUMMARY SKIPPED: ${researcher.display_name} - 0 papers found`)
     return
   }
 
@@ -66,6 +147,14 @@ async function sendEmailSummary(
     .join('\n')
 
   const subject = `${totalNew} new paper${totalNew === 1 ? '' : 's'} in your research feed`
+
+  console.log(`[daily-scholar-feed] 📧 SENDING PAPER SUMMARY:`)
+  console.log(`   → To: ${researcher.display_name} <${recipient}>`)
+  console.log(`   → Subject: ${subject}`)
+  console.log(`   → Papers: ${totalNew} total across ${entries.length} keyword${entries.length === 1 ? '' : 's'}`)
+  entries.forEach(([query, count]) => {
+    console.log(`      • "${query}": ${count} paper${count === 1 ? '' : 's'}`)
+  })
 
   const htmlParts = [
     `<p>Hi ${escapeHtml(firstName)},</p>`,
@@ -102,16 +191,15 @@ async function sendEmailSummary(
     })
 
     if (error) {
-      console.error(`[daily-scholar-feed] Failed to send email to ${recipient}:`, error.message)
+      console.error(`[daily-scholar-feed] ❌ SUMMARY FAILED: ${recipient} - ${error.message}`)
       return
     }
 
-    const id = data?.id ? ` (id: ${data.id})` : ''
-    console.log(`[daily-scholar-feed] Sent email notification to ${recipient} (${totalNew} new)${id}`)
+    const id = data?.id || 'unknown'
+    console.log(`[daily-scholar-feed] ✅ SUMMARY SENT: ${recipient} (Resend ID: ${id})`)
   } catch (error) {
     console.error(
-      `[daily-scholar-feed] Failed to send email to ${recipient}:`,
-      error instanceof Error ? error.message : 'Unknown error'
+      `[daily-scholar-feed] ❌ SUMMARY ERROR: ${recipient} - ${error instanceof Error ? error.message : 'Unknown error'}`
     )
   }
 }
@@ -149,7 +237,10 @@ export async function GET(request: NextRequest) {
     console.log('[daily-scholar-feed] RESEND_API_KEY not set. Email notifications will be skipped.')
   }
 
-  console.log('[daily-scholar-feed] Starting daily scholar feed cron job')
+  console.log(`\n[daily-scholar-feed] ═══════════════════════════════════════════════════`)
+  console.log(`[daily-scholar-feed] 🚀 STARTING DAILY SCHOLAR FEED CRON JOB`)
+  console.log(`[daily-scholar-feed] ⏰ Timestamp: ${new Date().toISOString()}`)
+  console.log(`[daily-scholar-feed] ═══════════════════════════════════════════════════\n`)
 
   try {
     // Fetch all active researchers
@@ -182,6 +273,7 @@ export async function GET(request: NextRequest) {
 
     let totalProcessed = 0
     let totalPapersFound = 0
+    let totalRemindersSent = 0
     const results = []
 
     // Process each researcher
@@ -189,12 +281,19 @@ export async function GET(request: NextRequest) {
       const keywords = uniqueKeywords(researcher.research_interests || [])
 
       if (keywords.length === 0) {
-        console.log(`[daily-scholar-feed] Skipping ${researcher.display_name}: No keywords`)
+        console.log(`\n[daily-scholar-feed] ──────────────────────────────────────────────────`)
+        console.log(`[daily-scholar-feed] 🔍 Processing: ${researcher.display_name}`)
+        console.log(`[daily-scholar-feed] ⚠️  Status: No keywords saved`)
+        const reminderSent = await sendReminderEmail(researcher, resendClient)
+        if (reminderSent) {
+          totalRemindersSent++
+        }
+        console.log(`[daily-scholar-feed] ──────────────────────────────────────────────────\n`)
         results.push({
           researcher_id: researcher.id,
           display_name: researcher.display_name,
-          status: 'skipped',
-          reason: 'No keywords'
+          status: reminderSent ? 'reminder_sent' : 'skipped',
+          reason: reminderSent ? 'No keywords - reminder sent' : 'No keywords - reminder failed'
         })
         continue
       }
@@ -202,7 +301,9 @@ export async function GET(request: NextRequest) {
       // Limit to 5 keywords to avoid excessive scraping
       const limitedKeywords = keywords.slice(0, 5)
 
-      console.log(`[daily-scholar-feed] Processing ${researcher.display_name} with ${limitedKeywords.length} keyword(s)`)
+      console.log(`\n[daily-scholar-feed] ──────────────────────────────────────────────────`)
+      console.log(`[daily-scholar-feed] 🔍 Processing: ${researcher.display_name}`)
+      console.log(`[daily-scholar-feed] 🔑 Keywords: ${limitedKeywords.join(', ')}`)
 
       try {
         // Delete old papers (older than 30 days) for this user
@@ -313,7 +414,8 @@ export async function GET(request: NextRequest) {
           query_counts: Object.fromEntries(queryCounts)
         })
 
-        console.log(`[daily-scholar-feed] Completed ${researcher.display_name}: ${researcherPapersFound} papers found`)
+        console.log(`[daily-scholar-feed] ✅ Completed: ${researcherPapersFound} papers found for ${researcher.display_name}`)
+        console.log(`[daily-scholar-feed] ──────────────────────────────────────────────────\n`)
 
       } catch (error) {
         console.error(`[daily-scholar-feed] Failed to process ${researcher.display_name}:`, error)
@@ -326,13 +428,20 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log(`[daily-scholar-feed] Completed: ${totalProcessed}/${researchers.length} researchers processed, ${totalPapersFound} total papers found`)
+    console.log(`\n[daily-scholar-feed] ═══════════════════════════════════════════════════`)
+    console.log(`[daily-scholar-feed] 📊 DAILY SCHOLAR FEED COMPLETED`)
+    console.log(`[daily-scholar-feed] ═══════════════════════════════════════════════════`)
+    console.log(`[daily-scholar-feed] 👥 Researchers processed: ${totalProcessed}/${researchers.length}`)
+    console.log(`[daily-scholar-feed] 📄 Papers found: ${totalPapersFound}`)
+    console.log(`[daily-scholar-feed] 🔔 Reminder emails sent: ${totalRemindersSent}`)
+    console.log(`[daily-scholar-feed] ═══════════════════════════════════════════════════\n`)
 
     return NextResponse.json({
       message: 'Daily scholar feed completed',
       processed: totalProcessed,
       total_researchers: researchers.length,
       papers_found: totalPapersFound,
+      reminders_sent: totalRemindersSent,
       results
     })
 

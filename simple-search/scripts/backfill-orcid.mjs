@@ -16,7 +16,7 @@ import readline from 'readline'
 import { readFileSync } from 'fs'
 
 // Load environment variables from .env.local
-const envFile = readFileSync('.env.local', 'utf-8')
+const envFile = readFileSync('.env.production', 'utf-8')
 envFile.split('\n').forEach(line => {
   const match = line.match(/^([^#=]+)=(.*)$/)
   if (match) {
