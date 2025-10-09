@@ -64,16 +64,67 @@ interface ProcessedContent {
   }
 }
 
+type LifeSciencesMatrixRowKey =
+  | 'sampleModel'
+  | 'reagentsRatios'
+  | 'instrumentSetup'
+  | 'procedureSteps'
+  | 'controls'
+  | 'readoutsMetrics'
+  | 'qcCalibration'
+  | 'outcomeSummary';
+
+const LIFE_SCIENCES_MATRIX_ROWS: Array<{ key: LifeSciencesMatrixRowKey; label: string }> = [
+  { key: 'sampleModel', label: 'Sample and model' },
+  { key: 'reagentsRatios', label: 'Reagents and ratios' },
+  { key: 'instrumentSetup', label: 'Instrument setup' },
+  { key: 'procedureSteps', label: 'Procedure steps' },
+  { key: 'controls', label: 'Controls' },
+  { key: 'readoutsMetrics', label: 'Readouts and metrics' },
+  { key: 'qcCalibration', label: 'QC and calibration' },
+  { key: 'outcomeSummary', label: 'Outcome summary' }
+];
+
+const buildLifeSciencesMatrix = (papers: MockSimilarPaper[]): string => {
+  if (papers.length === 0) {
+    return '';
+  }
+
+  const headerRow = ['Row', ...papers.map(paper => paper.title)];
+  const tableRows = LIFE_SCIENCES_MATRIX_ROWS.map(row => [
+    row.label,
+    ...papers.map(paper => paper.matrix[row.key] ?? 'Not reported')
+  ]);
+  const grid = [headerRow, ...tableRows];
+  const columnWidths = headerRow.map((_, columnIndex) =>
+    grid.reduce((maxWidth, currentRow) => {
+      const cellLength = currentRow[columnIndex]?.length ?? 0;
+      return cellLength > maxWidth ? cellLength : maxWidth;
+    }, 0)
+  );
+
+  const separator = columnWidths
+    .map(width => ''.padEnd(width, '-'))
+    .join('-+-');
+
+  const formattedRows = grid.map(row =>
+    row
+      .map((cell, columnIndex) => cell.padEnd(columnWidths[columnIndex], ' '))
+      .join(' | ')
+  );
+
+  return [formattedRows[0], separator, ...formattedRows.slice(1)].join('\n');
+};
+
 interface MockSimilarPaper {
-  id: string
-  title: string
-  authors: string
-  venue: string
-  year: string
-  summary: string
-  highlight: string
-  methods: string[]
-  findings: string[]
+  id: string;
+  title: string;
+  authors: string;
+  venue: string;
+  year: string;
+  summary: string;
+  highlight: string;
+  matrix: Record<LifeSciencesMatrixRowKey, string>;
 }
 
 type VerificationRequestType = 'combined';
@@ -2217,16 +2268,23 @@ export default function Home() {
           'Focuses on teams mirroring the experimental setup to stress-test reproducibility across laboratories and instrumentation.',
         highlight:
           'Pay attention to calibration notes and cohort selection—they show how peers reconcile small deviations from the original protocol.',
-        methods: [
-          'Factorial design sweeps for lipid ratios and charge-balancing excipients',
-          'High-throughput nebuliser stress rigs to profile aerosol stability',
-          'Cryogenic TEM paired with dynamic light scattering for particle morphology'
-        ],
-        findings: [
-          'Identified optimal helper lipid blend that preserved >85% encapsulation efficiency.',
-          'Documented protocol for aligning aerosol pressure curves across lab hardware.',
-          'Shared calibration worksheet to standardise nebuliser plume density checks.'
-        ]
+        matrix: {
+          sampleModel:
+            'Pulmonary mRNA-LNP aerosol batches mirroring Zhang et al.; factorial replicates across helper lipid ratios.',
+          reagentsRatios:
+            'Helper lipid blends swept alongside charge-balancing excipients (0.5-2x baseline charge).',
+          instrumentSetup:
+            'High-throughput nebuliser stress rigs plus cryo-TEM and dynamic light scattering stations.',
+          procedureSteps:
+            'Factorial mixing -> nebuliser stress profiling -> cryo-TEM morphology readout.',
+          controls: 'Baseline Zhang formulation and placebo aerosols anchoring pressure curves.',
+          readoutsMetrics:
+            '>85% encapsulation efficiency, aerosol pressure traces, particle morphology panels.',
+          qcCalibration:
+            'Shared worksheet for plume density and cross-lab aerosol pressure alignment.',
+          outcomeSummary:
+            'Surfaced helper lipid blend delivering stable aerosols with reproducible encapsulation.'
+        }
       },
       {
         id: `${selectedPaper.id}-application-bridge`,
@@ -2238,16 +2296,23 @@ export default function Home() {
           'Tracked for practitioners adapting the core method to production-scale datasets, instrumentation upgrades, and cross-domain collaborations.',
         highlight:
           'Use this cluster when drafting collaboration briefs or benchmarking how the approach behaves under real-world constraints.',
-        methods: [
-          'Scaled spray-drying with inline particle sizing and humidity control',
-          'Process analytical technology (PAT) dashboards for lot release',
-          'Real-world respiratory deposition modelling coupled with patient monitoring'
-        ],
-        findings: [
-          'Demonstrated 20% faster turnaround for GMP-compatible batches without potency loss.',
-          'Outlined QA checkpoints that caught shear-induced RNA degradation early.',
-          'Reported adherence data showing strong patient tolerance in clinical pilots.'
-        ]
+        matrix: {
+          sampleModel:
+            'cGMP-bound spray-dried mRNA-LNP lots scaled for field pilots with patient cohort metadata.',
+          reagentsRatios:
+            'Scaled excipient additions tuned via inline humidity and particle-sizing feedback.',
+          instrumentSetup:
+            'Spray-drying line with inline particle sizing, humidity control, and PAT dashboards.',
+          procedureSteps:
+            'Batch prep -> spray-dry run -> real-time PAT monitoring -> release testing with deposition models.',
+          controls: 'Legacy process lots and stability retains used as lot-release comparators.',
+          readoutsMetrics:
+            'Turnaround time, potency retention, respiratory deposition simulations, patient tolerance logs.',
+          qcCalibration:
+            'PAT alarms tied to QA checkpoints capturing shear-induced RNA degradation.',
+          outcomeSummary:
+            'Delivered GMP-ready batches 20% faster while holding potency and adherence signals.'
+        }
       },
       {
         id: `${selectedPaper.id}-theory-thread`,
@@ -2258,19 +2323,32 @@ export default function Home() {
         summary:
           'Highlights the theoretical through-lines that anchor the study, surfacing foundational citations and interpretability discussions.',
         highlight: contextLine,
-        methods: [
-          'Computational fluid dynamics exploring nozzle-plume harmonics',
-          'Statistical design of experiments for multi-factor stability envelopes',
-          'Comparative modelling of lipid polymorphism under thermal stress'
-        ],
-        findings: [
-          'Provides intuition for why specific lipid polymorphs unlock longer airway residence.',
-          'Summarises cross-study consensus on robustness thresholds for nebulised RNA payloads.',
-          'Includes quick-look decision tree for selecting DOE templates by formulation goal.'
-        ]
+        matrix: {
+          sampleModel:
+            'Computational surrogates mirroring pulmonary delivery physics and lipid polymorph transitions.',
+          reagentsRatios:
+            'Parameterised lipid polymorph libraries and excipient ratios explored in silico.',
+          instrumentSetup:
+            'CFD modelling suites linked with statistical DOE tooling for stability envelope mapping.',
+          procedureSteps:
+            'Set stability hypotheses -> run CFD and DOE simulations -> stress-test thermal scenarios.',
+          controls:
+            'Baseline theoretical models from Zhang et al. referenced as priors in comparative runs.',
+          readoutsMetrics:
+            'Residence time predictions, stability envelopes, polymorph phase diagrams.',
+          qcCalibration:
+            'Model validation against published nebuliser harmonics and empirical aerosol data.',
+          outcomeSummary:
+            'Explained how lipid polymorphs extend airway residence and guide DOE template selection.'
+        }
       }
     ];
   }, [selectedPaper]);
+
+  const similarPapersMatrix = useMemo(
+    () => buildLifeSciencesMatrix(compiledSimilarPapers),
+    [compiledSimilarPapers]
+  );
 
   const refreshVerificationSummary = useCallback(async () => {
     if (!selectedPaperId) {
@@ -3686,52 +3764,14 @@ export default function Home() {
                       <div className="space-y-6" data-tutorial="similar-papers-panel">
                         {compiledSimilarPapers.length > 0 ? (
                           <div className="space-y-6">
-                            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white/90 shadow-sm">
-                              <div className="border-b border-slate-200 bg-emerald-50/70 px-6 py-4">
-                                <h4 className="text-sm font-semibold uppercase tracking-[0.3em] text-emerald-700">
-                                  Method & finding crosswalk
+                            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                              <div className="border-b border-slate-200 px-5 py-3">
+                                <h4 className="text-sm font-semibold text-slate-900">
+                                  Method &amp; Finding Crosswalk
                                 </h4>
                               </div>
                               <div className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-slate-100">
-                                  <thead className="bg-white">
-                                    <tr>
-                                      <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                        Paper thread
-                                      </th>
-                                      <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                        Key methods
-                                      </th>
-                                      <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                        Standout findings
-                                      </th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-100 bg-white/80">
-                                    {compiledSimilarPapers.map(paper => (
-                                      <tr key={`${paper.id}-table`}>
-                                        <td className="align-top px-6 py-4 text-sm text-slate-700">
-                                          <div className="font-semibold text-slate-900">{paper.title}</div>
-                                          <div className="mt-1 text-xs text-slate-500">{paper.authors}</div>
-                                        </td>
-                                        <td className="align-top px-6 py-4 text-sm text-slate-600">
-                                          <ul className="space-y-1">
-                                            {paper.methods.map((method, index) => (
-                                              <li key={`${paper.id}-method-${index}`}>{method}</li>
-                                            ))}
-                                          </ul>
-                                        </td>
-                                        <td className="align-top px-6 py-4 text-sm text-slate-600">
-                                          <ul className="space-y-1">
-                                            {paper.findings.map((finding, index) => (
-                                              <li key={`${paper.id}-finding-${index}`}>{finding}</li>
-                                            ))}
-                                          </ul>
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
+                                <pre className="whitespace-pre px-5 py-3 font-mono text-xs leading-relaxed text-slate-700">{similarPapersMatrix}</pre>
                               </div>
                             </div>
 
