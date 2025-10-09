@@ -525,7 +525,6 @@ export async function POST(request: NextRequest) {
     const forwardedFor = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
     const clientIdentifier =
       user?.id ||
-      request.ip ||
       forwardedFor ||
       request.headers.get('x-real-ip') ||
       'anonymous'
