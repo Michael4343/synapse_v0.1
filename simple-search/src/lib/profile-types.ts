@@ -40,6 +40,8 @@ export interface ProfilePersonalization {
 }
 
 export interface UserProfile {
+  first_name: string | null
+  last_name: string | null
   orcid_id: string | null
   academic_website: string | null
   profile_personalization: ProfilePersonalization | null

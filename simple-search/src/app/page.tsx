@@ -9,6 +9,7 @@ import { usePostHogTracking } from '../hooks/usePostHogTracking';
 import { useAuthModal, getUserDisplayName } from '../lib/auth-hooks';
 import { createClient } from '../lib/supabase';
 import { AuthModal } from '../components/auth-modal';
+import { WelcomeModal } from '../components/welcome-modal';
 import { VerificationModal } from '../components/verification-modal';
 import { OnboardingTutorial } from '../components/onboarding-tutorial';
 import type { ProfilePersonalization, UserProfile } from '../lib/profile-types';
@@ -85,35 +86,22 @@ const LIFE_SCIENCES_MATRIX_ROWS: Array<{ key: LifeSciencesMatrixRowKey; label: s
   { key: 'outcomeSummary', label: 'Outcome summary' }
 ];
 
-const buildLifeSciencesMatrix = (papers: MockSimilarPaper[]): string => {
+interface LifeSciencesMatrixRow {
+  key: LifeSciencesMatrixRowKey;
+  label: string;
+  values: string[];
+}
+
+const buildLifeSciencesMatrixRows = (papers: MockSimilarPaper[]): LifeSciencesMatrixRow[] => {
   if (papers.length === 0) {
-    return '';
+    return [];
   }
 
-  const headerRow = ['Row', ...papers.map(paper => paper.title)];
-  const tableRows = LIFE_SCIENCES_MATRIX_ROWS.map(row => [
-    row.label,
-    ...papers.map(paper => paper.matrix[row.key] ?? 'Not reported')
-  ]);
-  const grid = [headerRow, ...tableRows];
-  const columnWidths = headerRow.map((_, columnIndex) =>
-    grid.reduce((maxWidth, currentRow) => {
-      const cellLength = currentRow[columnIndex]?.length ?? 0;
-      return cellLength > maxWidth ? cellLength : maxWidth;
-    }, 0)
-  );
-
-  const separator = columnWidths
-    .map(width => ''.padEnd(width, '-'))
-    .join('-+-');
-
-  const formattedRows = grid.map(row =>
-    row
-      .map((cell, columnIndex) => cell.padEnd(columnWidths[columnIndex], ' '))
-      .join(' | ')
-  );
-
-  return [formattedRows[0], separator, ...formattedRows.slice(1)].join('\n');
+  return LIFE_SCIENCES_MATRIX_ROWS.map(row => ({
+    key: row.key,
+    label: row.label,
+    values: papers.map(paper => paper.matrix[row.key] ?? 'Not reported')
+  }));
 };
 
 interface MockSimilarPaper {
@@ -1040,6 +1028,7 @@ export default function Home() {
   const [communityReviewStatus, setCommunityReviewStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [communityReviewError, setCommunityReviewError] = useState('');
   const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
 
   const profileManualKeywordsRef = useRef('');
   const isMountedRef = useRef(true);
@@ -1276,7 +1265,7 @@ export default function Home() {
       const supabase = createClient();
       const { data, error } = await supabase
         .from('profiles')
-        .select('orcid_id, academic_website, profile_personalization, last_profile_enriched_at, profile_enrichment_version')
+        .select('first_name, last_name, orcid_id, academic_website, profile_personalization, last_profile_enriched_at, profile_enrichment_version')
         .eq('id', user.id)
         .single();
 
@@ -1290,12 +1279,19 @@ export default function Home() {
         setProfileError('We could not load your research profile. Please try again.');
       } else {
         setProfile({
+          first_name: data?.first_name ?? null,
+          last_name: data?.last_name ?? null,
           orcid_id: data?.orcid_id ?? null,
           academic_website: data?.academic_website ?? null,
           profile_personalization: data?.profile_personalization ?? null,
           last_profile_enriched_at: data?.last_profile_enriched_at ?? null,
           profile_enrichment_version: data?.profile_enrichment_version ?? null,
         });
+
+        // Show welcome modal if user hasn't provided their name yet
+        if (data?.first_name === null) {
+          setShowWelcomeModal(true);
+        }
       }
     } catch (error) {
       if (isMountedRef.current) {
@@ -2345,8 +2341,8 @@ export default function Home() {
     ];
   }, [selectedPaper]);
 
-  const similarPapersMatrix = useMemo(
-    () => buildLifeSciencesMatrix(compiledSimilarPapers),
+  const lifeSciencesMatrixRows = useMemo(
+    () => buildLifeSciencesMatrixRows(compiledSimilarPapers),
     [compiledSimilarPapers]
   );
 
@@ -2636,6 +2632,34 @@ export default function Home() {
           : 'Unexpected error submitting community review request.'
       );
       setCommunityReviewStatus('error');
+    }
+  };
+
+  const handleSaveWelcomeNames = async (firstName: string, lastName: string) => {
+    if (!user) {
+      return { message: 'No user found' };
+    }
+
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from('profiles')
+        .update({ first_name: firstName, last_name: lastName })
+        .eq('id', user.id);
+
+      if (error) {
+        console.error('Failed to save welcome names:', error);
+        return error;
+      }
+
+      // Update local profile state so modal doesn't reappear
+      setProfile(prev => prev ? { ...prev, first_name: firstName, last_name: lastName } : null);
+      setShowWelcomeModal(false);
+
+      return null;
+    } catch (err) {
+      console.error('Unexpected error saving welcome names:', err);
+      return { message: 'Unexpected error occurred' };
     }
   };
 
@@ -3765,13 +3789,70 @@ export default function Home() {
                         {compiledSimilarPapers.length > 0 ? (
                           <div className="space-y-6">
                             <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                              <div className="border-b border-slate-200 px-5 py-3">
+                              <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-5 py-4">
                                 <h4 className="text-sm font-semibold text-slate-900">
                                   Method &amp; Finding Crosswalk
                                 </h4>
+                                <p className="text-xs text-slate-500">
+                                  Scan how each paper handles the key experimental dimensions.
+                                </p>
                               </div>
                               <div className="overflow-x-auto">
-                                <pre className="whitespace-pre px-5 py-3 font-mono text-xs leading-relaxed text-slate-700">{similarPapersMatrix}</pre>
+                                <table className="min-w-full text-left">
+                                  <thead className="bg-slate-50 text-xs font-medium text-slate-500">
+                                    <tr className="border-b border-slate-200">
+                                      <th className="w-48 px-5 py-3 text-left">
+                                        Research focus
+                                      </th>
+                                      {compiledSimilarPapers.map(paper => (
+                                        <th
+                                          key={paper.id}
+                                          className="min-w-[220px] max-w-[280px] px-4 py-3 text-left text-slate-600"
+                                          title={paper.title}
+                                        >
+                                          <span className="block whitespace-pre-wrap text-[11px] leading-snug">
+                                            {paper.title}
+                                          </span>
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody className="text-sm text-slate-700">
+                                    {lifeSciencesMatrixRows.length === 0 ? (
+                                      <tr>
+                                        <td
+                                          colSpan={compiledSimilarPapers.length + 1}
+                                          className="px-5 py-6 text-center text-sm text-slate-500"
+                                        >
+                                          No structured comparison is available for these papers yet.
+                                        </td>
+                                      </tr>
+                                    ) : (
+                                      lifeSciencesMatrixRows.map((row, rowIndex) => (
+                                        <tr
+                                          key={row.key}
+                                          className={`border-b border-slate-100 ${rowIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}
+                                        >
+                                          <th className="align-top px-5 py-4 text-sm font-semibold text-slate-900">
+                                            <span className="block whitespace-pre-wrap leading-snug">
+                                              {row.label}
+                                            </span>
+                                          </th>
+                                          {row.values.map((value, valueIndex) => (
+                                            <td
+                                              key={compiledSimilarPapers[valueIndex]?.id ?? valueIndex}
+                                              className="align-top px-4 py-4 text-sm leading-relaxed text-slate-700"
+                                            >
+                                              <span className="block whitespace-pre-wrap leading-snug">
+                                                {value}
+                                              </span>
+                                            </td>
+                                          ))}
+                                        </tr>
+                                      ))
+                                    )}
+                                  </tbody>
+                                </table>
                               </div>
                             </div>
 
@@ -3992,6 +4073,11 @@ export default function Home() {
         mode={authModal.mode}
         onClose={authModal.close}
         onSwitchMode={authModal.switchMode}
+      />
+      {/* Welcome Modal */}
+      <WelcomeModal
+        isOpen={showWelcomeModal}
+        onSave={handleSaveWelcomeNames}
       />
       {/* Save to List Modal */}
       <SaveToListModal
