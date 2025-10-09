@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { LogOut, Rss, User, UserCog, X, AlertTriangle, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { LogOut, Rss, User, UserCog, X, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../lib/auth-context';
 import { usePostHogTracking } from '../hooks/usePostHogTracking';
 import { useAuthModal, getUserDisplayName } from '../lib/auth-hooks';
@@ -77,7 +77,7 @@ interface MockSimilarPaper {
 }
 
 type VerificationRequestType = 'combined';
-type VerificationTrack = 'claims' | 'reproducibility' | 'paper' | 'similar';
+type VerificationTrack = 'reproducibility' | 'paper' | 'similar';
 
 interface ResearchPaperAnalysis {
   stage: string;
@@ -95,17 +95,6 @@ interface ResearchPaperAnalysis {
     question: string;
     weight: number;
     helper?: string;
-  }>;
-  criticalPath?: Array<{
-    id: string;
-    name: string;
-    deliverable: string;
-    checklist: string[];
-    primaryRisk?: {
-      severity: string;
-      issue: string;
-      mitigation: string;
-    };
   }>;
   evidence: {
     strong: Array<{
@@ -356,7 +345,6 @@ interface VerificationSummaryPayload {
   requests: VerificationRequestRecord[]
   communityReviewRequests: CommunityReviewRequestRecord[]
   reproducibilityReport: ResearchPaperAnalysis | null
-  claimsReport: ResearchPaperAnalysis | null
 }
 
 const SHELL_CLASSES = 'min-h-screen bg-slate-50 text-slate-900 flex flex-col xl:h-screen xl:overflow-hidden';
@@ -663,52 +651,6 @@ const VERIFICATION_DATA: Record<string, ResearchPaperAnalysis> = {
       { id: 'compounds', question: 'Can you source or synthesise the VCP activator compound panel described?', weight: 2, helper: 'Lead molecules ship from two specialised vendors; analog synthesis support may be required.' },
       { id: 'compliance', question: 'Are your approvals for patient-derived cell handling current and traceable?', weight: 1, helper: 'Requires IRB amendments plus cold-chain documentation for neuron stocks.' }
     ],
-    criticalPath: [
-      {
-        id: 'compound',
-        name: 'Compound sourcing and quality control',
-        deliverable: 'Validated compound panel',
-        checklist: ['Confirm vendor availability', 'Set up HPLC and mass spec QC workflow', 'Prepare storage and dosing stocks'],
-        primaryRisk: {
-          severity: 'moderate',
-          issue: 'Lead compounds currently on allocation with a six-week replenishment lead time.',
-          mitigation: 'Engage alternate suppliers noted in the supplement or reserve CRO synthesis capacity early.'
-        }
-      },
-      {
-        id: 'models',
-        name: 'Neuronal model setup and characterisation',
-        deliverable: 'QC validated neurons ready for dosing',
-        checklist: ['Differentiate iPSC neurons or thaw VCP mutant lines', 'Benchmark baseline autophagy and proteasome markers'],
-        primaryRisk: {
-          severity: 'critical',
-          issue: 'Differentiation batches drift in proteostasis baseline without tight SOP control.',
-          mitigation: 'Adopt the author SOP for maturation days and include internal healthy control lines.'
-        }
-      },
-      {
-        id: 'assays',
-        name: 'Autophagy and proteasome assays',
-        deliverable: 'Flux curves across compound doses',
-        checklist: ['High-content imaging pipeline configured', 'Proteasome activity kit validated with controls'],
-        primaryRisk: {
-          severity: 'moderate',
-          issue: 'Compound cytotoxicity window narrows sharply after 48 hours.',
-          mitigation: 'Use staggered dosing and viability gates described in the supplement to avoid false positives.'
-        }
-      },
-      {
-        id: 'analysis',
-        name: 'Data integration and reporting',
-        deliverable: 'Integrated autophagy and proteasome report',
-        checklist: ['Analysis scripts for proteostasis metrics', 'Predefined QC gates for outlier exclusion'],
-        primaryRisk: {
-          severity: 'minor',
-          issue: 'Normalisation requires internal controls not included in the public data dump.',
-          mitigation: 'Recreate control curves from the shared spreadsheets or request raw files via the author contact channel.'
-        }
-      }
-    ],
     evidence: {
       strong: [
         { claim: 'VCP-874 boosted autophagic flux by 45% in patient-derived neurons.', source: 'Supplementary Figure 4', confidence: 'verified' },
@@ -741,41 +683,6 @@ const VERIFICATION_DATA: Record<string, ResearchPaperAnalysis> = {
       { id: 'dataset', question: 'Is your team comfortable rebuilding the ImageNet ingestion pipeline with deterministic preprocessing?', weight: 2, helper: 'Consistent crop, flip, and colour jitter policies are required to hit the reported accuracy.' },
       { id: 'kernels', question: 'Can you maintain or emulate the legacy CUDA/cuDNN kernels referenced in the paper?', weight: 2, helper: 'Contemporary frameworks hide some details but still require precise cuDNN versions or equivalent fused kernels.' },
       { id: 'ops', question: 'Do you have telemetry to monitor throughput, loss curves, and gradient spikes during long runs?', weight: 1, helper: 'Helps catch divergence early when reproducing the baseline schedule.' }
-    ],
-    criticalPath: [
-      {
-        id: 'data-prep',
-        name: 'Dataset normalisation and caching',
-        deliverable: 'Verified ImageNet shard set',
-        checklist: ['Curate 2012 train/val manifest', 'Generate deterministic shuffles', 'Provision NVMe cache'],
-        primaryRisk: {
-          severity: 'moderate',
-          issue: 'Checksum drift or missing images break reproducibility guarantees.',
-          mitigation: 'Reconcile with ImageNet metadata archive and store manifest diffs alongside cached shards.'
-        }
-      },
-      {
-        id: 'training',
-        name: 'Baseline training run',
-        deliverable: 'Top-1 / Top-5 accuracy curves',
-        checklist: ['Reserve two high-memory GPUs', 'Match the original LR momentum schedule', 'Enable robust checkpointing'],
-        primaryRisk: {
-          severity: 'critical',
-          issue: 'Deviation in learning rate schedule collapses accuracy.',
-          mitigation: 'Mirror the original step schedule and validate every 20k iterations to confirm convergence.'
-        }
-      },
-      {
-        id: 'benchmark',
-        name: 'Evaluation and ablation sweeps',
-        deliverable: 'Reproduction metrics with confidence intervals',
-        checklist: ['Run deterministic evaluation script', 'Log throughput and memory usage', 'Capture ablation deltas'],
-        primaryRisk: {
-          severity: 'moderate',
-          issue: 'Hardware variance makes throughput comparisons noisy.',
-          mitigation: 'Report normalised images/second and compare against a PyTorch reference implementation.'
-        }
-      }
     ],
     evidence: {
       strong: [
@@ -810,41 +717,6 @@ const VERIFICATION_DATA: Record<string, ResearchPaperAnalysis> = {
       { id: 'anneal', question: 'Do you operate an inert-atmosphere anneal step for residue removal?', weight: 2, helper: 'Annealing in forming gas or argon is necessary to recover carrier mobility after lithography.' },
       { id: 'metrology', question: 'Is Raman/AFM metrology available to confirm monolayer thickness and strain?', weight: 1, helper: 'Spectra confirm the G and 2D peaks; AFM ensures the transfer avoided wrinkles.' }
     ],
-    criticalPath: [
-      {
-        id: 'flake-harvest',
-        name: 'Graphene exfoliation and inspection',
-        deliverable: 'Monolayer graphene flakes catalogued',
-        checklist: ['Exfoliate onto 300 nm SiO₂', 'Optically screen for monolayers', 'Log candidate flakes with coordinates'],
-        primaryRisk: {
-          severity: 'moderate',
-          issue: 'Flake contamination or wrinkles reduce mobility.',
-          mitigation: 'Use clean tape, verify with Raman/AFM, and discard flakes with polymer residue.'
-        }
-      },
-      {
-        id: 'pattern',
-        name: 'Hall bar patterning and metallisation',
-        deliverable: 'Contacted Hall bar devices',
-        checklist: ['Spin-coat resist with soft bake', 'Define geometry via e-beam', 'Deposit Cr/Au contacts'],
-        primaryRisk: {
-          severity: 'critical',
-          issue: 'Overexposure or resist scumming damages the flake edge.',
-          mitigation: 'Optimise dose on sacrificial flakes and include oxygen descum before metallisation.'
-        }
-      },
-      {
-        id: 'anneal',
-        name: 'Anneal and electrical characterisation',
-        deliverable: 'Mobility curves vs. gate voltage',
-        checklist: ['Anneal in forming gas', 'Wire-bond device', 'Sweep gate voltage for mobility extraction'],
-        primaryRisk: {
-          severity: 'moderate',
-          issue: 'Ambient exposure post-anneal reintroduces dopants.',
-          mitigation: 'Package devices immediately or work inside a nitrogen glovebox.'
-        }
-      }
-    ],
     evidence: {
       strong: [
         { claim: 'Independent labs have reproduced mobility >10,000 cm²/Vs with similar exfoliation workflows.', source: 'Tombros et al., Nature Physics 2007', confidence: 'verified' },
@@ -878,41 +750,6 @@ const VERIFICATION_DATA: Record<string, ResearchPaperAnalysis> = {
       { id: 'storage', question: 'Is petabyte-scale storage with audit trails available for raw reads and intermediate contigs?', weight: 2, helper: 'Trace files and consensus scaffolds must be retained for reproducibility and regulatory review.' },
       { id: 'annotation', question: 'Do you have a team that can refresh gene annotation and QC against current reference builds?', weight: 1, helper: 'Updates to Ensembl/RefSeq annotations are needed to align with modern gene models.' }
     ],
-    criticalPath: [
-      {
-        id: 'pilot',
-        name: 'Pilot sequencing and calibration',
-        deliverable: 'Calibrated sequencing runs with QC reports',
-        checklist: ['Sequence well-characterised BAC clones', 'Benchmark against NIST genomes', 'Validate base-call accuracy'],
-        primaryRisk: {
-          severity: 'moderate',
-          issue: 'Instrument drift skews quality metrics across centres.',
-          mitigation: 'Run recurring calibration against the Genome in a Bottle reference set and share QC dashboards.'
-        }
-      },
-      {
-        id: 'assembly',
-        name: 'Whole-genome assembly and scaffolding',
-        deliverable: 'Consensus assembly with gap catalogue',
-        checklist: ['Merge reads across centres', 'Run assembly with documented parameters', 'Annotate remaining gaps/scaffolds'],
-        primaryRisk: {
-          severity: 'critical',
-          issue: 'Metadata mismatches between centres introduce chimeric contigs.',
-          mitigation: 'Enforce shared manifest templates and re-run suspect libraries through independent validation.'
-        }
-      },
-      {
-        id: 'annotation',
-        name: 'Annotation and comparative analysis',
-        deliverable: 'Annotated reference genome release',
-        checklist: ['Lift over to current gene models', 'Run repeat masking and structural variant calls', 'Publish QC and coverage reports'],
-        primaryRisk: {
-          severity: 'moderate',
-          issue: 'Legacy annotation pipelines do not map cleanly to modern references.',
-          mitigation: 'Use Ensembl/RefSeq joint pipelines and document manual curation steps.'
-        }
-      }
-    ],
     evidence: {
       strong: [
         { claim: 'The human genome reference has been independently reassembled multiple times with concordant coverage metrics.', source: 'Telomere-to-Telomere consortium reports (2022)', confidence: 'verified' },
@@ -935,33 +772,6 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
-function toStringArray(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value
-      .filter(isNonEmptyString)
-      .map((item) => item.trim())
-      .filter((item) => item.length > 0);
-  }
-  if (isNonEmptyString(value)) {
-    const normalized = value.replace(/\r\n/g, '\n').trim();
-    if (normalized.length === 0) {
-      return [];
-    }
-
-    const rawItems = normalized
-      .split(/[;\n\u2022]+/)
-      .map((item) => item.replace(/^\s*[-*]\s*/, '').trim())
-      .filter((item) => item.length > 0);
-
-    if (rawItems.length > 0) {
-      return rawItems;
-    }
-
-    return [normalized];
-  }
-  return [];
-}
-
 function StaticReproReport({
   report,
   onRequestReview,
@@ -978,10 +788,6 @@ function StaticReproReport({
   const questions = useMemo(
     () => (Array.isArray(report.feasibilityQuestions) ? report.feasibilityQuestions : []),
     [report.feasibilityQuestions]
-  );
-  const criticalPhases = useMemo(
-    () => (Array.isArray(report.criticalPath) ? report.criticalPath : []),
-    [report.criticalPath]
   );
 
   const [answers, setAnswers] = useState<Record<string, 'yes' | 'no' | null>>(() => {
@@ -1009,13 +815,7 @@ function StaticReproReport({
     }));
   }
 
-  const isPlaceholder = questions.length === 0 && criticalPhases.length === 0;
-
-  const blockerSeverityTone: Record<string, string> = {
-    critical: 'border border-red-200 bg-red-50 text-red-600',
-    moderate: 'border border-amber-200 bg-amber-50 text-amber-600',
-    minor: 'border border-sky-200 bg-sky-50 text-sky-600'
-  };
+  const isPlaceholder = questions.length === 0;
 
   if (isPlaceholder) {
     return (
@@ -1032,7 +832,7 @@ function StaticReproReport({
             Detailed reproducibility analysis coming soon
           </p>
           <p className="mt-2 text-xs text-amber-700">
-            Feasibility questions, critical path analysis, and expert insights will be added for this paper.
+            Feasibility questions and expert insights will be added for this paper.
           </p>
         </section>
       </div>
@@ -1100,85 +900,6 @@ function StaticReproReport({
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h4 className="text-base font-semibold text-slate-900">Critical path</h4>
-            <p className="mt-1 text-sm text-slate-600">High-level phases with the main output and risk to watch.</p>
-          </div>
-        </div>
-        <div className="mt-6 space-y-5">
-          {criticalPhases.map((phase) => {
-            const checklist = toStringArray(phase.checklist);
-            const primaryBlocker =
-              phase.primaryRisk && typeof phase.primaryRisk === 'object' ? phase.primaryRisk : null;
-            const severityLabel = primaryBlocker && typeof primaryBlocker.severity === 'string'
-              ? primaryBlocker.severity.charAt(0).toUpperCase() + primaryBlocker.severity.slice(1)
-              : 'No major risk';
-
-            return (
-              <article key={phase.id} className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-                <header className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <p className="mt-1 text-base font-semibold text-slate-900">{phase.name}</p>
-                  </div>
-                </header>
-
-                <div className="mt-5 grid gap-5 md:grid-cols-2">
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Key deliverable</p>
-                    <div className="mt-2 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700">
-                      {phase.deliverable}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Primary risk</p>
-                    {primaryBlocker ? (
-                      <div className="mt-2 rounded-lg border border-slate-200 bg-white p-4">
-                        <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-600">
-                          <span
-                            className={`inline-flex items-center rounded-full px-2 py-0.5 ${
-                              blockerSeverityTone[primaryBlocker.severity] ?? 'border border-slate-200 bg-white text-slate-600'
-                            }`}
-                          >
-                            {severityLabel}
-                          </span>
-                        </div>
-                        <p className="mt-3 text-sm font-semibold text-slate-900">{primaryBlocker.issue}</p>
-                      </div>
-                    ) : (
-                      <div className="mt-2 rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-600">
-                        No major blockers captured yet.
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {primaryBlocker ? (
-                  <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
-                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Mitigation</p>
-                    <p className="mt-2 text-sm text-slate-700">{primaryBlocker.mitigation}</p>
-                  </div>
-                ) : null}
-
-                {checklist.length ? (
-                  <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
-                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Checklist</p>
-                    <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm text-slate-700">
-                      {checklist.map((item, index) => (
-                        <li key={`${phase.id}-check-${index}`}>
-                          {item}
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
-      </section>
-
       {onRequestReview ? (
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-start gap-4">
@@ -1204,129 +925,6 @@ function StaticReproReport({
       ) : null}
     </div>
   );
-}
-
-function ClaimsReportPreview({
-  report,
-  onRequestReview,
-  communityReviewStatus = 'idle',
-  communityReviewRequested = false,
-  communityReviewError = ''
-}: {
-  report: ResearchPaperAnalysis;
-  onRequestReview?: (source: VerificationTrack) => void;
-  communityReviewStatus?: 'idle' | 'sending' | 'success' | 'error';
-  communityReviewRequested?: boolean;
-  communityReviewError?: string;
-}) {
-  const headline = report.evidence.strong[0];
-  const strongEvidence = report.evidence.strong;
-  const gaps = report.evidence.gaps;
-  const assumptions = report.evidence.assumptions;
-  const isSending = communityReviewStatus === 'sending';
-  const isComplete = communityReviewRequested || communityReviewStatus === 'success';
-  const buttonLabel = isSending ? 'Sending…' : isComplete ? 'Request Received' : 'Request Community Review';
-
-  return (
-    <div className="space-y-6" data-tutorial="claims-overview">
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900">Claims verification snapshot</h3>
-            <p className="mt-1 text-sm text-slate-600">{report.paper.title}</p>
-            <p className="text-xs text-slate-500">{report.paper.authors} • {report.paper.venue}</p>
-          </div>
-          <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-violet-700">
-            Claims
-          </span>
-        </div>
-        {headline ? (
-          <div className="mt-4">
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Headline finding</h4>
-            <p className="mt-2 text-sm font-semibold text-slate-900">{headline.claim}</p>
-            <p className="mt-1 text-xs text-slate-500">Source: {headline.source}</p>
-          </div>
-        ) : null}
-      </section>
-
-      {strongEvidence.length ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Evidence we stand behind</h4>
-          <ul className="mt-4 space-y-3 text-sm text-slate-700">
-            {strongEvidence.map((item, index) => (
-              <li key={`claims-evidence-${index}`} className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <CheckCircle2 className="mt-1 h-5 w-5 text-emerald-500" />
-                <div>
-                  <p className="font-medium text-slate-900">{item.claim}</p>
-                  <p className="text-xs text-slate-500">Source: {item.source}</p>
-                  {item.notes ? <p className="mt-1 text-xs text-slate-500">{item.notes}</p> : null}
-                  {item.confidence ? <p className="mt-1 text-xs text-slate-400">Confidence: {item.confidence}</p> : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {gaps.length ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Gaps & follow-ups</h4>
-          <ul className="mt-4 space-y-3 text-sm text-slate-700">
-            {gaps.map((gap, index) => (
-              <li key={`claims-gap-${index}`} className="flex gap-3 rounded-xl border border-slate-200 bg-white p-4">
-                <AlertTriangle className="mt-1 h-5 w-5 text-amber-500" />
-                <div>
-                  <p className="font-medium text-slate-900">{gap.description}</p>
-                  <p className="text-xs text-slate-500">Impact: {gap.impact}</p>
-                  <p className="text-xs text-slate-500">Severity: {gap.severity}</p>
-                  {gap.needsExpert !== undefined ? (
-                    <p className="mt-1 text-xs text-slate-400">
-                      {gap.needsExpert ? 'Requires expert outreach.' : 'Track internally for now.'}
-                    </p>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {assumptions.length ? (
-        <section className="rounded-2xl border border-slate-200 bg-slate-50 p-6 shadow-sm">
-          <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Assumptions we made</h4>
-          <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-slate-600">
-            {assumptions.map((assumption, index) => (
-              <li key={`assumption-${index}`}>{assumption}</li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {onRequestReview ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-start gap-4">
-            <button
-              type="button"
-              onClick={() => onRequestReview('claims')}
-              disabled={isSending || isComplete}
-              className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {buttonLabel}
-            </button>
-            <div>
-              <p className="text-sm text-slate-600">We&apos;ll compile patents, PhD theses, and contact the original study authors.</p>
-              {communityReviewStatus === 'error' && communityReviewError ? (
-                <p className="mt-2 text-xs text-rose-600">{communityReviewError}</p>
-              ) : null}
-              {isComplete ? (
-                <p className="mt-2 text-xs text-slate-500">Thanks — we&apos;ll reach out via email to coordinate this review.</p>
-              ) : null}
-            </div>
-          </div>
-    </section>
-  ) : null}
-</div>
-);
 }
 
 export default function Home() {
@@ -2580,14 +2178,12 @@ export default function Home() {
     ? communityReviewRequests.find(request => request.user_id === user.id)
     : null;
   const hasCommunityReviewRequest = Boolean(activeCommunityReviewRequest);
-  const claimsReport = (verificationSummary?.claimsReport as ResearchPaperAnalysis | null) ?? null;
   const reproducibilityReport = (verificationSummary?.reproducibilityReport as ResearchPaperAnalysis | null) ?? null;
-  const hasClaimsReport = Boolean(claimsReport);
   const hasReproReport = Boolean(reproducibilityReport);
   const shouldDisableVerification = !hasSelectedPaper || isVerificationSending || verificationSummaryLoading;
 
   const isTrackReportAvailable = (track: VerificationTrack) =>
-    track === 'claims' ? hasClaimsReport : track === 'reproducibility' ? hasReproReport : false;
+    track === 'reproducibility' ? hasReproReport : false;
 
   const compiledSimilarPapers = useMemo<MockSimilarPaper[]>(() => {
     if (!selectedPaper) {
@@ -2687,8 +2283,7 @@ export default function Home() {
       setVerificationSummary({
         requests: [],
         communityReviewRequests: [],
-        reproducibilityReport: sampleReport,
-        claimsReport: sampleReport
+        reproducibilityReport: sampleReport
       });
       return;
     }
@@ -2705,8 +2300,7 @@ export default function Home() {
         communityReviewRequests: Array.isArray(data.communityReviewRequests)
           ? data.communityReviewRequests
           : [],
-        reproducibilityReport: data.reproducibilityReport ?? null,
-        claimsReport: data.claimsReport ?? null
+        reproducibilityReport: data.reproducibilityReport ?? null
       });
     } catch (error) {
       console.error('Failed to load verification summary:', error);
@@ -2781,8 +2375,7 @@ export default function Home() {
           }
         ],
         communityReviewRequests: [],
-        reproducibilityReport: sampleReport,
-        claimsReport: sampleReport
+        reproducibilityReport: sampleReport
       });
       requestAnimationFrame(() => {
         document.getElementById('verification-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -3008,7 +2601,7 @@ export default function Home() {
   }, [communityReviewStatus, hasCommunityReviewRequest, user]);
 
   const getVerificationButtonClasses = (track: VerificationTrack) => {
-    if ((track === 'claims' || track === 'reproducibility') && shouldDisableVerification) {
+    if (track === 'reproducibility' && shouldDisableVerification) {
       return 'inline-flex items-center justify-center rounded-lg border border-slate-200 bg-slate-100 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400 cursor-not-allowed opacity-60';
     }
 
@@ -3029,14 +2622,12 @@ export default function Home() {
 
   const BASE_LABELS: Record<VerificationTrack, string> = {
     reproducibility: 'CAN I REPRODUCE THIS?',
-    claims: 'PAPER CLAIMS',
     paper: 'SHOW THIS PAPER',
     similar: 'COMPILE SIMILAR PAPERS'
   };
 
   const VIEW_LABELS: Record<VerificationTrack, string> = {
     reproducibility: 'CAN I REPRODUCE THIS?',
-    claims: 'PAPER CLAIMS',
     paper: 'SHOW THIS PAPER',
     similar: 'COMPILE SIMILAR PAPERS'
   };
@@ -3076,16 +2667,12 @@ export default function Home() {
       return 'Preview the example briefing for this sample paper.';
     }
     if (isTrackReportAvailable(track)) {
-      return track === 'reproducibility'
-        ? 'View the latest reproducibility briefing for this paper.'
-        : 'View the latest claims briefing for this paper.';
+      return 'View the latest reproducibility briefing for this paper.';
     }
     if (hasActiveVerificationRequest) {
       return 'Our agent is already processing this paper — switch views to review progress.';
     }
-    return track === 'reproducibility'
-      ? 'Kick off the combined reproducibility + claims briefing.'
-      : 'Kick off the combined claims + reproducibility briefing.';
+    return 'Kick off the reproducibility briefing.';
   };
 
   const verificationButtons = (
@@ -3142,24 +2729,6 @@ export default function Home() {
           className={`h-1 w-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-sky-600 transition-all duration-200 ease-out ${verificationView === 'reproducibility' ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
         />
       </div>
-      <div className="flex flex-col items-center gap-1">
-        <button
-          type="button"
-          onClick={() => handleVerificationRequest('claims')}
-          className={getVerificationButtonClasses('claims')}
-          aria-pressed={verificationView === 'claims'}
-          disabled={shouldDisableVerification}
-          title={getVerificationButtonTitle('claims')}
-          data-tutorial="claims-button"
-        >
-          <span className="flex items-center gap-2">
-            {getVerificationButtonLabel('claims')}
-          </span>
-        </button>
-        <span
-          className={`h-1 w-full rounded-full bg-gradient-to-r from-violet-400 via-sky-500 to-emerald-400 transition-all duration-200 ease-out ${verificationView === 'claims' ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
-        />
-      </div>
     </div>
   );
 
@@ -3210,11 +2779,6 @@ export default function Home() {
 
     console.log(`📝 [PERF] handlePaperSaved completed in ${Date.now() - startTime}ms`);
   };
-
-
-
-
-
   const handleTutorialClose = () => {
     setTutorialOpen(false);
   };
@@ -3232,10 +2796,8 @@ export default function Home() {
 
     if (step <= 1) {
       setVerificationView('paper');
-    } else if (step <= 3) {
-      setVerificationView('reproducibility');
     } else {
-      setVerificationView('claims');
+      setVerificationView('reproducibility');
     }
   }, [selectedPaper, setSelectedPaper, setVerificationView]);
 
@@ -4088,8 +3650,8 @@ export default function Home() {
                   <section className="space-y-4">
                     {verificationView === 'paper' && (
                       <div className="space-y-4" data-tutorial="paper-overview">
-                        {/* DOI/External links for non-sample papers */}
-                        {!isSamplePaperId(selectedPaper.id) && selectedPaperPrimaryLink && (
+                        {/* DOI/External links */}
+                        {selectedPaperPrimaryLink && (
                           <div className={DETAIL_METADATA_CLASSES}>
                             <p>
                               <a
@@ -4239,9 +3801,7 @@ export default function Home() {
                               ? (latestVerificationRequest.result_summary as ResearchPaperAnalysis)
                               : null;
 
-                          const activeReport = verificationView === 'claims'
-                            ? claimsReport ?? fallbackReport
-                            : reproducibilityReport ?? fallbackReport;
+                          const activeReport = reproducibilityReport ?? fallbackReport;
 
                           if (activeReport) {
                             const communityReviewHandler = user
@@ -4250,26 +3810,18 @@ export default function Home() {
                                   authModal.openSignup();
                                 };
 
-                            return verificationView === 'claims' ? (
-                              <ClaimsReportPreview
+                            return (
+                              <StaticReproReport
                                 report={activeReport}
                                 onRequestReview={communityReviewHandler}
                                 communityReviewStatus={communityReviewStatus}
                                 communityReviewRequested={hasCommunityReviewRequest}
-                            communityReviewError={communityReviewError}
-                          />
-                        ) : (
-                          <StaticReproReport
-                            report={activeReport}
-                            onRequestReview={communityReviewHandler}
-                            communityReviewStatus={communityReviewStatus}
-                            communityReviewRequested={hasCommunityReviewRequest}
-                            communityReviewError={communityReviewError}
-                          />
-                        );
-                      }
+                                communityReviewError={communityReviewError}
+                              />
+                            );
+                          }
 
-                      if (latestVerificationRequest) {
+                          if (latestVerificationRequest) {
                         const status = latestVerificationRequest.status;
                         const statusLabel = status.replace('_', ' ');
                         let statusMessage = 'The request is recorded. We will follow up with the full briefing shortly.';
@@ -4291,7 +3843,7 @@ export default function Home() {
                                 </p>
                               </div>
                               <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium uppercase tracking-wide text-slate-500">
-                                {verificationView === 'claims' ? 'Claims view' : 'Reproducibility view'}
+                                Reproducibility view
                               </span>
                             </div>
                             <p className="mt-4 leading-relaxed">{statusMessage}</p>

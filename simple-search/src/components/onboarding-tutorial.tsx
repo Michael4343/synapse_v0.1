@@ -1,14 +1,14 @@
 'use client'
 
 import React from 'react'
-import { X, ArrowRight, ArrowLeft, CheckCircle2 } from 'lucide-react'
+import { X, ArrowRight, ArrowLeft } from 'lucide-react'
 
 interface TutorialStep {
   id: number
   title: string
   description: string
   highlightSelector?: string
-  action?: 'show-paper' | 'show-reproducibility' | 'show-claims' | 'cta'
+  action?: 'show-paper' | 'show-reproducibility' | 'cta'
 }
 
 const TUTORIAL_STEPS: TutorialStep[] = [
@@ -35,24 +35,11 @@ const TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: 3,
     title: 'Review feasibility insights',
-    description: 'Walk through the feasibility snapshot, critical path, and blockers for this experiment.',
+    description: 'Walk through the feasibility snapshot and blockers for this experiment.',
     highlightSelector: '[data-tutorial="repro-overview"]'
   },
   {
     id: 4,
-    title: 'Check scientific claims',
-    description: 'Switch to the claims briefing to assess headline findings and evidence strength.',
-    highlightSelector: '[data-tutorial="claims-button"]',
-    action: 'show-claims'
-  },
-  {
-    id: 5,
-    title: 'Inspect evidence & gaps',
-    description: 'Study supporting evidence, gaps, and assumptions captured for the key claims.',
-    highlightSelector: '[data-tutorial="claims-overview"]'
-  },
-  {
-    id: 6,
     title: 'Ready to verify your own papers?',
     description: '',
     action: 'cta'

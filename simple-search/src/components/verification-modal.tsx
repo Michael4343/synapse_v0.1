@@ -5,18 +5,15 @@ import { X } from 'lucide-react'
 
 interface VerificationModalProps {
   isOpen: boolean
-  type: 'combined' | 'claims' | 'reproducibility' | null
+  type: 'combined' | 'reproducibility' | null
   status: 'idle' | 'sending' | 'success' | 'error'
   errorMessage: string
   onClose: () => void
 }
 
-const TYPE_COPY: Record<'combined' | 'claims' | 'reproducibility', { actionLabel: string }> = {
+const TYPE_COPY: Record<'combined' | 'reproducibility', { actionLabel: string }> = {
   combined: {
     actionLabel: 'VERIFICATION BRIEFING'
-  },
-  claims: {
-    actionLabel: 'CLAIMS VERIFICATION'
   },
   reproducibility: {
     actionLabel: 'REPRODUCIBILITY VERIFICATION'

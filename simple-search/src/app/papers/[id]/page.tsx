@@ -228,12 +228,12 @@ function PaperDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [verificationModalOpen, setVerificationModalOpen] = useState(false)
-  const [activeVerification, setActiveVerification] = useState<'claims' | 'reproducibility' | null>(null)
+  const [activeVerification, setActiveVerification] = useState<'combined' | null>(null)
   const [verificationStatus, setVerificationStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle')
   const [verificationError, setVerificationError] = useState('')
   const isVerificationSending = verificationStatus === 'sending'
 
-  const handleVerificationClick = async (type: 'claims' | 'reproducibility') => {
+  const handleVerificationClick = async () => {
     if (!paper) {
       return
     }
@@ -243,7 +243,7 @@ function PaperDetailPage() {
       return
     }
 
-    setActiveVerification(type)
+    setActiveVerification('combined')
     setVerificationError('')
     setVerificationStatus('sending')
     setVerificationModalOpen(true)
@@ -255,7 +255,7 @@ function PaperDetailPage() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          verificationType: type,
+          verificationType: 'combined',
           paper: buildVerificationPayload(paper)
         })
       })
@@ -438,16 +438,7 @@ function PaperDetailPage() {
           <div className="mt-4 flex flex-col gap-3 sm:flex-row">
             <button
               type="button"
-              onClick={() => handleVerificationClick('claims')}
-              disabled={loading || isVerificationSending}
-              title={!user ? 'Sign in to request verification' : undefined}
-              className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              VERIFY CLAIMS
-            </button>
-            <button
-              type="button"
-              onClick={() => handleVerificationClick('reproducibility')}
+              onClick={handleVerificationClick}
               disabled={loading || isVerificationSending}
               title={!user ? 'Sign in to request verification' : undefined}
               className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600 disabled:cursor-not-allowed disabled:opacity-60"
