@@ -38,5 +38,6 @@ export const TABLES = {
   PAPER_FEEDBACK: 'paper_feedback',
   VERIFICATION_REQUESTS: 'paper_verification_requests',
   COMMUNITY_REVIEW_REQUESTS: 'paper_community_review_requests',
-  PAPER_DISCUSSIONS: 'paper_discussions'
+  PAPER_DISCUSSIONS: 'paper_discussions',
+  WEEKLY_DIGESTS: 'weekly_digests'
 } as const

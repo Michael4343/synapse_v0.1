@@ -19,6 +19,7 @@ import { buildVerifyListName, buildCompileListName, savePaperToNamedList } from 
 import type { ListPaperPayload } from '../lib/list-actions';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { WeeklyDigestComponent } from '../components/weekly-digest';
 import {
   getCachedData,
   setCachedData,
@@ -1619,6 +1620,12 @@ export default function Home() {
   const [listItemsLoadingMessage, setListItemsLoadingMessage] = useState('');
   const [cachedListItems, setCachedListItems] = useState<Map<number, ApiSearchResult[]>>(new Map());
   const [profileEditorVisible, setProfileEditorVisible] = useState(false);
+
+  useEffect(() => {
+    const handler = () => setProfileEditorVisible(true);
+    window.addEventListener('evidentia:open-profile-editor', handler);
+    return () => window.removeEventListener('evidentia:open-profile-editor', handler);
+  }, [setProfileEditorVisible]);
   const [profileSaveLoading, setProfileSaveLoading] = useState(false);
   const [accountDropdownVisible, setAccountDropdownVisible] = useState(false);
   const [scrapedContent, setScrapedContent] = useState<string | null>(null);
@@ -4425,6 +4432,10 @@ export default function Home() {
           <section
             className={`min-h-0 min-w-0 transition-all duration-300 ${FEED_CARD_CLASSES} xl:basis-[40%] xl:h-full xl:overflow-y-auto 2xl:basis-[38%]`}
           >
+            {/* Weekly Research Digest - Appears at top for authenticated users */}
+            {user && !isSearchContext && !isListViewActive && (
+              <WeeklyDigestComponent userId={user.id} />
+            )}
 
             <header className="flex flex-col gap-0">
               <div className="flex items-center justify-between">
