@@ -33,7 +33,10 @@
       "Read(//tmp/**)",
       "WebFetch(domain:scholar.google.com)",
       "Bash(cd:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "WebFetch(domain:info.orcid.org)",
+      "WebFetch(domain:groups.google.com)",
+      "WebFetch(domain:support.orcid.org)"
     ],
     "deny": [],
     "ask": []

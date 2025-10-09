@@ -3,13 +3,14 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { LogOut, Rss, User, UserCog, X, ArrowLeft } from 'lucide-react';
+import { LogOut, Rss, User, UserCog, X, ArrowLeft, ChevronDown } from 'lucide-react';
 import { useAuth } from '../lib/auth-context';
 import { usePostHogTracking } from '../hooks/usePostHogTracking';
 import { useAuthModal, getUserDisplayName } from '../lib/auth-hooks';
 import { createClient } from '../lib/supabase';
 import { AuthModal } from '../components/auth-modal';
 import { WelcomeModal } from '../components/welcome-modal';
+import { OrcidSearchModal } from '../components/orcid-search-modal';
 import { VerificationModal } from '../components/verification-modal';
 import { OnboardingTutorial } from '../components/onboarding-tutorial';
 import type { ProfilePersonalization, UserProfile } from '../lib/profile-types';
@@ -110,9 +111,135 @@ interface MockSimilarPaper {
   authors: string;
   venue: string;
   year: string;
+  citationCount: number | null;
+  clusterLabel: string;
   summary: string;
   highlight: string;
   matrix: Record<LifeSciencesMatrixRowKey, string>;
+}
+
+const formatCitationCount = (count: number | null): string => {
+  if (count === null) {
+    return 'Citations not reported';
+  }
+  if (count === 1) {
+    return '1 citation';
+  }
+  if (count === 0) {
+    return '0 citations';
+  }
+  if (count >= 1000) {
+    const formatted = (count / 1000).toFixed(count % 1000 === 0 ? 0 : 1).replace(/\.0$/, '');
+    return `${formatted}k citations`;
+  }
+  return `${count.toLocaleString()} citations`;
+};
+
+interface CrosswalkMatrixModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  rows: LifeSciencesMatrixRow[];
+  papers: MockSimilarPaper[];
+}
+
+function CrosswalkMatrixModal({ isOpen, onClose, rows, papers }: CrosswalkMatrixModalProps) {
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen, onClose]);
+
+  if (!isOpen) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-5xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.35)]">
+        <div className="flex items-start justify-between border-b border-slate-200 px-6 py-4">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Method &amp; Finding Crosswalk</h3>
+            <p className="mt-1 text-sm text-slate-500">Full comparison across all research dimensions.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="ml-4 inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+          >
+            <span className="sr-only">Close</span>
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+        <div className="max-h-[70vh] overflow-auto">
+          {rows.length === 0 ? (
+            <div className="px-6 py-12 text-center text-sm text-slate-500">
+              No structured comparison is available for these papers yet.
+            </div>
+          ) : (
+            <table className="min-w-full text-left">
+              <thead className="sticky top-0 bg-white text-xs font-medium text-slate-500 shadow-[0_1px_0_rgba(15,23,42,0.08)]">
+                <tr>
+                  <th className="w-56 px-6 py-3 text-left uppercase tracking-wide text-slate-500">Research focus</th>
+                  {papers.map(paper => (
+                    <th
+                      key={paper.id}
+                      className="min-w-[240px] max-w-[320px] px-4 py-3 text-left text-slate-600"
+                      title={paper.title}
+                    >
+                      <span className="block whitespace-pre-wrap text-sm font-semibold leading-snug text-slate-800">
+                        {paper.title}
+                      </span>
+                      <span className="mt-1 block text-xs uppercase tracking-wide text-slate-400">{paper.year}</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="text-sm text-slate-700">
+                {rows.map((row, rowIndex) => (
+                  <tr key={row.key} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
+                    <th className="align-top px-6 py-4 text-sm font-semibold text-slate-900">
+                      <span className="block whitespace-pre-wrap leading-snug">{row.label}</span>
+                    </th>
+                    {papers.map((paper, paperIndex) => {
+                      const value = row.values[paperIndex] ?? 'Not reported';
+                      const isMissing = !value || value === 'Not reported';
+
+                      return (
+                        <td key={paper.id} className="align-top px-4 py-4 text-sm leading-relaxed text-slate-700">
+                          {isMissing ? (
+                            <span className="inline-flex items-center rounded-full bg-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600">
+                              Not reported
+                            </span>
+                          ) : (
+                            <span className="block whitespace-pre-wrap leading-snug">{value}</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 type VerificationRequestType = 'combined';
@@ -416,6 +543,8 @@ const DETAIL_REPRO_BUTTON_CLASSES = 'inline-flex items-center justify-center rou
 const DETAIL_SIMILAR_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-lg border border-emerald-200 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-emerald-700 transition hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50';
 const DETAIL_VERIFY_BUTTON_ACTIVE_CLASSES = 'border-sky-400 bg-sky-50 text-sky-900 shadow-[0_12px_28px_rgba(56,189,248,0.25)] ring-2 ring-offset-2 ring-sky-200';
 const DETAIL_SIMILAR_BUTTON_ACTIVE_CLASSES = 'border-emerald-400 bg-emerald-50 text-emerald-900 shadow-[0_12px_28px_rgba(16,185,129,0.25)] ring-2 ring-offset-2 ring-emerald-200';
+const DETAIL_PATENT_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-lg border border-slate-200 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400 bg-white cursor-not-allowed opacity-60';
+const DETAIL_COMMUNITY_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-lg border border-sky-200 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-60';
 const PROFILE_CARD_CLASSES = 'rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
 const ACCOUNT_ICON_BUTTON_CLASSES = 'inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-900';
 const PROFILE_LABEL_CLASSES = 'text-sm font-medium text-slate-700';
@@ -812,17 +941,9 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 function StaticReproReport({
-  report,
-  onRequestReview,
-  communityReviewStatus = 'idle',
-  communityReviewRequested = false,
-  communityReviewError = ''
+  report
 }: {
   report: ResearchPaperAnalysis;
-  onRequestReview?: (source: VerificationTrack) => void;
-  communityReviewStatus?: 'idle' | 'sending' | 'success' | 'error';
-  communityReviewRequested?: boolean;
-  communityReviewError?: string;
 }) {
   const questions = useMemo(
     () => (Array.isArray(report.feasibilityQuestions) ? report.feasibilityQuestions : []),
@@ -877,10 +998,6 @@ function StaticReproReport({
       </div>
     );
   }
-
-  const isSending = communityReviewStatus === 'sending';
-  const isComplete = communityReviewRequested || communityReviewStatus === 'success';
-  const buttonLabel = isSending ? 'Sending…' : isComplete ? 'Request Received' : 'Request Community Review';
 
   return (
     <div className="space-y-6" data-tutorial="repro-overview">
@@ -938,30 +1055,6 @@ function StaticReproReport({
           })}
         </div>
       </section>
-
-      {onRequestReview ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-start gap-4">
-            <button
-              type="button"
-              onClick={() => onRequestReview('reproducibility')}
-              disabled={isSending || isComplete}
-              className="inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {buttonLabel}
-            </button>
-            <div>
-              <p className="text-sm text-slate-600">We&apos;ll compile patents, PhD theses, and contact the original study authors.</p>
-              {communityReviewStatus === 'error' && communityReviewError ? (
-                <p className="mt-2 text-xs text-rose-600">{communityReviewError}</p>
-              ) : null}
-              {isComplete ? (
-                <p className="mt-2 text-xs text-slate-500">Thanks — we&apos;ll reach out via email to coordinate this review.</p>
-              ) : null}
-            </div>
-          </div>
-        </section>
-      ) : null}
     </div>
   );
 }
@@ -1029,6 +1122,10 @@ export default function Home() {
   const [communityReviewError, setCommunityReviewError] = useState('');
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [showOrcidSearchModal, setShowOrcidSearchModal] = useState(false);
+  const [openCrosswalkRowKey, setOpenCrosswalkRowKey] =
+    useState<LifeSciencesMatrixRowKey | null>(null);
+  const [isCrosswalkModalOpen, setIsCrosswalkModalOpen] = useState(false);
 
   const profileManualKeywordsRef = useRef('');
   const isMountedRef = useRef(true);
@@ -2238,8 +2335,11 @@ export default function Home() {
     }
 
     const leadAuthor = selectedPaper.authors[0] ?? 'Lead research team';
-    const venueLabel = selectedPaper.venue ?? 'leading venues';
-    const publicationWindow = selectedPaper.year ? selectedPaper.year.toString() : 'recent years';
+    const venueLabel = selectedPaper.venue ?? 'Leading venues';
+    const baseYear = typeof selectedPaper.year === 'number' ? selectedPaper.year : new Date().getFullYear();
+    const publicationWindow = baseYear.toString();
+    const translationalYear = (baseYear + 1).toString();
+    const conceptualYear = (baseYear - 1).toString();
     const focusAreaRaw = selectedPaper.title.split(/[–—:\-]/)[0]?.trim() ?? selectedPaper.title;
     const focusArea = focusAreaRaw.length > 0 ? focusAreaRaw : selectedPaper.title;
     const conciseFocusArea = focusArea.length > 80 ? `${focusArea.slice(0, 77)}…` : focusArea;
@@ -2260,6 +2360,8 @@ export default function Home() {
         authors: `${leadAuthor} et al.`,
         venue: venueLabel,
         year: publicationWindow,
+        citationCount: 112,
+        clusterLabel: 'Sample and model',
         summary:
           'Focuses on teams mirroring the experimental setup to stress-test reproducibility across laboratories and instrumentation.',
         highlight:
@@ -2286,8 +2388,10 @@ export default function Home() {
         id: `${selectedPaper.id}-application-bridge`,
         title: `Translational takes on ${displayFocusArea}`,
         authors: `Applied research groups referencing ${leadAuthor}`,
-        venue: 'Translational cohorts',
-        year: 'Field deployments',
+        venue: 'Pharmaceutics',
+        year: translationalYear,
+        citationCount: 106,
+        clusterLabel: 'Field deployments',
         summary:
           'Tracked for practitioners adapting the core method to production-scale datasets, instrumentation upgrades, and cross-domain collaborations.',
         highlight:
@@ -2314,8 +2418,10 @@ export default function Home() {
         id: `${selectedPaper.id}-theory-thread`,
         title: `Conceptual framings aligned with ${displayFocusArea}`,
         authors: 'Theory & methods consortiums',
-        venue: 'Conceptual frameworks',
-        year: 'Insight primers',
+        venue: 'Journal of Aerosol Research',
+        year: conceptualYear,
+        citationCount: 98,
+        clusterLabel: 'Insight primers',
         summary:
           'Highlights the theoretical through-lines that anchor the study, surfacing foundational citations and interpretability discussions.',
         highlight: contextLine,
@@ -2345,6 +2451,25 @@ export default function Home() {
     () => buildLifeSciencesMatrixRows(compiledSimilarPapers),
     [compiledSimilarPapers]
   );
+
+  useEffect(() => {
+    if (lifeSciencesMatrixRows.length === 0) {
+      setOpenCrosswalkRowKey(null);
+      return;
+    }
+
+    setOpenCrosswalkRowKey(prevKey => {
+      if (prevKey && lifeSciencesMatrixRows.some(row => row.key === prevKey)) {
+        return prevKey;
+      }
+
+      return lifeSciencesMatrixRows[0].key;
+    });
+  }, [lifeSciencesMatrixRows]);
+
+  const handleCrosswalkRowToggle = useCallback((rowKey: LifeSciencesMatrixRowKey) => {
+    setOpenCrosswalkRowKey(prevKey => (prevKey === rowKey ? null : rowKey));
+  }, []);
 
   const refreshVerificationSummary = useCallback(async () => {
     if (!selectedPaperId) {
@@ -2383,6 +2508,98 @@ export default function Home() {
       setVerificationSummaryLoading(false);
     }
   }, [selectedPaperId]);
+
+  const handleCommunityReviewRequest = useCallback(async (source: VerificationTrack) => {
+    if (!selectedPaper) {
+      return;
+    }
+
+    if (!user) {
+      authModal.openSignup();
+      return;
+    }
+
+    if (isSamplePaper) {
+      setCommunityReviewError('Select a paper from your feed to request a community review.');
+      setCommunityReviewStatus('error');
+      return;
+    }
+
+    if (communityReviewStatus === 'sending') {
+      return;
+    }
+
+    if (hasCommunityReviewRequest) {
+      setCommunityReviewStatus('success');
+      setCommunityReviewError('');
+      return;
+    }
+
+    setCommunityReviewStatus('sending');
+    setCommunityReviewError('');
+
+    try {
+      const response = await fetch(`/api/papers/${selectedPaper.id}/community-review-request`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          paper: buildVerificationPayloadFromSearchResult(selectedPaper),
+          source
+        })
+      });
+
+      if (!response.ok) {
+        let message = 'Failed to submit community review request. Please try again.';
+        try {
+          const errorData = await response.json();
+          if (errorData?.error) {
+            message = errorData.error;
+          }
+        } catch (parseError) {
+          console.error('Failed to parse community review error response:', parseError);
+        }
+        setCommunityReviewError(message);
+        setCommunityReviewStatus('error');
+        return;
+      }
+
+      try {
+        const data = await response.json();
+        if (!data?.alreadyExists) {
+          await refreshVerificationSummary();
+        } else {
+          refreshVerificationSummary();
+        }
+      } catch (parseError) {
+        console.error('Failed to parse community review success response:', parseError);
+        refreshVerificationSummary();
+      }
+
+      setCommunityReviewStatus('success');
+      setCommunityReviewError('');
+    } catch (requestError) {
+      console.error('Community review request failed:', requestError);
+      setCommunityReviewError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Unexpected error submitting community review request.'
+      );
+      setCommunityReviewStatus('error');
+    }
+  }, [selectedPaper, user, authModal, isSamplePaper, communityReviewStatus, hasCommunityReviewRequest, refreshVerificationSummary]);
+
+  const handleCommunityReviewButtonClick = useCallback(() => {
+    handleCommunityReviewRequest('reproducibility');
+  }, [handleCommunityReviewRequest]);
+
+  const handleSimilarPaperSaveClick = useCallback(() => {
+    if (!user) {
+      authModal.openSignup();
+      return;
+    }
+  }, [authModal, user]);
 
   const updateVerificationView = (track: VerificationTrack) => {
     if (selectedPaper) {
@@ -2554,86 +2771,6 @@ export default function Home() {
     }
   };
 
-  const handleCommunityReviewRequest = async (source: VerificationTrack) => {
-    if (!selectedPaper) {
-      return;
-    }
-
-    if (!user) {
-      authModal.openSignup();
-      return;
-    }
-
-    if (isSamplePaper) {
-      setCommunityReviewError('Select a paper from your feed to request a community review.');
-      setCommunityReviewStatus('error');
-      return;
-    }
-
-    if (communityReviewStatus === 'sending') {
-      return;
-    }
-
-    if (hasCommunityReviewRequest) {
-      setCommunityReviewStatus('success');
-      setCommunityReviewError('');
-      return;
-    }
-
-    setCommunityReviewStatus('sending');
-    setCommunityReviewError('');
-
-    try {
-      const response = await fetch(`/api/papers/${selectedPaper.id}/community-review-request`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          paper: buildVerificationPayloadFromSearchResult(selectedPaper),
-          source
-        })
-      });
-
-      if (!response.ok) {
-        let message = 'Failed to submit community review request. Please try again.';
-        try {
-          const errorData = await response.json();
-          if (errorData?.error) {
-            message = errorData.error;
-          }
-        } catch (parseError) {
-          console.error('Failed to parse community review error response:', parseError);
-        }
-        setCommunityReviewError(message);
-        setCommunityReviewStatus('error');
-        return;
-      }
-
-      try {
-        const data = await response.json();
-        if (!data?.alreadyExists) {
-          await refreshVerificationSummary();
-        } else {
-          refreshVerificationSummary();
-        }
-      } catch (parseError) {
-        console.error('Failed to parse community review success response:', parseError);
-        refreshVerificationSummary();
-      }
-
-      setCommunityReviewStatus('success');
-      setCommunityReviewError('');
-    } catch (requestError) {
-      console.error('Community review request failed:', requestError);
-      setCommunityReviewError(
-        requestError instanceof Error
-          ? requestError.message
-          : 'Unexpected error submitting community review request.'
-      );
-      setCommunityReviewStatus('error');
-    }
-  };
 
   const handleSaveWelcomeNames = async (firstName: string, lastName: string) => {
     if (!user) {
@@ -2656,11 +2793,50 @@ export default function Home() {
       setProfile(prev => prev ? { ...prev, first_name: firstName, last_name: lastName } : null);
       setShowWelcomeModal(false);
 
+      // Check if ORCID is empty, if so show ORCID search modal
+      if (!profile?.orcid_id) {
+        setShowOrcidSearchModal(true);
+      }
+
       return null;
     } catch (err) {
       console.error('Unexpected error saving welcome names:', err);
       return { message: 'Unexpected error occurred' };
     }
+  };
+
+  const handleSelectOrcid = async (orcidId: string) => {
+    if (!user) {
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from('profiles')
+        .update({ orcid_id: orcidId })
+        .eq('id', user.id);
+
+      if (error) {
+        console.error('Failed to save ORCID:', error);
+        return;
+      }
+
+      // Update local profile state
+      setProfile(prev => prev ? { ...prev, orcid_id: orcidId } : null);
+
+      // Update the profile form field so it shows in the profile editor
+      setProfileFormOrcid(orcidId);
+
+      // Close modal
+      setShowOrcidSearchModal(false);
+    } catch (err) {
+      console.error('Unexpected error saving ORCID:', err);
+    }
+  };
+
+  const handleSkipOrcid = () => {
+    setShowOrcidSearchModal(false);
   };
 
   useEffect(() => {
@@ -2777,8 +2953,21 @@ export default function Home() {
     return 'Kick off the reproducibility briefing.';
   };
 
+  const communityReviewIsSending = communityReviewStatus === 'sending';
+  const communityReviewIsComplete = hasCommunityReviewRequest || communityReviewStatus === 'success';
+  const communityReviewButtonDisabled = !hasSelectedPaper || communityReviewIsSending || communityReviewIsComplete;
+  const communityReviewButtonLabel = communityReviewIsSending
+    ? 'Sending…'
+    : communityReviewIsComplete
+      ? 'Request Received'
+      : 'Community Review';
+  const communityReviewErrorMessage = communityReviewStatus === 'error' ? communityReviewError : '';
+  const communityReviewSuccessMessage = communityReviewIsComplete
+    ? 'Thanks — we\'ll reach out via email to coordinate this review.'
+    : '';
+
   const verificationButtons = (
-    <div className="flex items-center gap-3 sm:gap-4">
+    <div className="flex flex-wrap items-center gap-3 sm:gap-4">
       <div className="flex flex-col items-center gap-1">
         <button
           type="button"
@@ -2814,6 +3003,12 @@ export default function Home() {
         />
       </div>
       <div className="flex flex-col items-center gap-1">
+        <button type="button" className={DETAIL_PATENT_BUTTON_CLASSES} disabled>
+          <span className="flex items-center gap-2">COMPILE SIMILAR PATENTS</span>
+        </button>
+        <span className="h-1 w-full rounded-full bg-slate-200 opacity-0" aria-hidden="true" />
+      </div>
+      <div className="flex flex-col items-center gap-1">
         <button
           type="button"
           onClick={() => handleVerificationRequest('reproducibility')}
@@ -2830,6 +3025,25 @@ export default function Home() {
         <span
           className={`h-1 w-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-sky-600 transition-all duration-200 ease-out ${verificationView === 'reproducibility' ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
         />
+      </div>
+      <div className="flex flex-col items-center gap-1 text-center">
+        <button
+          type="button"
+          onClick={handleCommunityReviewButtonClick}
+          className={DETAIL_COMMUNITY_BUTTON_CLASSES}
+          disabled={communityReviewButtonDisabled}
+        >
+          <span className="flex items-center gap-2">{communityReviewButtonLabel}</span>
+        </button>
+        <span
+          className={`h-1 w-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-indigo-500 transition-all duration-200 ease-out ${communityReviewIsComplete ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
+        />
+        {communityReviewErrorMessage ? (
+          <p className="mt-2 max-w-[180px] text-[11px] leading-snug text-rose-600">{communityReviewErrorMessage}</p>
+        ) : null}
+        {!communityReviewErrorMessage && communityReviewSuccessMessage ? (
+          <p className="mt-2 max-w-[180px] text-[11px] leading-snug text-slate-500">{communityReviewSuccessMessage}</p>
+        ) : null}
       </div>
     </div>
   );
@@ -3789,71 +4003,90 @@ export default function Home() {
                         {compiledSimilarPapers.length > 0 ? (
                           <div className="space-y-6">
                             <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                              <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-5 py-4">
-                                <h4 className="text-sm font-semibold text-slate-900">
-                                  Method &amp; Finding Crosswalk
-                                </h4>
-                                <p className="text-xs text-slate-500">
-                                  Scan how each paper handles the key experimental dimensions.
-                                </p>
+                              <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                  <h4 className="text-sm font-semibold text-slate-900">
+                                    Method &amp; Finding Crosswalk
+                                  </h4>
+                                  <p className="text-xs text-slate-500">
+                                    Scan how each paper handles the key experimental dimensions.
+                                  </p>
+                                </div>
+                                {lifeSciencesMatrixRows.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsCrosswalkModalOpen(true)}
+                                    className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                                  >
+                                    View full matrix
+                                  </button>
+                                )}
                               </div>
-                              <div className="overflow-x-auto">
-                                <table className="min-w-full text-left">
-                                  <thead className="bg-slate-50 text-xs font-medium text-slate-500">
-                                    <tr className="border-b border-slate-200">
-                                      <th className="w-48 px-5 py-3 text-left">
-                                        Research focus
-                                      </th>
-                                      {compiledSimilarPapers.map(paper => (
-                                        <th
-                                          key={paper.id}
-                                          className="min-w-[220px] max-w-[280px] px-4 py-3 text-left text-slate-600"
-                                          title={paper.title}
+                              {lifeSciencesMatrixRows.length === 0 ? (
+                                <div className="px-5 py-6 text-sm text-slate-500">
+                                  No structured comparison is available for these papers yet.
+                                </div>
+                              ) : (
+                                <div className="divide-y divide-slate-200">
+                                  {lifeSciencesMatrixRows.map(row => {
+                                    const isOpen = openCrosswalkRowKey === row.key;
+                                    const panelId = `crosswalk-${row.key}`;
+
+                                    return (
+                                      <div key={row.key}>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleCrosswalkRowToggle(row.key)}
+                                          className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition hover:bg-slate-50"
+                                          aria-expanded={isOpen}
+                                          aria-controls={panelId}
                                         >
-                                          <span className="block whitespace-pre-wrap text-[11px] leading-snug">
-                                            {paper.title}
+                                          <span className="text-sm font-semibold text-slate-900">
+                                            {row.label}
                                           </span>
-                                        </th>
-                                      ))}
-                                    </tr>
-                                  </thead>
-                                  <tbody className="text-sm text-slate-700">
-                                    {lifeSciencesMatrixRows.length === 0 ? (
-                                      <tr>
-                                        <td
-                                          colSpan={compiledSimilarPapers.length + 1}
-                                          className="px-5 py-6 text-center text-sm text-slate-500"
-                                        >
-                                          No structured comparison is available for these papers yet.
-                                        </td>
-                                      </tr>
-                                    ) : (
-                                      lifeSciencesMatrixRows.map((row, rowIndex) => (
-                                        <tr
-                                          key={row.key}
-                                          className={`border-b border-slate-100 ${rowIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}
-                                        >
-                                          <th className="align-top px-5 py-4 text-sm font-semibold text-slate-900">
-                                            <span className="block whitespace-pre-wrap leading-snug">
-                                              {row.label}
-                                            </span>
-                                          </th>
-                                          {row.values.map((value, valueIndex) => (
-                                            <td
-                                              key={compiledSimilarPapers[valueIndex]?.id ?? valueIndex}
-                                              className="align-top px-4 py-4 text-sm leading-relaxed text-slate-700"
-                                            >
-                                              <span className="block whitespace-pre-wrap leading-snug">
-                                                {value}
-                                              </span>
-                                            </td>
-                                          ))}
-                                        </tr>
-                                      ))
-                                    )}
-                                  </tbody>
-                                </table>
-                              </div>
+                                          <ChevronDown
+                                            className={`h-4 w-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : 'rotate-0'}`}
+                                            aria-hidden="true"
+                                          />
+                                        </button>
+                                        {isOpen && (
+                                          <div id={panelId} className="space-y-4 bg-slate-50/60 px-5 pb-5">
+                                            {compiledSimilarPapers.map((paper, paperIndex) => {
+                                              const value = row.values[paperIndex] ?? 'Not reported';
+                                              const isMissing = !value || value === 'Not reported';
+
+                                              return (
+                                                <div
+                                                  key={paper.id}
+                                                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                                                >
+                                                  <div className="flex flex-col gap-1">
+                                                    <p className="text-sm font-semibold leading-snug text-slate-900">
+                                                      {paper.title}
+                                                    </p>
+                                                    <span className="text-xs font-medium text-slate-500">
+                                                      {paper.venue} • {paper.year} • {formatCitationCount(paper.citationCount)}
+                                                    </span>
+                                                  </div>
+                                                  {isMissing ? (
+                                                    <span className="mt-3 inline-flex items-center rounded-full bg-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600">
+                                                      Not reported
+                                                    </span>
+                                                  ) : (
+                                                    <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
+                                                      {value}
+                                                    </p>
+                                                  )}
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
 
                             <div className="space-y-4">
@@ -3865,8 +4098,8 @@ export default function Home() {
                                   <div className="space-y-2">
                                     <h4 className="text-lg font-semibold text-slate-900">{paper.title}</h4>
                                     <p className="text-sm text-slate-600">{paper.authors}</p>
-                                    <p className="text-xs font-medium uppercase tracking-[0.3em] text-slate-400">
-                                      {paper.year}
+                                    <p className="text-xs font-medium text-slate-500">
+                                      {paper.venue} • {paper.year} • {formatCitationCount(paper.citationCount)}
                                     </p>
                                   </div>
                                   <p className="mt-4 text-sm leading-relaxed text-slate-600">{paper.summary}</p>
@@ -3877,15 +4110,8 @@ export default function Home() {
                                   <div className="mt-4 flex flex-wrap items-center gap-2">
                                     <button
                                       type="button"
-                                      className="inline-flex items-center justify-center rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-70"
-                                      disabled
-                                    >
-                                      Preview summary
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="inline-flex items-center justify-center rounded-lg border border-transparent bg-emerald-500 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white opacity-70"
-                                      disabled
+                                      onClick={handleSimilarPaperSaveClick}
+                                      className="inline-flex items-center justify-center rounded-lg border border-transparent bg-emerald-500 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2"
                                     >
                                       Save to reading list
                                     </button>
@@ -3925,21 +4151,7 @@ export default function Home() {
                           const activeReport = reproducibilityReport ?? fallbackReport;
 
                           if (activeReport) {
-                            const communityReviewHandler = user
-                              ? handleCommunityReviewRequest
-                              : (_track: VerificationTrack) => {
-                                  authModal.openSignup();
-                                };
-
-                            return (
-                              <StaticReproReport
-                                report={activeReport}
-                                onRequestReview={communityReviewHandler}
-                                communityReviewStatus={communityReviewStatus}
-                                communityReviewRequested={hasCommunityReviewRequest}
-                                communityReviewError={communityReviewError}
-                              />
-                            );
+                            return <StaticReproReport report={activeReport} />;
                           }
 
                           if (latestVerificationRequest) {
@@ -4060,6 +4272,13 @@ export default function Home() {
           </aside>
         </div>
       </main>
+      <CrosswalkMatrixModal
+        isOpen={isCrosswalkModalOpen}
+        onClose={() => setIsCrosswalkModalOpen(false)}
+        rows={lifeSciencesMatrixRows}
+        papers={compiledSimilarPapers}
+      />
+
       {/* Auth Modal */}
       <VerificationModal
         isOpen={verificationModalOpen}
@@ -4078,6 +4297,14 @@ export default function Home() {
       <WelcomeModal
         isOpen={showWelcomeModal}
         onSave={handleSaveWelcomeNames}
+      />
+      {/* ORCID Search Modal */}
+      <OrcidSearchModal
+        isOpen={showOrcidSearchModal}
+        firstName={profile?.first_name || ''}
+        lastName={profile?.last_name || ''}
+        onSelect={handleSelectOrcid}
+        onSkip={handleSkipOrcid}
       />
       {/* Save to List Modal */}
       <SaveToListModal
