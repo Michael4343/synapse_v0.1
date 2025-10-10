@@ -3165,18 +3165,72 @@ export default function Home() {
     }));
 
     try {
-      const resolution = await resolveCrosswalkPaperForSave(crosswalkPaper, selectedPaper.id);
-      const listName = buildCompileListName(selectedPaper.title);
+      const listName = buildCompileListName(selectedPaper.title || '');
       const existingLists = userLists.map((list) => ({ id: list.id, name: list.name }));
+
+      const updateListCaches = (targetListId: number, item: ApiSearchResult, position: 'start' | 'end') => {
+        let itemsChanged = false;
+        let updatedItems: ApiSearchResult[] | null = null;
+
+        setCachedListItems((prev) => {
+          const existing = prev.get(targetListId) ?? [];
+          if (existing.some(existingItem => existingItem.id === item.id)) {
+            updatedItems = existing;
+            return prev;
+          }
+
+          updatedItems = position === 'start' ? [item, ...existing] : [...existing, item];
+          itemsChanged = true;
+          const next = new Map(prev);
+          next.set(targetListId, updatedItems);
+          return next;
+        });
+
+        if (itemsChanged && updatedItems) {
+          if (user) {
+            const listItemsCacheKey = `${LIST_ITEMS_CACHE_KEY}-${user.id}-${targetListId}`;
+            setCachedData(listItemsCacheKey, updatedItems);
+          }
+          if (selectedListId === targetListId) {
+            setListItems(updatedItems);
+          }
+        }
+      };
+
+      const baseListPayload = mapSearchResultToListPayload(selectedPaper);
+      const baseSaveResult = await savePaperToNamedList({
+        listName,
+        paper: baseListPayload,
+        existingLists
+      });
+
+      if (!baseSaveResult.listId) {
+        throw new Error('Unable to determine list for this paper.');
+      }
+
+      const targetListId = baseSaveResult.listId;
+
+      if (baseSaveResult.status === 'saved') {
+        handlePaperSaved(targetListId);
+        updateListCaches(targetListId, convertListPayloadToDisplayItem(baseListPayload), 'start');
+      }
+
+      const listsForSimilar = existingLists.some((list) => list.id === targetListId)
+        ? existingLists
+        : [...existingLists, { id: targetListId, name: listName }];
+
+      const resolution = await resolveCrosswalkPaperForSave(crosswalkPaper, selectedPaper.id);
 
       const saveResult = await savePaperToNamedList({
         listName,
         paper: resolution.listPayload,
-        existingLists
+        existingLists: listsForSimilar
       });
 
-      if (saveResult.listId) {
-        handlePaperSaved(saveResult.listId);
+      const resolvedListId = saveResult.listId ?? targetListId;
+
+      if (resolvedListId) {
+        handlePaperSaved(resolvedListId);
       }
 
       if (saveResult.status === 'saved') {
@@ -3192,29 +3246,7 @@ export default function Home() {
           }
         }));
 
-        if (saveResult.listId && selectedListId === saveResult.listId) {
-          const targetListId = saveResult.listId;
-          setListItems(prevItems => {
-            if (prevItems.some(item => item.id === resolution.displayItem.id)) {
-              return prevItems;
-            }
-
-            const updatedItems = [...prevItems, resolution.displayItem];
-
-            setCachedListItems(prev => {
-              const next = new Map(prev);
-              next.set(targetListId, updatedItems);
-              return next;
-            });
-
-            if (user) {
-              const listItemsCacheKey = `${LIST_ITEMS_CACHE_KEY}-${user.id}-${targetListId}`;
-              setCachedData(listItemsCacheKey, updatedItems);
-            }
-
-            return updatedItems;
-          });
-        }
+        updateListCaches(resolvedListId, resolution.displayItem, 'end');
 
         trackEvent({
           name: 'similar_paper_saved',
@@ -4116,6 +4148,7 @@ export default function Home() {
       }
 
       setProfile((previous) => ({
+        ...previous,
         orcid_id: normalizedOrcid,
         academic_website: normalizedWebsite || null,
         profile_personalization: simplePersonalization,
