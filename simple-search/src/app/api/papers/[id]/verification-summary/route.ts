@@ -111,7 +111,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unable to load community review requests' }, { status: 500 })
     }
 
-    let paperData: { reproducibility_data: unknown; claims_verified: unknown } | null = null
+    let paperData: { reproducibility_data: unknown; claims_verified: unknown; similar_papers_data: unknown } | null = null
     if (isUuid(id)) {
       const { data, error } = await supabaseAdmin
         .from(TABLES.SEARCH_RESULTS)
