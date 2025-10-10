@@ -1,4 +1,5 @@
 TODO
+remove human genome paper
 update tuturiall
 fix mobile styling
 optimise user tracking

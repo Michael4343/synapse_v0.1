@@ -472,10 +472,10 @@ function CrosswalkMatrixModal({ isOpen, onClose, rows, papers }: CrosswalkMatrix
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2">
       <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-5xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.35)]">
-        <div className="flex items-start justify-between border-b border-slate-200 px-6 py-4">
+      <div className="relative z-10 flex h-[calc(100vh-1rem)] w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.35)]">
+        <div className="flex flex-shrink-0 items-start justify-between border-b border-slate-200 px-6 py-4">
           <div>
             <h3 className="text-lg font-semibold text-slate-900">Method &amp; Finding Crosswalk</h3>
             <p className="mt-1 text-sm text-slate-500">Full comparison across all research dimensions.</p>
@@ -489,7 +489,7 @@ function CrosswalkMatrixModal({ isOpen, onClose, rows, papers }: CrosswalkMatrix
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
-        <div className="max-h-[70vh] overflow-auto">
+        <div className="flex-1 overflow-auto">
           {rows.length === 0 ? (
             <div className="px-6 py-12 text-center text-sm text-slate-500">
               No structured comparison is available for these papers yet.
@@ -700,21 +700,6 @@ const SAMPLE_PAPERS: ApiSearchResult[] = [
     url: 'https://www.semanticscholar.org/paper/c92bd747a97eeafdb164985b0d044caa1dc6e73e',
     source: 'semantic_scholar',
     publicationDate: '2004-10-21'
-  },
-  {
-    id: 'fc448a7db5a2fac242705bd8e37ae1fc4a858643',
-    title: 'Initial sequencing and analysis of the human genome.',
-    abstract: 'The human genome holds an extraordinary trove of information about human development, physiology, medicine and evolution. Here we report the results of an international collaboration to produce and make freely available a draft sequence of the human genome. We also present an initial analysis of the data, describing some of the insights that can be gleaned from the sequence. The development of the human genome project, the generation of a draft sequence, and the nature of the sequence itself are described, as well as an analysis of the human genome sequence.',
-    authors: ['E. Lander', 'L. Linton', 'B. Birren', 'C. Nusbaum', 'M. Zody', 'J. Baldwin', 'K. Devon', 'K. Dewar', 'M. Doyle', 'W. Fitzhugh', 'R. Funke', 'D. Gage', 'K. Harris', 'A. Heaford', 'J. Howland', 'L. Kann', 'J. Lehoczky', 'R. Levine', 'P. McEwan', 'K. McKernan', 'J. Meldrim', 'J. Mesirov', 'C. Miranda', 'W. Morris', 'J. Naylor', 'C. Raymond', 'M. Rosetti', 'R. Santos', 'A. Sheridan', 'C. Sougnez'],
-    year: 2001,
-    venue: 'Nature',
-    citationCount: 13848,
-    semanticScholarId: 'fc448a7db5a2fac242705bd8e37ae1fc4a858643',
-    arxivId: null,
-    doi: '10.1038/35057062',
-    url: 'https://www.semanticscholar.org/paper/fc448a7db5a2fac242705bd8e37ae1fc4a858643',
-    source: 'semantic_scholar',
-    publicationDate: '2001-02-15'
   }
 ]
 
@@ -1460,39 +1445,6 @@ const VERIFICATION_DATA: Record<string, ResearchPaperAnalysis> = {
         'Class 1000 clean-room access with e-beam lithography is available.',
         'Thermal evaporators support Cr/Au deposition.',
         'Raman spectroscopy is calibrated for graphene signatures.'
-      ]
-    }
-  },
-  fc448a7db5a2fac242705bd8e37ae1fc4a858643: {
-    stage: 'community_feedback',
-    lastUpdated: '2024-12-05',
-    reviewers: ['Genomics Community Panel'],
-    summary: 'Mostly reproducible for large genome centres with automated sequencing pipelines. Main challenge is orchestrating the multi-lab assembly workflow and matching archival reference standards.',
-    paper: {
-      title: 'Initial sequencing and analysis of the human genome',
-      authors: 'Lander et al.',
-      venue: 'Nature (2001)',
-      doi: '10.1038/35057062'
-    },
-    feasibilityQuestions: [
-      { id: 'platform', question: 'Do you operate high-throughput sequencing instruments or maintain partnerships with a genome centre?', weight: 3, helper: 'The original effort involved multiple capillary sequencing centres; modern equivalents use NovaSeq or PacBio Revio runs.' },
-      { id: 'assembly', question: 'Can you run large-scale assembly pipelines with version-controlled reference data?', weight: 2, helper: 'Assembly requires orchestrating Celera-style overlap layout consensus or modern HiFi assemblers with strict metadata tracking.' },
-      { id: 'storage', question: 'Is petabyte-scale storage with audit trails available for raw reads and intermediate contigs?', weight: 2, helper: 'Trace files and consensus scaffolds must be retained for reproducibility and regulatory review.' },
-      { id: 'annotation', question: 'Do you have a team that can refresh gene annotation and QC against current reference builds?', weight: 1, helper: 'Updates to Ensembl/RefSeq annotations are needed to align with modern gene models.' }
-    ],
-    evidence: {
-      strong: [
-        { claim: 'The human genome reference has been independently reassembled multiple times with concordant coverage metrics.', source: 'Telomere-to-Telomere consortium reports (2022)', confidence: 'verified' },
-        { claim: 'Shared QC dashboards and reference standards enable cross-centre reproducibility.', source: 'Genome in a Bottle technical documentation', confidence: 'inferred' }
-      ],
-      gaps: [
-        { description: 'Gap closure for centromeric regions remains specialised.', impact: 'Long-read platforms or ultra-long nanopore runs are required for completeness.', severity: 'critical', needsExpert: true },
-        { description: 'Data retention policies differ across sequencing centres.', impact: 'Audit trails may be incomplete without unified storage governance.', severity: 'moderate', needsExpert: false }
-      ],
-      assumptions: [
-        'Sequencing centres participate in shared metadata and QC standards.',
-        'Long-read or HiFi sequencing is budgeted for repetitive regions.',
-        'Dedicated data engineers maintain the assembly pipelines.'
       ]
     }
   }
@@ -3165,8 +3117,10 @@ export default function Home() {
     }));
 
     try {
-      const listName = buildCompileListName(selectedPaper.title || '');
+      const listName = buildCompileListName(crosswalkPaper.title || selectedPaper.title || '');
+      const verifyListName = buildVerifyListName(selectedPaper.title || '');
       const existingLists = userLists.map((list) => ({ id: list.id, name: list.name }));
+      const existingVerifyList = existingLists.find((list) => list.name === verifyListName) ?? null;
 
       const updateListCaches = (targetListId: number, item: ApiSearchResult, position: 'start' | 'end') => {
         let itemsChanged = false;
@@ -3213,6 +3167,9 @@ export default function Home() {
       if (baseSaveResult.status === 'saved') {
         handlePaperSaved(targetListId);
         updateListCaches(targetListId, convertListPayloadToDisplayItem(baseListPayload), 'start');
+      } else if (baseSaveResult.status !== 'already-in-list') {
+        const baseFailureMessage = baseSaveResult.error ?? 'Unable to save this paper right now.';
+        throw new Error(baseFailureMessage);
       }
 
       const listsForSimilar = existingLists.some((list) => list.id === targetListId)
@@ -3233,19 +3190,10 @@ export default function Home() {
         handlePaperSaved(resolvedListId);
       }
 
-      if (saveResult.status === 'saved') {
-        const successMessage = resolution.matchStrategy === 'crosswalk-fallback'
-          ? `Added a summary to ${listName}.`
-          : `Added to ${listName}.`;
+      const addedToCompileList = saveResult.status === 'saved';
+      const alreadyInCompileList = saveResult.status === 'already-in-list';
 
-        setSimilarPaperSaveState((prev) => ({
-          ...prev,
-          [crosswalkPaper.id]: {
-            status: 'success',
-            message: successMessage
-          }
-        }));
-
+      if (addedToCompileList) {
         updateListCaches(resolvedListId, resolution.displayItem, 'end');
 
         trackEvent({
@@ -3257,23 +3205,62 @@ export default function Home() {
             match_strategy: resolution.matchStrategy
           }
         });
-
-        return;
+      } else if (!alreadyInCompileList) {
+        const failureMessage = saveResult.error ?? 'Unable to save this paper right now.';
+        throw new Error(failureMessage);
       }
 
-      if (saveResult.status === 'already-in-list') {
-        setSimilarPaperSaveState((prev) => ({
-          ...prev,
-          [crosswalkPaper.id]: {
-            status: 'already',
-            message: `This paper is already in ${listName}.`
-          }
-        }));
-        return;
+      // Ensure the related paper also lands in the parent paper's VERIFY list/feed.
+      const verifyListsForSave = listsForSimilar.some((list) => list.name === verifyListName)
+        ? listsForSimilar
+        : existingVerifyList
+          ? [...listsForSimilar, existingVerifyList]
+          : listsForSimilar;
+
+      const verifySaveResult = await savePaperToNamedList({
+        listName: verifyListName,
+        paper: resolution.listPayload,
+        existingLists: verifyListsForSave
+      });
+
+      const verifyListId = verifySaveResult.listId ?? existingVerifyList?.id ?? null;
+
+      if (verifyListId) {
+        handlePaperSaved(verifyListId);
       }
 
-      const failureMessage = saveResult.error ?? 'Unable to save this paper right now.';
-      throw new Error(failureMessage);
+      const addedToVerifyList = verifySaveResult.status === 'saved';
+      const alreadyInVerifyList = verifySaveResult.status === 'already-in-list';
+
+      if (addedToVerifyList && verifyListId) {
+        updateListCaches(verifyListId, resolution.displayItem, 'end');
+      } else if (!alreadyInVerifyList) {
+        const verifyFailureMessage = verifySaveResult.error ?? 'Unable to save this paper to the verification list right now.';
+        throw new Error(verifyFailureMessage);
+      }
+
+      const message = (() => {
+        if (!alreadyInCompileList && !alreadyInVerifyList) {
+          return `Added to ${listName} and the verification list.`;
+        }
+        if (!alreadyInCompileList && alreadyInVerifyList) {
+          return `Added to ${listName}; already in the verification list.`;
+        }
+        if (alreadyInCompileList && !alreadyInVerifyList) {
+          return `Already in ${listName}; added to the verification list.`;
+        }
+        return `This paper is already saved in ${listName} and the verification list.`;
+      })();
+
+      setSimilarPaperSaveState((prev) => ({
+        ...prev,
+        [crosswalkPaper.id]: {
+          status: alreadyInCompileList && alreadyInVerifyList ? 'already' : 'success',
+          message
+        }
+      }));
+
+      return;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unexpected error saving paper.';
       console.error('Similar paper save failed:', error);
@@ -3601,7 +3588,7 @@ export default function Home() {
 
   const getVerificationButtonLabel = (track: VerificationTrack): string => {
     if (track === 'paper') {
-      return 'SHOW PAPER';
+      return 'PAPER';
     }
     if (track === 'similar') {
       return verificationView === 'similar' ? VIEW_LABELS.similar : BASE_LABELS.similar;
@@ -3667,11 +3654,29 @@ export default function Home() {
           data-tutorial="show-paper-button"
         >
           <span className="flex items-center gap-2">
-            SHOW PAPER
+            PAPER
           </span>
         </button>
         <span
           className={`h-1 w-full rounded-full bg-gradient-to-r from-slate-400 via-slate-500 to-slate-600 transition-all duration-200 ease-out ${verificationView === 'paper' ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
+        />
+      </div>
+      <div className="flex flex-col items-center gap-1">
+        <button
+          type="button"
+          onClick={() => handleVerificationRequest('reproducibility')}
+          className={getVerificationButtonClasses('reproducibility')}
+          aria-pressed={verificationView === 'reproducibility'}
+          disabled={shouldDisableVerification}
+          title={getVerificationButtonTitle('reproducibility')}
+          data-tutorial="reproducibility-button"
+        >
+          <span className="flex items-center gap-2">
+            {getVerificationButtonLabel('reproducibility')}
+          </span>
+        </button>
+        <span
+          className={`h-1 w-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-sky-600 transition-all duration-200 ease-out ${verificationView === 'reproducibility' ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
         />
       </div>
       <div className="flex flex-col items-center gap-1">
@@ -3698,26 +3703,8 @@ export default function Home() {
         <span className="h-1 w-full rounded-full bg-slate-200 opacity-0" aria-hidden="true" />
       </div>
       <div className="flex flex-col items-center gap-1">
-        <button
-          type="button"
-          onClick={() => handleVerificationRequest('reproducibility')}
-          className={getVerificationButtonClasses('reproducibility')}
-          aria-pressed={verificationView === 'reproducibility'}
-          disabled={shouldDisableVerification}
-          title={getVerificationButtonTitle('reproducibility')}
-          data-tutorial="reproducibility-button"
-        >
-          <span className="flex items-center gap-2">
-            {getVerificationButtonLabel('reproducibility')}
-          </span>
-        </button>
-        <span
-          className={`h-1 w-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-sky-600 transition-all duration-200 ease-out ${verificationView === 'reproducibility' ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
-        />
-      </div>
-      <div className="flex flex-col items-center gap-1">
         <button type="button" className={DETAIL_PATENT_BUTTON_CLASSES} disabled>
-          <span className="flex items-center gap-2">COMMUNITY REVIEW</span>
+          <span className="flex items-center gap-2">COMMUNITY</span>
         </button>
         <span className="h-1 w-full rounded-full bg-slate-200 opacity-0" aria-hidden="true" />
       </div>
