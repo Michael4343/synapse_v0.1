@@ -34,11 +34,17 @@ const TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: 3,
     title: 'SIMILAR PAPERS',
+    description: 'Jump up to the Similar Papers tab to surface adjacent literature clusters.',
+    highlightSelector: '[data-tutorial="similar-papers-button"]'
+  },
+  {
+    id: 4,
+    title: 'SIMILAR PAPER INSIGHTS',
     description: 'Browse adjacent work to spot follow-up experiments and method variations.',
     highlightSelector: '[data-tutorial="similar-papers-panel"]'
   },
   {
-    id: 4,
+    id: 5,
     title: 'Ready to verify your own papers?',
     description: '',
     action: 'cta'

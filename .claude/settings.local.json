@@ -38,7 +38,8 @@
       "WebFetch(domain:groups.google.com)",
       "WebFetch(domain:support.orcid.org)",
       "WebFetch(domain:orcid.github.io)",
-      "WebFetch(domain:posthog.com)"
+      "WebFetch(domain:posthog.com)",
+      "Bash(node:*)"
     ],
     "deny": [],
     "ask": []

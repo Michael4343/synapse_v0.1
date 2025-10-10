@@ -1929,6 +1929,10 @@ export default function Home() {
 
   useEffect(() => {
     if (!user) {
+      // Preserve the sample paper while the tutorial is guiding first-time visitors
+      const shouldPreserveSamplePaper =
+        typeof window !== 'undefined' && localStorage.getItem('evidentia_tutorial_completed') !== 'true';
+
       // Reset profile states
       setProfile(null);
       setProfileError('');
@@ -1943,7 +1947,9 @@ export default function Home() {
       setProfileEditorVisible(false);
 
       // Reset feed and panel states to return to landing page
-      setSelectedPaper(null);
+      if (!shouldPreserveSamplePaper) {
+        setSelectedPaper(null);
+      }
       setKeywordResults([]);
       setSelectedListId(null);
       setListItems([]);
@@ -3755,6 +3761,11 @@ export default function Home() {
     }
 
     if (step === 3) {
+      setVerificationView('reproducibility');
+      return;
+    }
+
+    if (step === 4) {
       setVerificationView('similar');
     }
   }, [selectedPaper, setSelectedPaper, setVerificationView]);
