@@ -72,12 +72,11 @@ export function AuthModal({ isOpen, mode, onClose, onSwitchMode }: AuthModalProp
           <h2 className={MODAL_TITLE_CLASSES}>
             {mode === 'login' ? 'Login' : 'Create account'}
           </h2>
-          <p className={MODAL_SUBTITLE_CLASSES}>
-            {mode === 'login'
-              ? 'Sign in to access your saved research and preferences'
-              : 'Create your account to get started'
-            }
-          </p>
+          {mode === 'signup' && (
+            <p className={MODAL_SUBTITLE_CLASSES}>
+              Create your account to get started
+            </p>
+          )}
         </div>
 
         {/* Form */}

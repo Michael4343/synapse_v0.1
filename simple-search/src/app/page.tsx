@@ -13,6 +13,7 @@ import { WelcomeModal } from '../components/welcome-modal';
 import { OrcidSearchModal } from '../components/orcid-search-modal';
 import { VerificationModal } from '../components/verification-modal';
 import { OnboardingTutorial } from '../components/onboarding-tutorial';
+import { TourPromptModal } from '../components/tour-prompt-modal';
 import type { ProfilePersonalization, UserProfile } from '../lib/profile-types';
 import { SaveToListModal } from '../components/save-to-list-modal';
 import { buildVerifyListName, buildCompileListName, savePaperToNamedList } from '../lib/list-actions';
@@ -1639,6 +1640,8 @@ export default function Home() {
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [showOrcidSearchModal, setShowOrcidSearchModal] = useState(false);
+  const [showTourPrompt, setShowTourPrompt] = useState(false);
+  const [hasSeenInitialAuth, setHasSeenInitialAuth] = useState(false);
   const [openCrosswalkRowKey, setOpenCrosswalkRowKey] =
     useState<LifeSciencesMatrixRowKey | null>(null);
   const [isCrosswalkModalOpen, setIsCrosswalkModalOpen] = useState(false);
@@ -1711,17 +1714,29 @@ export default function Home() {
     };
   }, []);
 
-  // Show tutorial for first-time visitors
+  // Show auth modal on first visit, then tutorial flow
+  useEffect(() => {
+    const hasSeenAuth = localStorage.getItem('evidentia_seen_initial_auth');
+
+    if (!hasSeenAuth) {
+      // First time visitor - show auth modal after a brief delay
+      setTimeout(() => {
+        authModal.openLogin();
+        setHasSeenInitialAuth(true);
+      }, 500);
+    }
+  }, []);
+
+  // Legacy tutorial logic (kept for backward compatibility)
   useEffect(() => {
     const tutorialCompleted = localStorage.getItem('evidentia_tutorial_completed');
-    if (!tutorialCompleted && !user) {
+    const hasSeenAuth = localStorage.getItem('evidentia_seen_initial_auth');
+
+    // Only auto-show tutorial if they've already seen the auth flow
+    if (!tutorialCompleted && !user && hasSeenAuth && !tutorialOpen && !showTourPrompt) {
       // Auto-select CRISPR paper for demo
       setSelectedPaper(SAMPLE_PAPERS[0]);
       setVerificationView('paper');
-      // Delay showing tutorial to allow UI to render
-      setTimeout(() => {
-        setTutorialOpen(true);
-      }, 500);
     }
   }, [user]);
 
@@ -3743,6 +3758,32 @@ export default function Home() {
     authModal.openSignup();
   };
 
+  const handleAuthModalClose = () => {
+    authModal.close();
+
+    // If this is the first time seeing auth, show tour prompt
+    if (hasSeenInitialAuth && !localStorage.getItem('evidentia_seen_initial_auth')) {
+      localStorage.setItem('evidentia_seen_initial_auth', 'true');
+      setShowTourPrompt(true);
+    }
+  };
+
+  const handleTourPromptYes = () => {
+    setShowTourPrompt(false);
+    // Auto-select CRISPR paper for demo
+    setSelectedPaper(SAMPLE_PAPERS[0]);
+    setVerificationView('paper');
+    // Show tutorial after a brief delay
+    setTimeout(() => {
+      setTutorialOpen(true);
+    }, 300);
+  };
+
+  const handleTourPromptNo = () => {
+    setShowTourPrompt(false);
+    localStorage.setItem('evidentia_tutorial_completed', 'true');
+  };
+
   const handleTutorialStepChange = useCallback((step: number) => {
     const demoPaper = SAMPLE_PAPERS[0];
 
@@ -4989,8 +5030,14 @@ export default function Home() {
       <AuthModal
         isOpen={authModal.isOpen}
         mode={authModal.mode}
-        onClose={authModal.close}
+        onClose={handleAuthModalClose}
         onSwitchMode={authModal.switchMode}
+      />
+      {/* Tour Prompt Modal */}
+      <TourPromptModal
+        isOpen={showTourPrompt}
+        onYes={handleTourPromptYes}
+        onNo={handleTourPromptNo}
       />
       {/* Welcome Modal */}
       <WelcomeModal
