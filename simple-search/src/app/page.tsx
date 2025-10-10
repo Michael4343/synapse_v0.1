@@ -15,7 +15,7 @@ import { VerificationModal } from '../components/verification-modal';
 import { OnboardingTutorial } from '../components/onboarding-tutorial';
 import type { ProfilePersonalization, UserProfile } from '../lib/profile-types';
 import { SaveToListModal } from '../components/save-to-list-modal';
-import { buildVerifyListName, savePaperToNamedList } from '../lib/list-actions';
+import { buildVerifyListName, buildCompileListName, savePaperToNamedList } from '../lib/list-actions';
 import type { ListPaperPayload } from '../lib/list-actions';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -117,6 +117,9 @@ interface RawMethodCrosswalkPaper {
   summary: string;
   highlight: string;
   matrix?: Partial<Record<LifeSciencesMatrixRowKey, string>>;
+  semanticScholarId?: string | null;
+  doi?: string | null;
+  url?: string | null;
 }
 
 interface MethodFindingCrosswalkPayload {
@@ -134,12 +137,26 @@ interface CrosswalkDisplayPaper {
   summary: string;
   highlight: string;
   matrix: Record<LifeSciencesMatrixRowKey, string>;
+  semanticScholarId?: string | null;
+  doi?: string | null;
+  url?: string | null;
 }
 
 type SimilarPaperSaveState = {
   status: 'idle' | 'saving' | 'success' | 'already' | 'error';
   message?: string;
 };
+
+type SaveMatchStrategy =
+  | 'paper-detail'
+  | 'semantic-scholar-id'
+  | 'semantic-scholar-doi'
+  | 'semantic-scholar-url'
+  | 'semantic-scholar-title'
+  | 'semantic-scholar-first-result'
+  | 'crosswalk-fallback';
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const formatCitationCount = (count: number | null): string => {
   if (count === null) {
@@ -156,6 +173,270 @@ const formatCitationCount = (count: number | null): string => {
     return `${formatted}k citations`;
   }
   return `${count.toLocaleString()} citations`;
+};
+
+const normaliseTitleForComparison = (title: string | null | undefined): string => {
+  if (!title) {
+    return '';
+  }
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+};
+
+const coerceAuthorsArray = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter((item): item is string => Boolean(item));
+  }
+
+  if (typeof value === 'string') {
+    return value
+      .split(/,|;| and | & /i)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+};
+
+const mapSearchResultToListPayload = (result: ApiSearchResult, sourceOverride?: string | null): ListPaperPayload => ({
+  id: result.id,
+  title: result.title,
+  abstract: result.abstract,
+  authors: coerceAuthorsArray(result.authors),
+  year: result.year,
+  venue: result.venue,
+  citationCount: result.citationCount,
+  semanticScholarId: result.semanticScholarId || null,
+  arxivId: result.arxivId ?? null,
+  doi: result.doi ?? null,
+  url: result.url ?? null,
+  source: sourceOverride ?? result.source ?? null,
+  publicationDate: result.publicationDate ?? null,
+});
+
+const mapPaperDetailToSearchResult = (paper: any): ApiSearchResult | null => {
+  if (!paper || typeof paper !== 'object') {
+    return null;
+  }
+
+  const authors = coerceAuthorsArray((paper as Record<string, unknown>).authors);
+  const title = typeof paper.title === 'string' ? paper.title : '';
+  if (!title) {
+    return null;
+  }
+
+  const year = typeof paper.year === 'number' ? paper.year : Number.isFinite(Number(paper.year)) ? Number(paper.year) : null;
+
+  return {
+    id: String(paper.id ?? ''),
+    title,
+    abstract: typeof paper.abstract === 'string' ? paper.abstract : null,
+    authors,
+    year: Number.isFinite(year) ? (year as number) : null,
+    venue: typeof paper.venue === 'string' ? paper.venue : null,
+    citationCount: typeof paper.citation_count === 'number' ? paper.citation_count : null,
+    semanticScholarId: typeof paper.semantic_scholar_id === 'string' ? paper.semantic_scholar_id : '',
+    arxivId: typeof paper.arxiv_id === 'string' ? paper.arxiv_id : null,
+    doi: typeof paper.doi === 'string' ? paper.doi : null,
+    url: typeof paper.url === 'string' ? paper.url : null,
+    source: typeof paper.source_api === 'string' ? paper.source_api : 'paper_detail',
+    publicationDate: typeof paper.publication_date === 'string' ? paper.publication_date : null,
+  };
+};
+
+const mapRawSearchResult = (raw: any): ApiSearchResult | null => {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const title = typeof raw.title === 'string' ? raw.title : '';
+  if (!title) {
+    return null;
+  }
+
+  return {
+    id: typeof raw.id === 'string' ? raw.id : String(raw.id ?? ''),
+    title,
+    abstract: typeof raw.abstract === 'string' ? raw.abstract : null,
+    authors: coerceAuthorsArray(raw.authors),
+    year: typeof raw.year === 'number' ? raw.year : null,
+    venue: typeof raw.venue === 'string' ? raw.venue : null,
+    citationCount: typeof raw.citationCount === 'number' ? raw.citationCount : null,
+    semanticScholarId: typeof raw.semanticScholarId === 'string' ? raw.semanticScholarId : '',
+    arxivId: typeof raw.arxivId === 'string' ? raw.arxivId : null,
+    doi: typeof raw.doi === 'string' ? raw.doi : null,
+    url: typeof raw.url === 'string' ? raw.url : null,
+    source: typeof raw.source === 'string' ? raw.source : 'semantic_scholar',
+    publicationDate: typeof raw.publicationDate === 'string' ? raw.publicationDate : null,
+  };
+};
+
+const convertListPayloadToDisplayItem = (payload: ListPaperPayload): ApiSearchResult => ({
+  id: payload.id,
+  title: payload.title,
+  abstract: payload.abstract ?? null,
+  authors: coerceAuthorsArray(payload.authors),
+  year: typeof payload.year === 'number' ? payload.year : null,
+  venue: typeof payload.venue === 'string' ? payload.venue : null,
+  citationCount: typeof payload.citationCount === 'number' ? payload.citationCount : null,
+  semanticScholarId: payload.semanticScholarId ?? '',
+  arxivId: payload.arxivId ?? null,
+  doi: payload.doi ?? null,
+  url: payload.url ?? null,
+  source: payload.source ?? 'method_crosswalk',
+  publicationDate: payload.publicationDate ?? null,
+});
+
+interface ResolvedSimilarPaper {
+  listPayload: ListPaperPayload;
+  displayItem: ApiSearchResult;
+  matchStrategy: SaveMatchStrategy;
+}
+
+const buildFallbackSaveArtifacts = (crosswalkPaper: CrosswalkDisplayPaper, basePaperId: string): ResolvedSimilarPaper => {
+  const fallbackId = `crosswalk:${basePaperId}:${crosswalkPaper.id}`;
+  const yearNumber = Number.parseInt(crosswalkPaper.year, 10);
+  const citationCount = typeof crosswalkPaper.citationCount === 'number'
+    ? crosswalkPaper.citationCount
+    : Number.isFinite(Number(crosswalkPaper.citationCount))
+      ? Number(crosswalkPaper.citationCount)
+      : null;
+
+  const authors = coerceAuthorsArray(crosswalkPaper.authors);
+
+  const listPayload: ListPaperPayload = {
+    id: fallbackId,
+    title: crosswalkPaper.title,
+    abstract: crosswalkPaper.summary,
+    authors,
+    year: Number.isFinite(yearNumber) ? yearNumber : null,
+    venue: crosswalkPaper.venue,
+    citationCount,
+    semanticScholarId: crosswalkPaper.semanticScholarId ?? null,
+    arxivId: null,
+    doi: crosswalkPaper.doi ?? null,
+    url: crosswalkPaper.url ?? null,
+    source: 'method_crosswalk',
+    publicationDate: Number.isFinite(yearNumber) ? `${yearNumber}-01-01` : null,
+  };
+
+  return {
+    listPayload,
+    displayItem: convertListPayloadToDisplayItem(listPayload),
+    matchStrategy: 'crosswalk-fallback',
+  };
+};
+
+const fetchPaperDetailAsSearchResult = async (paperId: string): Promise<ApiSearchResult | null> => {
+  try {
+    const response = await fetch(`/api/papers/${paperId}`);
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    return mapPaperDetailToSearchResult(data);
+  } catch (error) {
+    console.error('Failed to fetch paper detail for save:', error);
+    return null;
+  }
+};
+
+const searchSemanticScholarForCrosswalk = async (
+  crosswalkPaper: CrosswalkDisplayPaper
+): Promise<{ result: ApiSearchResult | null; strategy: SaveMatchStrategy | null }> => {
+  const body: Record<string, unknown> = {
+    query: crosswalkPaper.title,
+    limit: 5,
+  };
+
+  const parsedYear = Number.parseInt(crosswalkPaper.year, 10);
+  if (!Number.isNaN(parsedYear)) {
+    body.year = parsedYear;
+  }
+
+  try {
+    const response = await fetch('/api/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      return { result: null, strategy: null };
+    }
+
+    const payload = await response.json();
+    const rawResults = Array.isArray(payload?.results) ? payload.results : [];
+    const normalisedResults = rawResults
+      .map(mapRawSearchResult)
+      .filter((item): item is ApiSearchResult => Boolean(item));
+
+    if (!normalisedResults.length) {
+      return { result: null, strategy: null };
+    }
+
+    const normalisedTitle = normaliseTitleForComparison(crosswalkPaper.title);
+
+    const bySemanticScholarId = crosswalkPaper.semanticScholarId
+      ? normalisedResults.find((result) => result.semanticScholarId && result.semanticScholarId === crosswalkPaper.semanticScholarId)
+      : null;
+    if (bySemanticScholarId) {
+      return { result: bySemanticScholarId, strategy: 'semantic-scholar-id' };
+    }
+
+    const byDoi = crosswalkPaper.doi
+      ? normalisedResults.find((result) => result.doi && result.doi.toLowerCase() === crosswalkPaper.doi?.toLowerCase())
+      : null;
+    if (byDoi) {
+      return { result: byDoi, strategy: 'semantic-scholar-doi' };
+    }
+
+    const byUrl = crosswalkPaper.url
+      ? normalisedResults.find((result) => result.url && result.url.toLowerCase() === crosswalkPaper.url?.toLowerCase())
+      : null;
+    if (byUrl) {
+      return { result: byUrl, strategy: 'semantic-scholar-url' };
+    }
+
+    const byTitle = normalisedResults.find((result) => normaliseTitleForComparison(result.title) === normalisedTitle);
+    if (byTitle) {
+      return { result: byTitle, strategy: 'semantic-scholar-title' };
+    }
+
+    return { result: normalisedResults[0], strategy: 'semantic-scholar-first-result' };
+  } catch (error) {
+    console.error('Semantic Scholar search failed for crosswalk save:', error);
+    return { result: null, strategy: null };
+  }
+};
+
+const resolveCrosswalkPaperForSave = async (
+  crosswalkPaper: CrosswalkDisplayPaper,
+  basePaperId: string
+): Promise<ResolvedSimilarPaper> => {
+  if (UUID_REGEX.test(crosswalkPaper.id)) {
+    const detail = await fetchPaperDetailAsSearchResult(crosswalkPaper.id);
+    if (detail) {
+      return {
+        listPayload: mapSearchResultToListPayload(detail),
+        displayItem: detail,
+        matchStrategy: 'paper-detail',
+      };
+    }
+  }
+
+  const { result, strategy } = await searchSemanticScholarForCrosswalk(crosswalkPaper);
+  if (result) {
+    return {
+      listPayload: mapSearchResultToListPayload(result),
+      displayItem: result,
+      matchStrategy: strategy ?? 'semantic-scholar-first-result',
+    };
+  }
+
+  return buildFallbackSaveArtifacts(crosswalkPaper, basePaperId);
 };
 
 interface CrosswalkMatrixModalProps {
@@ -1458,6 +1739,10 @@ export default function Home() {
   }, [selectedPaper]);
 
   useEffect(() => {
+    setSimilarPaperSaveState({});
+  }, [selectedPaper?.id]);
+
+  useEffect(() => {
     if (!user) {
       // Reset account dropdown when user logs out
       setAccountDropdownVisible(false);
@@ -2655,7 +2940,10 @@ export default function Home() {
         clusterLabel: paper.clusterLabel,
         summary: paper.summary,
         highlight: paper.highlight,
-        matrix
+        matrix,
+        semanticScholarId: typeof paper.semanticScholarId === 'string' ? paper.semanticScholarId : null,
+        doi: typeof paper.doi === 'string' ? paper.doi : null,
+        url: typeof paper.url === 'string' ? paper.url : null
       }
     })
   }, [verificationSummary?.methodFindingCrosswalk]);
@@ -2875,59 +3163,13 @@ export default function Home() {
     }));
 
     try {
-      const searchBody: { query: string; limit: number; year?: number } = {
-        query: crosswalkPaper.title,
-        limit: 1
-      };
-
-      const parsedYear = Number.parseInt(crosswalkPaper.year, 10);
-      if (!Number.isNaN(parsedYear)) {
-        searchBody.year = parsedYear;
-      }
-
-      const searchResponse = await fetch('/api/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(searchBody)
-      });
-
-      if (!searchResponse.ok) {
-        const errorPayload = await searchResponse.json().catch(() => ({}));
-        const message = typeof errorPayload?.error === 'string'
-          ? errorPayload.error
-          : 'Unable to reach Semantic Scholar right now.';
-        throw new Error(message);
-      }
-
-      const searchData = await searchResponse.json();
-      const [matchedPaper] = Array.isArray(searchData?.results) ? searchData.results : [];
-
-      if (!matchedPaper?.id) {
-        throw new Error('Could not find this paper on Semantic Scholar.');
-      }
-
-      const listPayload: ListPaperPayload = {
-        id: String(matchedPaper.id),
-        title: matchedPaper.title ?? crosswalkPaper.title,
-        abstract: matchedPaper.abstract ?? null,
-        authors: Array.isArray(matchedPaper.authors) ? matchedPaper.authors : [],
-        year: typeof matchedPaper.year === 'number' ? matchedPaper.year : null,
-        venue: matchedPaper.venue ?? null,
-        citationCount: typeof matchedPaper.citationCount === 'number' ? matchedPaper.citationCount : null,
-        semanticScholarId: matchedPaper.semanticScholarId ?? null,
-        arxivId: matchedPaper.arxivId ?? null,
-        doi: matchedPaper.doi ?? null,
-        url: matchedPaper.url ?? null,
-        source: matchedPaper.source ?? 'semantic_scholar',
-        publicationDate: matchedPaper.publicationDate ?? null
-      };
-
-      const listName = buildVerifyListName(selectedPaper.title);
+      const resolution = await resolveCrosswalkPaperForSave(crosswalkPaper, selectedPaper.id);
+      const listName = buildCompileListName(selectedPaper.title);
       const existingLists = userLists.map((list) => ({ id: list.id, name: list.name }));
 
       const saveResult = await savePaperToNamedList({
         listName,
-        paper: listPayload,
+        paper: resolution.listPayload,
         existingLists
       });
 
@@ -2936,34 +3178,52 @@ export default function Home() {
       }
 
       if (saveResult.status === 'saved') {
+        const successMessage = resolution.matchStrategy === 'crosswalk-fallback'
+          ? `Added a summary to ${listName}.`
+          : `Added to ${listName}.`;
+
         setSimilarPaperSaveState((prev) => ({
           ...prev,
           [crosswalkPaper.id]: {
             status: 'success',
-            message: `Added to ${listName}.`
+            message: successMessage
           }
         }));
 
-        // Optimistically update the list items if viewing the saved list
         if (saveResult.listId && selectedListId === saveResult.listId) {
+          const targetListId = saveResult.listId;
           setListItems(prevItems => {
-            // Check if paper already exists to avoid duplicates
-            const exists = prevItems.some(item => item.id === listPayload.id);
-            if (exists) return prevItems;
+            if (prevItems.some(item => item.id === resolution.displayItem.id)) {
+              return prevItems;
+            }
 
-            // Add new paper to the end of the list
-            return [...prevItems, matchedPaper as ApiSearchResult];
+            const updatedItems = [...prevItems, resolution.displayItem];
+
+            setCachedListItems(prev => {
+              const next = new Map(prev);
+              next.set(targetListId, updatedItems);
+              return next;
+            });
+
+            if (user) {
+              const listItemsCacheKey = `${LIST_ITEMS_CACHE_KEY}-${user.id}-${targetListId}`;
+              setCachedData(listItemsCacheKey, updatedItems);
+            }
+
+            return updatedItems;
           });
         }
 
         trackEvent({
           name: 'similar_paper_saved',
           properties: {
-            paper_id: matchedPaper.id,
+            paper_id: resolution.listPayload.id,
             list_name: listName,
-            source: matchedPaper.source ?? 'semantic_scholar'
+            source: resolution.listPayload.source ?? 'method_crosswalk',
+            match_strategy: resolution.matchStrategy
           }
         });
+
         return;
       }
 
@@ -2972,7 +3232,7 @@ export default function Home() {
           ...prev,
           [crosswalkPaper.id]: {
             status: 'already',
-            message: 'This paper is already in the VERIFY list.'
+            message: `This paper is already in ${listName}.`
           }
         }));
         return;
@@ -2992,7 +3252,7 @@ export default function Home() {
       }));
       trackError('similar_paper_save', message, 'handleSimilarPaperSaveClick');
     }
-  }, [authModal, user, selectedPaper, isSamplePaper, userLists, selectedListId, handlePaperSaved, trackEvent, trackError]);
+  }, [authModal, user, selectedPaper, isSamplePaper, userLists, handlePaperSaved, selectedListId, trackEvent, trackError, setCachedListItems]);
 
   const updateVerificationView = (track: VerificationTrack) => {
     if (selectedPaper) {
@@ -4491,7 +4751,7 @@ export default function Home() {
                                       </button>
                                     </div>
                                     {saveStatus === 'saving' && (
-                                      <p className="mt-2 text-xs text-slate-500">Saving to VERIFY list…</p>
+                                      <p className="mt-2 text-xs text-slate-500">Saving to your list…</p>
                                     )}
                                     {saveStatus === 'success' && message && (
                                       <p className="mt-2 text-xs font-medium text-emerald-600">{message}</p>

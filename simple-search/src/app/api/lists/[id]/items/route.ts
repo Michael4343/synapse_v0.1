@@ -45,7 +45,7 @@ export async function POST(
       .from('list_items')
       .select('id')
       .eq('list_id', listId)
-      .eq('paper_data->id', paper.id)
+      .eq('paper_data->>id', paper.id)
       .single()
 
     if (existingItem) {

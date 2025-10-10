@@ -28,15 +28,24 @@ export interface SavePaperResult {
 }
 
 const VERIFY_LIST_PREFIX = 'VERIFY - '
+const COMPILE_LIST_PREFIX = 'COMPILE - '
 const MAX_LIST_NAME_LENGTH = 120
 
-export function buildVerifyListName(title: string): string {
+function buildPrefixedListName(prefix: string, title: string): string {
   const normalizedTitle = title.trim().replace(/\s+/g, ' ')
-  const maxTitleLength = Math.max(MAX_LIST_NAME_LENGTH - VERIFY_LIST_PREFIX.length, 16)
+  const maxTitleLength = Math.max(MAX_LIST_NAME_LENGTH - prefix.length, 16)
   const truncatedTitle = normalizedTitle.length > maxTitleLength
     ? normalizedTitle.slice(0, maxTitleLength - 3) + '...'
     : normalizedTitle
-  return `${VERIFY_LIST_PREFIX}${truncatedTitle}`
+  return `${prefix}${truncatedTitle}`
+}
+
+export function buildVerifyListName(title: string): string {
+  return buildPrefixedListName(VERIFY_LIST_PREFIX, title)
+}
+
+export function buildCompileListName(title: string): string {
+  return buildPrefixedListName(COMPILE_LIST_PREFIX, title)
 }
 
 interface SavePaperToNamedListOptions {
