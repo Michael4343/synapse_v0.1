@@ -1714,18 +1714,19 @@ export default function Home() {
     };
   }, []);
 
-  // Show auth modal on first visit, then tutorial flow
+  // Show auth modal on first visit, then tutorial flow (only for non-logged-in users)
   useEffect(() => {
     const hasSeenAuth = localStorage.getItem('evidentia_seen_initial_auth');
 
-    if (!hasSeenAuth) {
+    // Only show auth modal if user is not logged in
+    if (!hasSeenAuth && !user) {
       // First time visitor - show auth modal after a brief delay
       setTimeout(() => {
         authModal.openLogin();
         setHasSeenInitialAuth(true);
       }, 500);
     }
-  }, []);
+  }, [user]);
 
   // Legacy tutorial logic (kept for backward compatibility)
   useEffect(() => {
@@ -3761,8 +3762,8 @@ export default function Home() {
   const handleAuthModalClose = () => {
     authModal.close();
 
-    // If this is the first time seeing auth, show tour prompt
-    if (hasSeenInitialAuth && !localStorage.getItem('evidentia_seen_initial_auth')) {
+    // If this is the first time seeing auth and user is not logged in, show tour prompt
+    if (hasSeenInitialAuth && !localStorage.getItem('evidentia_seen_initial_auth') && !user) {
       localStorage.setItem('evidentia_seen_initial_auth', 'true');
       setShowTourPrompt(true);
     }

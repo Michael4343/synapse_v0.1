@@ -17,7 +17,7 @@ const GOOGLE_BUTTON_CLASSES = 'w-full rounded-xl border border-slate-200 bg-whit
 const DIVIDER_CLASSES = 'relative flex items-center justify-center'
 const DIVIDER_LINE_CLASSES = 'absolute inset-x-0 h-px bg-slate-200'
 const DIVIDER_TEXT_CLASSES = 'relative bg-white px-4 text-xs font-semibold text-slate-500'
-const TERMS_CLASSES = 'text-xs text-slate-500'
+
 export function RegisterForm({ onSuccess }: RegisterFormProps) {
   const [formState, formActions] = useAuthForm('signup')
 
@@ -144,11 +144,6 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
             {formState.success}
           </SuccessMessage>
         )}
-
-        {/* Terms */}
-        <p className={TERMS_CLASSES}>
-          By creating an account, you agree to our Terms of Service and Privacy Policy.
-        </p>
 
         {/* Submit Button */}
         <button
