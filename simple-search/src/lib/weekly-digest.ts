@@ -203,7 +203,7 @@ async function getPersonalFeedRows(
       .select('*')
       .eq('user_id', userId)
       .gte('created_at', sevenDaysAgo.toISOString())
-      .order('publication_date', { ascending: false, nullsLast: false })
+      .order('publication_date', { ascending: false, nullsFirst: false })
       .order('scraped_at', { ascending: false })
       .limit(60)
 
@@ -231,26 +231,29 @@ async function getPersonalFeedRows(
 }
 
 function mapRowsToCandidates(rows: PersonalFeedRow[]): WeeklyPaperCandidate[] {
-  return rows
-    .map((row) => {
-      const title = row.paper_title ?? row.title ?? ''
-      const url = row.paper_url ?? row.url ?? null
-      if (!title.trim()) {
-        return null
-      }
+  const out: WeeklyPaperCandidate[] = []
 
-      return {
-        title,
-        url,
-        semanticScholarId: row.semantic_scholar_id ?? row.semanticScholarId ?? null,
-        doi: row.doi ?? null,
-        pmid: row.pmid ?? null,
-        source: row.source_api ?? row.source ?? row.query_keyword ?? null,
-        publicationDate: row.publication_date ?? row.scraped_at ?? null,
-      }
-    })
-    .filter((candidate): candidate is WeeklyPaperCandidate => Boolean(candidate))
+  for (const row of rows) {
+    const title = (row.paper_title ?? row.title ?? '').trim()
+    const url = (row.paper_url ?? row.url ?? '').trim()
+    if (!title || !url) continue
+
+    const candidate: WeeklyPaperCandidate = {
+      title,
+      url, // ok even if WeeklyPaperCandidate.url is optional
+      semanticScholarId: String(row.semantic_scholar_id ?? row.semanticScholarId ?? ''),
+      doi: String(row.doi ?? ''),
+      pmid: String(row.pmid ?? ''),
+      source: String(row.source_api ?? row.source ?? row.query_keyword ?? ''),
+      publicationDate: String(row.publication_date ?? row.scraped_at ?? ''),
+    }
+
+    out.push(candidate)
+  }
+
+  return out
 }
+
 
 async function fetchProfileRow(userId: string, log: DigestLogger): Promise<Record<string, unknown> | null> {
   const columnSets = [
@@ -274,8 +277,8 @@ async function fetchProfileRow(userId: string, log: DigestLogger): Promise<Recor
       return null
     }
 
-    if (data) {
-      return data
+    if (data && typeof data === 'object' && data !== null) {
+      return data as Record<string, unknown>;
     }
   }
 
@@ -375,9 +378,10 @@ function mapGeminiDigestPayload(
       const paper = enriched[index]
       const fallbackBlurb = `Included based on available metadata (citations: ${paper.citationCount ?? 0}). Consider skimming to assess fit for ${userDescription}.`
       const whyBlurb =
-        typeof entry.why === 'string' && entry.why.trim().length > 0
-          ? entry.why.trim()
-          : fallbackBlurb
+      typeof entry.why === 'string' && entry.why.trim()
+        ? entry.why.trim()
+        : fallbackBlurb
+    
 
       mustReadPapers.push({
         title: paper.title,

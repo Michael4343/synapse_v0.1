@@ -1588,6 +1588,7 @@ export default function Home() {
   const [keywordResults, setKeywordResults] = useState<ApiSearchResult[]>([]);
   const [keywordLoading, setKeywordLoading] = useState(false);
   const [keywordError, setKeywordError] = useState('');
+  const [activeTab, setActiveTab] = useState<'digest' | 'papers'>(user ? 'digest' : 'papers');
   const [lastKeywordQuery, setLastKeywordQuery] = useState('');
   const [lastYearQuery, setLastYearQuery] = useState<number | null>(null);
   const [resultOffset, setResultOffset] = useState(0);
@@ -1664,6 +1665,14 @@ export default function Home() {
   const previousPaperRef = useRef<ApiSearchResult | null>(null);
   const feedBaselineRecordedRef = useRef(false);
   const personalFeedInitializedRef = useRef(false);
+  const previousUserRef = useRef(user);
+  useEffect(() => {
+    if (previousUserRef.current === user) {
+      return;
+    }
+    previousUserRef.current = user;
+    setActiveTab(user ? 'digest' : 'papers');
+  }, [user]);
 
   useEffect(() => {
     if (!accountDropdownVisible) {
@@ -2241,6 +2250,7 @@ export default function Home() {
       setLastKeywordQuery(trimmed);
       setLastYearQuery(validYear);
       setResultOffset(0);
+      setActiveTab('papers');
     }
 
     const startTime = typeof performance !== 'undefined' ? performance.now() : null;
@@ -2486,7 +2496,6 @@ export default function Home() {
         .filter(Boolean)
         .join(' • ')
     : '';
-
   const hasKeywords = profile?.profile_personalization?.manual_keywords && profile.profile_personalization.manual_keywords.length > 0;
   const profileNeedsSetup = Boolean(user) && !profileLoading && !profileError && (!profile || !hasKeywords);
   const isPersonalFeedActive = lastKeywordQuery === PERSONAL_FEED_LABEL;
@@ -3832,6 +3841,7 @@ export default function Home() {
     fetchListItems(listId);
     // Clear selected paper or set to first item once loaded
     setSelectedPaper(null);
+    setActiveTab('papers');
   };
 
   const handleOrcidSave = async () => {
@@ -4432,11 +4442,6 @@ export default function Home() {
           <section
             className={`min-h-0 min-w-0 transition-all duration-300 ${FEED_CARD_CLASSES} xl:basis-[40%] xl:h-full xl:overflow-y-auto 2xl:basis-[38%]`}
           >
-            {/* Weekly Research Digest - Appears at top for authenticated users */}
-            {user && !isSearchContext && !isListViewActive && (
-              <WeeklyDigestComponent userId={user.id} />
-            )}
-
             <header className="flex flex-col gap-0">
               <div className="flex items-center justify-between">
                 <div className="flex flex-col gap-1">
@@ -4457,7 +4462,7 @@ export default function Home() {
                           setYearQuery('');
                         }
                       }}
-                      placeholder="Find the knowledge the papers leave out"
+                      placeholder="Search for papers and more"
                       className={SEARCH_INPUT_CLASSES}
                     />
                   </div>
@@ -4499,50 +4504,100 @@ export default function Home() {
                 </div>
               </form>
 
-              <div className={FILTER_BAR_CLASSES}>
-                {user && hasKeywords && !isPersonalFeedActive && (keywordResults.length > 0 || lastKeywordQuery) && (
-                  <button
-                    onClick={() => handleRefreshPersonalFeed()}
-                    className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
-                    title="Back to Personal Feed"
-                  >
-                    <ArrowLeft className="h-3.5 w-3.5" />
-                  </button>
-                )}
-                <label className={FILTER_CHECKBOX_LABEL_CLASSES}>
-                  <input
-                    type="checkbox"
-                    checked={researchChecked}
-                    onChange={() => setResearchChecked((prev) => !prev)}
-                    className={FILTER_CHECKBOX_INPUT_CLASSES}
-                  />
-                  <span>Research</span>
-                </label>
-                <label className={FILTER_CHECKBOX_DISABLED_LABEL_CLASSES} title="Coming soon">
-                  <input
-                    type="checkbox"
-                    checked={patentsChecked}
-                    onChange={() => setPatentsChecked((prev) => !prev)}
-                    disabled
-                    aria-disabled
-                    className={`${FILTER_CHECKBOX_INPUT_CLASSES} ${FILTER_CHECKBOX_INPUT_DISABLED_CLASSES}`}
-                  />
-                  <span>Patents</span>
-                </label>
-                <label className={FILTER_CHECKBOX_DISABLED_LABEL_CLASSES} title="Coming soon">
-                  <input
-                    type="checkbox"
-                    checked={communityChecked}
-                    onChange={() => setCommunityChecked((prev) => !prev)}
-                    disabled
-                    aria-disabled
-                    className={`${FILTER_CHECKBOX_INPUT_CLASSES} ${FILTER_CHECKBOX_INPUT_DISABLED_CLASSES}`}
-                  />
-                  <span>Community</span>
-                </label>
+              <div className="mt-4 flex items-end gap-2 border-b border-slate-200">
+                {[
+                  { key: 'digest' as const, label: 'Digest', disabled: !user },
+                  { key: 'papers' as const, label: 'All Papers', disabled: false },
+                ].map((tab) => {
+                  const isActive = activeTab === tab.key
+                  const isDisabled = tab.disabled
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => {
+                        if (!isDisabled) {
+                          setActiveTab(tab.key)
+                        }
+                      }}
+                      disabled={isDisabled}
+                      aria-pressed={isActive}
+                      className={[
+                        'relative px-4 py-2 text-sm font-medium transition',
+                        isActive ? 'text-sky-600' : 'text-slate-500 hover:text-slate-700',
+                        isDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
+                      ].join(' ')}
+                    >
+                      <span>{tab.label}</span>
+                      <span
+                        className={[
+                          'absolute inset-x-2 bottom-0 h-0.5 rounded-full transition',
+                          isActive ? 'bg-sky-500' : 'bg-transparent',
+                        ].join(' ')}
+                        aria-hidden="true"
+                      />
+                    </button>
+                  )
+                })}
               </div>
+
+              {activeTab === 'papers' && (
+                <div className={FILTER_BAR_CLASSES}>
+                  {user && hasKeywords && !isPersonalFeedActive && (keywordResults.length > 0 || lastKeywordQuery) && (
+                    <button
+                      onClick={() => handleRefreshPersonalFeed()}
+                      className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
+                      title="Back to Personal Feed"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  <label className={FILTER_CHECKBOX_LABEL_CLASSES}>
+                    <input
+                      type="checkbox"
+                      checked={researchChecked}
+                      onChange={() => setResearchChecked((prev) => !prev)}
+                      className={FILTER_CHECKBOX_INPUT_CLASSES}
+                    />
+                    <span>Research</span>
+                  </label>
+                  <label className={FILTER_CHECKBOX_DISABLED_LABEL_CLASSES} title="Coming soon">
+                    <input
+                      type="checkbox"
+                      checked={patentsChecked}
+                      onChange={() => setPatentsChecked((prev) => !prev)}
+                      disabled
+                      aria-disabled
+                      className={`${FILTER_CHECKBOX_INPUT_CLASSES} ${FILTER_CHECKBOX_INPUT_DISABLED_CLASSES}`}
+                    />
+                    <span>Patents</span>
+                  </label>
+                  <label className={FILTER_CHECKBOX_DISABLED_LABEL_CLASSES} title="Coming soon">
+                    <input
+                      type="checkbox"
+                      checked={communityChecked}
+                      onChange={() => setCommunityChecked((prev) => !prev)}
+                      disabled
+                      aria-disabled
+                      className={`${FILTER_CHECKBOX_INPUT_CLASSES} ${FILTER_CHECKBOX_INPUT_DISABLED_CLASSES}`}
+                    />
+                    <span>Community</span>
+                  </label>
+                </div>
+              )}
             </header>
 
+            {activeTab === 'digest' ? (
+              <div className="mt-6 space-y-4">
+                {user ? (
+                  <WeeklyDigestComponent userId={user.id} />
+                ) : (
+                  <div className="rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center text-sm text-slate-600">
+                    Sign in to see your personalised weekly digest.
+                  </div>
+                )}
+              </div>
+            ) : (
             <div className="space-y-4">
               {profileError && user && (
                 <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600">
@@ -4600,6 +4655,7 @@ export default function Home() {
                 </>
               )}
             </div>
+            )}
           </section>
 
           <aside
@@ -4614,7 +4670,7 @@ export default function Home() {
                       <input
                         type="text"
                         disabled
-                        placeholder="Share your wisdom to help science"
+                        placeholder="Share your wisdom to help science (coming soon)"
                         className={`${SEARCH_INPUT_CLASSES} disabled:cursor-not-allowed disabled:text-slate-500`}
                       />
                     </div>
