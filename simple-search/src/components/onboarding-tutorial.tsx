@@ -14,29 +14,28 @@ interface TutorialStep {
 const TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: 0,
-    title: 'See the iconic Nobel Prize-winning CRISPR-Cas9 paper.',
-    description: '',
+    title: 'PAPER',
+    description: 'Check the Paper Details tile for fast context, then scan the abstract right underneath.',
     highlightSelector: '[data-tutorial="paper-hero"]'
   },
   {
     id: 1,
-    title: 'Explore the paper overview',
-    description: 'Scan the authors and abstract for A Programmable Dual-RNA–Guided DNA Endonuclease in Adaptive Bacterial Immunity.',
-    highlightSelector: '[data-tutorial="paper-overview"]',
-    action: 'show-paper'
-  },
-  {
-    id: 2,
-    title: 'Verify reproducibility',
-    description: 'Open the reproducibility briefing to see feasibility and lab-readiness guidance.',
+    title: 'CAN I REPRODUCE THIS?',
+    description: 'Tap the briefing to see straight answers on feasibility and lab readiness.',
     highlightSelector: '[data-tutorial="reproducibility-button"]',
     action: 'show-reproducibility'
   },
   {
-    id: 3,
-    title: 'Review feasibility insights',
-    description: 'Walk through the feasibility snapshot and blockers for this experiment.',
+    id: 2,
+    title: 'FEASIBILITY SNAPSHOT',
+    description: 'Walk the briefing for the quick summary and any blockers to watch.',
     highlightSelector: '[data-tutorial="repro-overview"]'
+  },
+  {
+    id: 3,
+    title: 'SIMILAR PAPERS',
+    description: 'Browse adjacent work to spot follow-up experiments and method variations.',
+    highlightSelector: '[data-tutorial="similar-papers-panel"]'
   },
   {
     id: 4,

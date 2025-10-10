@@ -3743,10 +3743,18 @@ export default function Home() {
       setSelectedPaper(demoPaper);
     }
 
-    if (step <= 1) {
+    if (step === 0) {
       setVerificationView('paper');
-    } else {
+      return;
+    }
+
+    if (step === 1 || step === 2) {
       setVerificationView('reproducibility');
+      return;
+    }
+
+    if (step === 3) {
+      setVerificationView('similar');
     }
   }, [selectedPaper, setSelectedPaper, setVerificationView]);
 

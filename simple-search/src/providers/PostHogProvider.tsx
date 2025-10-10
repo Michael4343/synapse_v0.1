@@ -87,6 +87,10 @@ export function PostHogProvider({ children }: PostHogProviderProps) {
     let isCancelled = false
     let loadedInstance: PostHogWithSessionRecording | null = null
 
+    // Store original console methods for preservation
+    const originalConsoleError = console.error
+    const originalConsoleWarn = console.warn
+
     const initPostHog = async () => {
       const { default: posthog } = await import('posthog-js')
       const ph = posthog as PostHogWithSessionRecording
@@ -102,12 +106,98 @@ export function PostHogProvider({ children }: PostHogProviderProps) {
           maskAllInputs: false,
           recordCrossOriginIframes: true,
         },
+        capture_exceptions: true, // Enable automatic exception capture
+        before_send: (event) => {
+          // Enrich all events with additional context
+          if (event && typeof event === 'object') {
+            event.properties = event.properties || {}
+
+            // Add environment context
+            event.properties.$environment = process.env.NODE_ENV || 'production'
+            event.properties.$page_path = window.location.pathname
+            event.properties.$page_url = window.location.href
+            event.properties.$user_agent = navigator.userAgent
+
+            // Add viewport info for UI-related errors
+            if (event.event === '$exception') {
+              event.properties.$viewport_width = window.innerWidth
+              event.properties.$viewport_height = window.innerHeight
+            }
+          }
+          return event
+        },
       })
 
       startSessionRecording(ph)
 
       if (process.env.NODE_ENV === 'development') {
         ph.debug()
+      }
+
+      // Intercept console.error and console.warn to send to PostHog
+      console.error = (...args: any[]) => {
+        originalConsoleError(...args)
+
+        try {
+          const errorMessage = args
+            .map(arg => {
+              if (arg instanceof Error) return arg.message
+              if (typeof arg === 'object') return JSON.stringify(arg)
+              return String(arg)
+            })
+            .join(' ')
+
+          const errorObj = args.find(arg => arg instanceof Error)
+
+          ph.capture('console_error', {
+            message: errorMessage,
+            stack: errorObj?.stack,
+            arguments: args.map(arg => {
+              if (arg instanceof Error) return { name: arg.name, message: arg.message }
+              if (typeof arg === 'object') {
+                try {
+                  return JSON.parse(JSON.stringify(arg))
+                } catch {
+                  return String(arg)
+                }
+              }
+              return arg
+            }),
+          })
+        } catch (e) {
+          // Silently fail if PostHog capture fails - don't break console.error
+          originalConsoleError('PostHog console.error capture failed:', e)
+        }
+      }
+
+      console.warn = (...args: any[]) => {
+        originalConsoleWarn(...args)
+
+        try {
+          const warnMessage = args
+            .map(arg => {
+              if (typeof arg === 'object') return JSON.stringify(arg)
+              return String(arg)
+            })
+            .join(' ')
+
+          ph.capture('console_warn', {
+            message: warnMessage,
+            arguments: args.map(arg => {
+              if (typeof arg === 'object') {
+                try {
+                  return JSON.parse(JSON.stringify(arg))
+                } catch {
+                  return String(arg)
+                }
+              }
+              return arg
+            }),
+          })
+        } catch (e) {
+          // Silently fail if PostHog capture fails
+          originalConsoleWarn('PostHog console.warn capture failed:', e)
+        }
       }
 
       loadedInstance = ph
@@ -118,6 +208,11 @@ export function PostHogProvider({ children }: PostHogProviderProps) {
 
     return () => {
       isCancelled = true
+
+      // Restore original console methods on cleanup
+      console.error = originalConsoleError
+      console.warn = originalConsoleWarn
+
       if (loadedInstance?.shutdown) {
         loadedInstance.shutdown()
       }

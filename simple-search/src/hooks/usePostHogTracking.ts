@@ -163,6 +163,33 @@ export function usePostHogTracking() {
     [trackEvent]
   )
 
+  const captureException = useCallback(
+    (error: Error, additionalProperties?: Record<string, any>) => {
+      if (!posthog || typeof window === 'undefined') {
+        return
+      }
+
+      try {
+        // Use PostHog's native captureException if available
+        if (typeof posthog.captureException === 'function') {
+          posthog.captureException(error, additionalProperties)
+        } else {
+          // Fallback to manual capture if captureException not available
+          posthog.capture('$exception', {
+            $exception_type: error.name,
+            $exception_message: error.message,
+            $exception_stack: error.stack,
+            $exception_source: 'manual',
+            ...additionalProperties,
+          })
+        }
+      } catch (e) {
+        console.warn('PostHog captureException failed', e)
+      }
+    },
+    [posthog]
+  )
+
   const identifyUser = useCallback(
     (userId: string, userProperties?: Record<string, any>) => {
       if (!posthog) return
@@ -184,9 +211,10 @@ export function usePostHogTracking() {
     () => ({
       trackEvent,
       trackError,
+      captureException,
       identifyUser,
       resetUser,
     }),
-    [identifyUser, resetUser, trackError, trackEvent]
+    [captureException, identifyUser, resetUser, trackError, trackEvent]
   )
 }

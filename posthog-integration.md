@@ -51,8 +51,12 @@ NEXT_PUBLIC_POSTHOG_ALLOWED_HOSTS=research.evidentia.bio
 ### Verification
 - `verification_requested` – Verification workflow kicked off for the active paper
 
-### Reliability
-- `error_occurred` – User-facing failure with a scoped `domain` and optional context payload
+### Reliability & Error Tracking
+- `error_occurred` – User-facing failure with a scoped `domain` and optional context payload (Legacy)
+- `$exception` – Automatic and manual exception capture with stack traces
+- `console_error` – All console.error() calls automatically captured
+- `console_warn` – All console.warn() calls automatically captured
+- `react_error_boundary` – React component rendering errors
 
 ## Event Properties Schema
 
@@ -168,6 +172,104 @@ These properties allow you to:
 
 Person properties persist across sessions and are automatically included in all event analytics.
 
+## Error Tracking (v0.2.0 - Beta Launch)
+
+### Automatic Error Capture
+
+Evidentia now features comprehensive automatic error tracking with zero configuration:
+
+**What's Captured Automatically:**
+- Uncaught JavaScript exceptions (`window.onerror`)
+- Unhandled promise rejections (`window.onunhandledrejection`)
+- All `console.error()` calls with stack traces
+- All `console.warn()` calls
+- React component rendering errors (via Error Boundary)
+
+**Configuration:**
+```typescript
+ph.init(apiKey, {
+  capture_exceptions: true, // Automatic exception capture
+  before_send: (event) => {
+    // Enrich all events with context
+    event.properties.$environment = process.env.NODE_ENV || 'production'
+    event.properties.$page_path = window.location.pathname
+    event.properties.$user_agent = navigator.userAgent
+    return event
+  },
+})
+```
+
+### Console Interception
+
+Console errors and warnings are automatically intercepted and sent to PostHog while preserving normal console behavior:
+
+```typescript
+console.error('API request failed', error) // Automatically sent to PostHog
+console.warn('Deprecated feature used')     // Automatically sent to PostHog
+```
+
+**Benefits:**
+- No code changes needed
+- Works with existing error handling
+- Full stack trace capture
+- Non-blocking - won't break your app
+
+### React Error Boundary
+
+All React component errors are caught by a global Error Boundary:
+
+**Location:** `src/components/error-boundary.tsx`
+**Wrapped in:** `src/app/layout.tsx`
+
+**What it does:**
+- Catches React rendering errors
+- Reports to PostHog with component stack
+- Shows friendly fallback UI to users
+- Provides reload option
+
+**Event properties:**
+```typescript
+{
+  error_name: 'TypeError'
+  error_message: 'Cannot read property...'
+  error_stack: 'TypeError: Cannot...'
+  component_stack: 'at ComponentName...'
+  page_path: '/papers/123'
+}
+```
+
+### Manual Exception Capture
+
+For explicit error reporting with custom context:
+
+```typescript
+import { usePostHogTracking } from '@/hooks/usePostHogTracking'
+
+const { captureException } = usePostHogTracking()
+
+try {
+  await processPayment(userId, amount)
+} catch (error) {
+  captureException(error as Error, {
+    domain: 'payments',
+    user_id: userId,
+    amount: amount,
+    severity: 'critical',
+  })
+}
+```
+
+### Error Events Reference
+
+| Event Name | Trigger | Properties |
+|-----------|---------|-----------|
+| `$exception` | Uncaught errors, captureException() | type, message, stack, environment |
+| `console_error` | console.error() | message, stack, arguments |
+| `console_warn` | console.warn() | message, arguments |
+| `react_error_boundary` | React errors | error_name, component_stack |
+
+**See:** [docs/error-tracking.md](simple-search/docs/error-tracking.md) for complete documentation.
+
 ## Implementation Details
 
 ### Session Recording Configuration
@@ -195,7 +297,7 @@ session_recording: {
 ```typescript
 import { usePostHogTracking } from '@/hooks/usePostHogTracking'
 
-const { trackEvent, trackError } = usePostHogTracking()
+const { trackEvent, trackError, captureException } = usePostHogTracking()
 
 trackEvent({
   name: 'search_performed',
@@ -207,7 +309,18 @@ trackEvent({
   }
 })
 
+// Legacy error tracking (deprecated)
 trackError('search', 'LLM enrichment failed', 'handleKeywordSearch')
+
+// Modern error tracking (recommended)
+try {
+  await riskyOperation()
+} catch (error) {
+  captureException(error as Error, {
+    operation: 'search',
+    context: 'handleKeywordSearch',
+  })
+}
 ```
 
 ## Data Privacy & Compliance
@@ -305,6 +418,6 @@ tracking.trackError('test_event', 'Testing PostHog integration')
 
 ---
 
-*Last Updated: October 9, 2025*
+*Last Updated: October 10, 2025*
 *PostHog Version: 1.266.0*
-*Configuration: Enhanced with Person Properties and Engagement Metrics*
+*Configuration: Enhanced with Person Properties, Engagement Metrics, and Comprehensive Error Tracking (v0.2.0)*

@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "../lib/auth-context";
 import { PostHogProvider } from "../providers/PostHogProvider";
+import { ErrorBoundary } from "../components/error-boundary";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -39,9 +40,11 @@ export default function RootLayout({
       >
         <Suspense fallback={null}>
           <PostHogProvider>
-            <AuthProvider>
-              {children}
-            </AuthProvider>
+            <ErrorBoundary>
+              <AuthProvider>
+                {children}
+              </AuthProvider>
+            </ErrorBoundary>
           </PostHogProvider>
         </Suspense>
       </body>
