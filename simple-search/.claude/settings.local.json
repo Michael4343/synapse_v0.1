@@ -3,7 +3,8 @@
     "allow": [
       "Read(//mnt/c/Users/mickl/Desktop/synapse v0.1/**)",
       "WebFetch(domain:posthog.com)",
-      "WebSearch"
+      "WebSearch",
+      "Read(//Users/alvindjajadikerta/Documents/**)"
     ],
     "deny": [],
     "ask": []
