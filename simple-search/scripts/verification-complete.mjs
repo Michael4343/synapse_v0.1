@@ -132,9 +132,41 @@ async function sendCompletionEmail({ request, paperTitle, reportData }) {
 
   const verificationLabel = request.verification_type ? request.verification_type.replace('_', ' ') : 'verification'
   const paperDisplayTitle = paperTitle || request.paper_title || request.paper_lookup_id || 'your paper'
-  const summaryBody = sanitiseSummary(reportData.summary)
-  const stageLabel = reportData.stage || 'completed'
-  const updatedAt = reportData.lastUpdated || new Date().toISOString()
+  const reproducibility = reportData?.reproducibility || null
+  const crosswalkPapers = reportData?.methodFindingCrosswalk?.papers || []
+
+  const summaryLines = []
+  if (reproducibility?.overallVerdict) {
+    summaryLines.push(`Overall verdict: ${reproducibility.overallVerdict}`)
+  }
+
+  if (Array.isArray(reproducibility?.feasibilitySnapshot) && reproducibility.feasibilitySnapshot.length > 0) {
+    summaryLines.push('Top capability checks:')
+    reproducibility.feasibilitySnapshot.slice(0, 3).forEach((item) => {
+      if (item?.question) {
+        summaryLines.push(`- ${item.question}`)
+      }
+    })
+  }
+
+  if (Array.isArray(crosswalkPapers) && crosswalkPapers.length > 0) {
+    summaryLines.push('Similar papers added:')
+    crosswalkPapers.slice(0, 3).forEach((paper) => {
+      if (paper?.title) {
+        const venue = paper.venue ? `, ${paper.venue}` : ''
+        const year = paper.year ? ` ${paper.year}` : ''
+        summaryLines.push(`- ${paper.title}${venue}${year}`)
+      }
+    })
+  }
+
+  const jsonDump = sanitiseSummary(reportData)
+  const summaryBody = summaryLines.length > 0
+    ? `${summaryLines.join('\n')}\n\nFull payload:\n${jsonDump}`
+    : jsonDump
+
+  const stageLabel = 'completed'
+  const updatedAt = new Date().toISOString()
 
   const textLines = [
     'Hi there,',
@@ -247,31 +279,93 @@ async function promptForJsonData() {
 function validateVerificationJson(data) {
   const errors = []
 
-  // Check required top-level fields
-  if (!data.stage) errors.push('Missing required field: stage')
-  if (!data.lastUpdated) errors.push('Missing required field: lastUpdated')
-  if (!data.reviewers || !Array.isArray(data.reviewers)) errors.push('Missing or invalid field: reviewers (must be array)')
-  if (!data.summary) errors.push('Missing required field: summary')
-  if (!data.paper) errors.push('Missing required field: paper')
-  if (!data.feasibilityQuestions || !Array.isArray(data.feasibilityQuestions)) {
-    errors.push('Missing or invalid field: feasibilityQuestions (must be array)')
-  }
-  if (!data.criticalPath || !Array.isArray(data.criticalPath)) {
-    errors.push('Missing or invalid field: criticalPath (must be array)')
-  }
-  if (!data.evidence) errors.push('Missing required field: evidence')
-
-  // Check paper object
-  if (data.paper) {
-    if (!data.paper.title) errors.push('Missing required field: paper.title')
-    if (!data.paper.authors) errors.push('Missing required field: paper.authors')
+  if (!data || typeof data !== 'object') {
+    return ['Payload must be a JSON object']
   }
 
-  // Check evidence object
-  if (data.evidence) {
-    if (!Array.isArray(data.evidence.strong)) errors.push('Missing or invalid field: evidence.strong (must be array)')
-    if (!Array.isArray(data.evidence.gaps)) errors.push('Missing or invalid field: evidence.gaps (must be array)')
-    if (!Array.isArray(data.evidence.assumptions)) errors.push('Missing or invalid field: evidence.assumptions (must be array)')
+  if (!data.paper || typeof data.paper !== 'object') {
+    errors.push('Missing required field: paper')
+  } else {
+    if (!data.paper.title || typeof data.paper.title !== 'string') {
+      errors.push('Missing required field: paper.title')
+    }
+    if (!data.paper.doiOrId || typeof data.paper.doiOrId !== 'string') {
+      errors.push('Missing required field: paper.doiOrId')
+    }
+    if (!data.paper.authors || typeof data.paper.authors !== 'string') {
+      errors.push('Missing required field: paper.authors')
+    }
+  }
+
+  if (!data.reproducibility || typeof data.reproducibility !== 'object') {
+    errors.push('Missing required field: reproducibility')
+  } else {
+    if (!data.reproducibility.overallVerdict || typeof data.reproducibility.overallVerdict !== 'string') {
+      errors.push('Missing required field: reproducibility.overallVerdict')
+    }
+
+    if (!Array.isArray(data.reproducibility.feasibilitySnapshot)) {
+      errors.push('Missing required field: reproducibility.feasibilitySnapshot (must be array)')
+    } else if (data.reproducibility.feasibilitySnapshot.length < 5) {
+      errors.push('reproducibility.feasibilitySnapshot should include at least 5 capability checks')
+    } else {
+      data.reproducibility.feasibilitySnapshot.forEach((item, index) => {
+        if (!item || typeof item !== 'object') {
+          errors.push(`Invalid feasibilitySnapshot item at index ${index}`)
+          return
+        }
+        if (!item.question || typeof item.question !== 'string') {
+          errors.push(`Missing question in feasibilitySnapshot index ${index}`)
+        }
+        if (!item.whyItMatters || typeof item.whyItMatters !== 'string') {
+          errors.push(`Missing whyItMatters in feasibilitySnapshot index ${index}`)
+        }
+      })
+    }
+  }
+
+  if (!data.methodFindingCrosswalk || typeof data.methodFindingCrosswalk !== 'object') {
+    errors.push('Missing required field: methodFindingCrosswalk')
+  } else if (!Array.isArray(data.methodFindingCrosswalk.papers) || data.methodFindingCrosswalk.papers.length === 0) {
+    errors.push('methodFindingCrosswalk.papers must be a non-empty array')
+  } else {
+    data.methodFindingCrosswalk.papers.forEach((paper, index) => {
+      if (!paper || typeof paper !== 'object') {
+        errors.push(`Invalid paper entry at index ${index}`)
+        return
+      }
+
+      const requiredStringFields = ['id', 'title', 'authors', 'venue', 'year', 'clusterLabel', 'summary', 'highlight']
+      requiredStringFields.forEach((field) => {
+        if (!paper[field] || typeof paper[field] !== 'string') {
+          errors.push(`Missing required field: methodFindingCrosswalk.papers[${index}].${field}`)
+        }
+      })
+
+      if (!('citationCount' in paper) || (paper.citationCount !== null && typeof paper.citationCount !== 'number')) {
+        errors.push(`Invalid citationCount for methodFindingCrosswalk.papers[${index}]`)
+      }
+
+      if (!paper.matrix || typeof paper.matrix !== 'object') {
+        errors.push(`Missing matrix object for methodFindingCrosswalk.papers[${index}]`)
+      } else {
+        const requiredMatrixFields = [
+          'sampleModel',
+          'materialsRatios',
+          'equipmentSetup',
+          'procedureSteps',
+          'controls',
+          'outputsMetrics',
+          'qualityChecks',
+          'outcomeSummary'
+        ]
+        requiredMatrixFields.forEach((field) => {
+          if (!paper.matrix[field] || typeof paper.matrix[field] !== 'string') {
+            errors.push(`Missing matrix field: methodFindingCrosswalk.papers[${index}].matrix.${field}`)
+          }
+        })
+      }
+    })
   }
 
   return errors
@@ -450,6 +544,8 @@ async function main() {
   console.log('Saving to database...\n')
 
   const now = new Date().toISOString()
+  const reproducibilityData = reportData.reproducibility ?? null
+  const crosswalkData = reportData.methodFindingCrosswalk ?? null
   let allSavesSucceeded = true
   const saveErrors = []
 
@@ -458,7 +554,8 @@ async function main() {
     const updatePayload = {
       status: 'in_progress', // Set to in_progress first
       updated_at: now,
-      result_summary: reportData
+      result_summary: reproducibilityData,
+      similar_papers_data: crosswalkData
     }
 
     const { error: updateError } = await supabase
@@ -478,29 +575,15 @@ async function main() {
   // Try to update search_results if paper exists
   const searchUpdate = {}
 
-  const applyClaimsUpdate = () => {
-    searchUpdate.claims_status = 'in_progress'
-    searchUpdate.claims_verified = reportData
-  }
-
-  const applyReproUpdate = () => {
+  if (reproducibilityData && (selected.verification_type === 'reproducibility' || selected.verification_type === 'combined')) {
     searchUpdate.reproducibility_status = 'in_progress'
-    searchUpdate.reproducibility_data = reportData
+    searchUpdate.reproducibility_data = reproducibilityData
   }
 
-  switch (selected.verification_type) {
-    case 'claims':
-      applyClaimsUpdate()
-      break
-    case 'reproducibility':
-      applyReproUpdate()
-      break
-    case 'combined':
-      applyClaimsUpdate()
-      applyReproUpdate()
-      break
-    default:
-      break
+  if (crosswalkData && selected.verification_type === 'combined') {
+    searchUpdate.similar_papers_status = 'in_progress'
+    searchUpdate.similar_papers_data = crosswalkData
+    searchUpdate.similar_papers_updated_at = now
   }
 
   if (Object.keys(searchUpdate).length > 0 && paperForUpdateId) {
@@ -543,11 +626,12 @@ async function main() {
       // Also update search_results status to completed
       if (Object.keys(searchUpdate).length > 0 && paperForUpdateId) {
         const finalSearchUpdate = {}
-        if (searchUpdate.claims_status) {
-          finalSearchUpdate.claims_status = 'completed'
-        }
         if (searchUpdate.reproducibility_status) {
           finalSearchUpdate.reproducibility_status = 'completed'
+        }
+        if (searchUpdate.similar_papers_status) {
+          finalSearchUpdate.similar_papers_status = 'completed'
+          finalSearchUpdate.similar_papers_updated_at = now
         }
 
         const { error: finalSearchError } = await supabase

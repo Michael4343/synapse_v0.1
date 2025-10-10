@@ -167,7 +167,11 @@ CREATE TABLE public.search_results (
   reproducibility_data JSONB DEFAULT NULL,
   -- Claims verification fields (for future implementation)
   claims_verified JSONB DEFAULT NULL,
-  claims_status TEXT DEFAULT NULL
+  claims_status TEXT DEFAULT NULL,
+  -- Similar papers crosswalk
+  similar_papers_status TEXT DEFAULT NULL,
+  similar_papers_data JSONB DEFAULT NULL,
+  similar_papers_updated_at TIMESTAMPTZ DEFAULT NULL
 );
 
 COMMENT ON COLUMN public.search_results.publication_date IS 'Publication date in string format from source API';
@@ -186,6 +190,9 @@ COMMENT ON COLUMN public.search_results.reproducibility_notes IS 'Human-readable
 COMMENT ON COLUMN public.search_results.reproducibility_data IS 'Full reproducibility analysis data in JSON format - for future implementation';
 COMMENT ON COLUMN public.search_results.claims_verified IS 'Array of verified claims with evidence links - for future implementation';
 COMMENT ON COLUMN public.search_results.claims_status IS 'Status of claims verification: verified, unverified, in_progress - for future implementation';
+COMMENT ON COLUMN public.search_results.similar_papers_status IS 'Workflow status for method-matched similar paper compilation';
+COMMENT ON COLUMN public.search_results.similar_papers_data IS 'Structured JSON payload capturing similar papers crosswalk output';
+COMMENT ON COLUMN public.search_results.similar_papers_updated_at IS 'Timestamp of the most recent similar paper crosswalk update';
 
 -- Indexes for search results
 CREATE INDEX idx_search_results_semantic_scholar_id ON public.search_results(semantic_scholar_id);

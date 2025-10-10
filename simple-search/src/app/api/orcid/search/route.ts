@@ -123,7 +123,26 @@ async function getOrcidProfile(orcidId: string, accessToken: string) {
 }
 
 /**
- * Parse ORCID search results and enrich with profile data
+ * Get works/publications for an ORCID iD
+ */
+async function getOrcidWorks(orcidId: string, accessToken: string) {
+  const response = await fetch(`${ORCID_API_BASE}/${orcidId}/works`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  })
+
+  if (!response.ok) {
+    console.error(`Failed to fetch ORCID works for ${orcidId}:`, response.status)
+    return null
+  }
+
+  return response.json()
+}
+
+/**
+ * Parse ORCID search results and enrich with profile data and works
  */
 async function parseOrcidResults(
   searchData: OrcidSearchResponse,
@@ -141,17 +160,22 @@ async function parseOrcidResults(
     .filter((id): id is string => Boolean(id))
     .slice(0, 10) // Limit to first 10 for performance
 
-  // Fetch detailed profiles in parallel
-  const profiles = await Promise.all(
-    orcidIds.map((orcidId) => getOrcidProfile(orcidId, accessToken))
-  )
+  // Fetch detailed profiles and works in parallel
+  const profilesAndWorksPromises = orcidIds.map(async (orcidId) => {
+    const [profile, worksData] = await Promise.all([
+      getOrcidProfile(orcidId, accessToken),
+      getOrcidWorks(orcidId, accessToken),
+    ])
+    return { profile, worksData, orcidId }
+  })
+
+  const profilesAndWorks = await Promise.all(profilesAndWorksPromises)
 
   // Transform to our format
-  return profiles
-    .map((profile, index) => {
+  return profilesAndWorks
+    .map(({ profile, worksData, orcidId }) => {
       if (!profile) return null
 
-      const orcidId = orcidIds[index]
       const name = profile.name || {}
       const givenNames = name['given-names']?.value || ''
       const familyName = name['family-name']?.value || ''
@@ -162,6 +186,12 @@ async function parseOrcidResults(
       const firstEmployment = Array.isArray(employments) ? employments[0] : null
       const institution = firstEmployment?.organization?.name || ''
 
+      // Parse works/publications (limit to 3 most recent)
+      const works = parseWorks(worksData)
+
+      // Only include results that have at least one publication
+      if (!works || works.length === 0) return null
+
       return {
         orcidId,
         name: fullName,
@@ -169,9 +199,47 @@ async function parseOrcidResults(
         familyName,
         institution,
         affiliation: institution, // Alias for backwards compatibility
+        works,
       }
     })
     .filter((result): result is NonNullable<typeof result> => result !== null)
+}
+
+/**
+ * Parse ORCID works data and extract relevant publication info
+ */
+function parseWorks(worksData: any) {
+  if (!worksData || !worksData.group) {
+    return []
+  }
+
+  const works = []
+  const groups = worksData.group || []
+
+  // Each group contains work summaries
+  for (const group of groups) {
+    const workSummary = group['work-summary']?.[0]
+    if (!workSummary) continue
+
+    const title = workSummary.title?.title?.value || ''
+    if (!title) continue
+
+    const year = workSummary['publication-date']?.year?.value
+    const journalTitle = workSummary['journal-title']?.value
+    const type = workSummary.type
+
+    works.push({
+      title,
+      year: year ? parseInt(year, 10) : undefined,
+      journalTitle,
+      type,
+    })
+
+    // Limit to 3 works
+    if (works.length >= 3) break
+  }
+
+  return works
 }
 
 /**

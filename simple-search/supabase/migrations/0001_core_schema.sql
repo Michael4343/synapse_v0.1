@@ -110,11 +110,17 @@ CREATE TABLE public.search_results (
   reproducibility_notes TEXT,
   reproducibility_data JSONB,
   claims_verified JSONB,
-  claims_status TEXT
+  claims_status TEXT,
+  similar_papers_status TEXT,
+  similar_papers_data JSONB,
+  similar_papers_updated_at TIMESTAMPTZ
 );
 
 COMMENT ON COLUMN public.search_results.scraped_content IS 'Full paper content scraped by Firecrawl in markdown format.';
 COMMENT ON COLUMN public.search_results.reproducibility_data IS 'Structured reproducibility analysis payload.';
+COMMENT ON COLUMN public.search_results.similar_papers_status IS 'Workflow status flag for similar paper compilation requests.';
+COMMENT ON COLUMN public.search_results.similar_papers_data IS 'Structured similar paper crosswalk output payload.';
+COMMENT ON COLUMN public.search_results.similar_papers_updated_at IS 'Timestamp when similar paper data was last updated.';
 
 CREATE TABLE public.search_result_queries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -178,12 +184,14 @@ CREATE TABLE public.paper_verification_requests (
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed', 'cancelled')),
   request_payload JSONB,
   result_summary JSONB,
+  similar_papers_data JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   completed_at TIMESTAMPTZ
 );
 
 COMMENT ON TABLE public.paper_verification_requests IS 'Tracks verification requests triggered by users and their fulfillment status.';
+COMMENT ON COLUMN public.paper_verification_requests.similar_papers_data IS 'Cached similar paper crosswalk payload associated with the request.';
 
 -- Community review requests ---------------------------------------------------
 CREATE TABLE public.paper_community_review_requests (

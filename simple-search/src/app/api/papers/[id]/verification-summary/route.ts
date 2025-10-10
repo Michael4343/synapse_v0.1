@@ -20,6 +20,7 @@ interface VerificationRequestRecord {
   completed_at: string | null
   result_summary: unknown
   request_payload: unknown
+  similar_papers_data: unknown
 }
 
 interface CommunityReviewRequestRecord {
@@ -38,6 +39,7 @@ interface VerificationSummaryResponse {
   communityReviewRequests: CommunityReviewRequestRecord[]
   reproducibilityReport: unknown
   claimsReport: unknown
+  methodFindingCrosswalk: unknown
 }
 
 function isVerificationRequestRecord(value: unknown): value is VerificationRequestRecord {
@@ -72,7 +74,8 @@ export async function GET(
         requests: [],
         communityReviewRequests: [],
         reproducibilityReport: null,
-        claimsReport: null
+        claimsReport: null,
+        methodFindingCrosswalk: null
       }
       return NextResponse.json(payload)
     }
@@ -86,7 +89,7 @@ export async function GET(
 
     const { data: requestsData, error: requestsError } = await supabaseAdmin
       .from(TABLES.VERIFICATION_REQUESTS)
-      .select('id, paper_id, paper_lookup_id, user_id, verification_type, status, created_at, updated_at, completed_at, result_summary, request_payload')
+      .select('id, paper_id, paper_lookup_id, user_id, verification_type, status, created_at, updated_at, completed_at, result_summary, request_payload, similar_papers_data')
       .eq('paper_lookup_id', id)
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
@@ -112,7 +115,7 @@ export async function GET(
     if (isUuid(id)) {
       const { data, error } = await supabaseAdmin
         .from(TABLES.SEARCH_RESULTS)
-        .select('reproducibility_data, claims_verified')
+        .select('reproducibility_data, claims_verified, similar_papers_data')
         .eq('id', id)
         .maybeSingle()
 
@@ -133,12 +136,14 @@ export async function GET(
       : []
 
     const fallbackReport = verifiedRequests.find((request) => request.result_summary)?.result_summary ?? null
+    const fallbackCrosswalk = verifiedRequests.find((request) => request.similar_papers_data)?.similar_papers_data ?? null
 
     const payload: VerificationSummaryResponse = {
       requests: verifiedRequests,
       communityReviewRequests: communityRequests,
       reproducibilityReport: paperData?.reproducibility_data ?? fallbackReport ?? null,
-      claimsReport: paperData?.claims_verified ?? fallbackReport ?? null
+      claimsReport: paperData?.claims_verified ?? fallbackReport ?? null,
+      methodFindingCrosswalk: paperData?.similar_papers_data ?? fallbackCrosswalk ?? null
     }
 
     return NextResponse.json(payload)

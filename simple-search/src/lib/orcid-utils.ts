@@ -2,6 +2,13 @@
  * ORCID API utilities and types
  */
 
+export interface OrcidWork {
+  title: string
+  year?: number
+  journalTitle?: string
+  type?: string
+}
+
 export interface OrcidSearchResult {
   orcidId: string
   name: string
@@ -9,6 +16,7 @@ export interface OrcidSearchResult {
   familyName?: string
   institution?: string
   affiliation?: string
+  works?: OrcidWork[]
 }
 
 export interface OrcidSearchResponse {

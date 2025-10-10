@@ -119,9 +119,9 @@ export function OrcidSearchModal({ isOpen, firstName, lastName, onSelect, onSkip
           {!loading && !error && results.length === 0 && (
             <div className="rounded-lg bg-slate-50 border border-slate-200 p-8 text-center">
               <Search className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-              <p className="text-sm font-medium text-slate-700 mb-2">No ORCID profiles found</p>
+              <p className="text-sm font-medium text-slate-700 mb-2">No ORCID profiles with publications found</p>
               <p className="text-xs text-slate-500">
-                No results found for &quot;{firstName} {lastName}&quot;. You can skip this step and add your ORCID iD manually later in your profile settings.
+                No profiles with published works found for &quot;{firstName} {lastName}&quot;. You can skip this step and add your ORCID iD manually later in your profile settings.
               </p>
             </div>
           )}
@@ -153,9 +153,27 @@ export function OrcidSearchModal({ isOpen, firstName, lastName, onSelect, onSkip
                         </a>
                       </div>
                       {result.institution && (
-                        <p className="text-xs text-slate-500 truncate">
+                        <p className="text-xs text-slate-500 truncate mb-2">
                           {result.institution}
                         </p>
+                      )}
+                      {result.works && result.works.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-slate-100">
+                          <p className="text-xs font-medium text-slate-600 mb-1">Recent Publications:</p>
+                          <div className="space-y-1">
+                            {result.works.map((work, idx) => (
+                              <div key={idx} className="text-xs text-slate-600">
+                                <span className="line-clamp-1" title={work.title}>
+                                  {work.title}
+                                </span>
+                                <span className="text-slate-400 text-[11px]">
+                                  {work.year && ` (${work.year})`}
+                                  {work.journalTitle && ` · ${work.journalTitle}`}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
                     <button

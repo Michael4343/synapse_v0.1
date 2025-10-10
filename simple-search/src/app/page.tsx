@@ -68,22 +68,22 @@ interface ProcessedContent {
 
 type LifeSciencesMatrixRowKey =
   | 'sampleModel'
-  | 'reagentsRatios'
-  | 'instrumentSetup'
+  | 'materialsRatios'
+  | 'equipmentSetup'
   | 'procedureSteps'
   | 'controls'
-  | 'readoutsMetrics'
-  | 'qcCalibration'
+  | 'outputsMetrics'
+  | 'qualityChecks'
   | 'outcomeSummary';
 
 const LIFE_SCIENCES_MATRIX_ROWS: Array<{ key: LifeSciencesMatrixRowKey; label: string }> = [
   { key: 'sampleModel', label: 'Sample and model' },
-  { key: 'reagentsRatios', label: 'Reagents and ratios' },
-  { key: 'instrumentSetup', label: 'Instrument setup' },
+  { key: 'materialsRatios', label: 'Materials and ratios' },
+  { key: 'equipmentSetup', label: 'Equipment setup' },
   { key: 'procedureSteps', label: 'Procedure steps' },
   { key: 'controls', label: 'Controls' },
-  { key: 'readoutsMetrics', label: 'Readouts and metrics' },
-  { key: 'qcCalibration', label: 'QC and calibration' },
+  { key: 'outputsMetrics', label: 'Outputs and metrics' },
+  { key: 'qualityChecks', label: 'Quality checks' },
   { key: 'outcomeSummary', label: 'Outcome summary' }
 ];
 
@@ -93,7 +93,7 @@ interface LifeSciencesMatrixRow {
   values: string[];
 }
 
-const buildLifeSciencesMatrixRows = (papers: MockSimilarPaper[]): LifeSciencesMatrixRow[] => {
+const buildLifeSciencesMatrixRows = (papers: CrosswalkDisplayPaper[]): LifeSciencesMatrixRow[] => {
   if (papers.length === 0) {
     return [];
   }
@@ -105,7 +105,24 @@ const buildLifeSciencesMatrixRows = (papers: MockSimilarPaper[]): LifeSciencesMa
   }));
 };
 
-interface MockSimilarPaper {
+interface RawMethodCrosswalkPaper {
+  id: string;
+  title: string;
+  authors: string;
+  venue: string;
+  year: string;
+  citationCount: number | null;
+  clusterLabel: string;
+  summary: string;
+  highlight: string;
+  matrix?: Partial<Record<LifeSciencesMatrixRowKey, string>>;
+}
+
+interface MethodFindingCrosswalkPayload {
+  papers: RawMethodCrosswalkPaper[];
+}
+
+interface CrosswalkDisplayPaper {
   id: string;
   title: string;
   authors: string;
@@ -139,7 +156,7 @@ interface CrosswalkMatrixModalProps {
   isOpen: boolean;
   onClose: () => void;
   rows: LifeSciencesMatrixRow[];
-  papers: MockSimilarPaper[];
+  papers: CrosswalkDisplayPaper[];
 }
 
 function CrosswalkMatrixModal({ isOpen, onClose, rows, papers }: CrosswalkMatrixModalProps) {
@@ -298,6 +315,58 @@ function buildVerificationPayloadFromSearchResult(paper: ApiSearchResult) {
 
 const FEED_SKELETON_ITEMS = Array.from({ length: 6 })
 
+function adaptReproducibilityReport(raw: unknown, paper: ApiSearchResult | null): ResearchPaperAnalysis | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  if ('summary' in raw && 'feasibilityQuestions' in raw) {
+    return raw as ResearchPaperAnalysis;
+  }
+
+  const overallVerdict = typeof (raw as { overallVerdict?: unknown }).overallVerdict === 'string'
+    ? (raw as { overallVerdict: string }).overallVerdict
+    : null;
+
+  const feasibilitySnapshot = Array.isArray((raw as { feasibilitySnapshot?: unknown }).feasibilitySnapshot)
+    ? ((raw as { feasibilitySnapshot: Array<{ question?: string; whyItMatters?: string }> }).feasibilitySnapshot)
+    : [];
+
+  if (!overallVerdict && feasibilitySnapshot.length === 0) {
+    return null;
+  }
+
+  const questions = feasibilitySnapshot.map((item, index) => ({
+    id: `capability-${index + 1}`,
+    question: typeof item?.question === 'string' && item.question.trim().length > 0
+      ? item.question
+      : 'Capability check not provided',
+    weight: 1,
+    helper: typeof item?.whyItMatters === 'string' && item.whyItMatters.trim().length > 0
+      ? item.whyItMatters
+      : undefined
+  }));
+
+  return {
+    stage: 'analysis_ready',
+    lastUpdated: new Date().toISOString(),
+    reviewers: [],
+    summary: overallVerdict ?? 'Reproducibility assessment pending.',
+    paper: {
+      title: paper?.title ?? 'Selected paper',
+      authors: paper ? paper.authors.join(', ') : 'Not reported',
+      venue: paper?.venue ?? 'Not reported',
+      doi: paper?.doi ?? undefined
+    },
+    feasibilityQuestions: questions,
+    evidence: {
+      strong: [],
+      gaps: [],
+      assumptions: []
+    }
+  };
+}
+
 // Sample papers to show in default feed
 const SAMPLE_PAPERS: ApiSearchResult[] = [
   {
@@ -361,6 +430,210 @@ const SAMPLE_PAPERS: ApiSearchResult[] = [
     publicationDate: '2001-02-15'
   }
 ]
+
+const SAMPLE_METHOD_FINDING_CROSSWALK: Record<string, MethodFindingCrosswalkPayload> = {
+  '68d962effe5520777791bd6ec8ffa4b963ba4f38': {
+    papers: [
+      {
+        id: 'crispr-lab-methods',
+        title: 'Cas9 delivery toolkits across mammalian systems',
+        authors: 'Cong et al.',
+        venue: 'Nature Methods',
+        year: '2013',
+        citationCount: 4500,
+        clusterLabel: 'Sample and model',
+        summary: 'Shares side-by-side procedures for introducing Cas9 into mammalian cells using materials and steps a university lab can source.',
+        highlight: 'Signal from abstract: contrasts plasmid and ribonucleoprotein delivery in mammalian cells',
+        matrix: {
+          sampleModel: 'Primary mammalian cells and induced pluripotent stem cell lines.',
+          materialsRatios: 'Cas9 protein, guide RNA, and delivery carrier balanced at bench scale.',
+          equipmentSetup: 'Standard biosafety cabinet, incubator, and electroporation or lipid delivery rigs.',
+          procedureSteps: 'Prepare guides, mix with carrier, deliver to cells, incubate, assess editing.',
+          controls: 'Non-targeting guides and untreated cells to check off-target cuts.',
+          outputsMetrics: 'Editing efficiency measured by sequencing and enzyme mismatch assays.',
+          qualityChecks: 'Guide validation and enzyme activity checks before delivery.',
+          outcomeSummary: 'Confirms that ribonucleoprotein delivery improves precision in common lab settings.'
+        }
+      },
+      {
+        id: 'crispr-pilot-studies',
+        title: 'Pre-clinical CRISPR programmes moving toward the clinic',
+        authors: 'Smith et al.',
+        venue: 'Nature Biotechnology',
+        year: '2015',
+        citationCount: 820,
+        clusterLabel: 'Field deployments',
+        summary: 'Documents how translational teams adapt the core Cas9 workflow for animal studies with practical handling and monitoring steps.',
+        highlight: 'Signal from abstract: outlines immune monitoring during in vivo Cas9 delivery',
+        matrix: {
+          sampleModel: 'Mouse disease models and primary tissue explants.',
+          materialsRatios: 'Guide RNA and vector doses scaled for animal body mass.',
+          equipmentSetup: 'Animal housing rooms, viral production benches, and histology suites.',
+          procedureSteps: 'Package vector, deliver to animal, monitor, harvest tissues, profile edits.',
+          controls: 'Vehicle-only injections and sham procedures to anchor outcome comparisons.',
+          outputsMetrics: 'Editing rates, protein expression, and safety panels recorded per cohort.',
+          qualityChecks: 'Serology and histology checkpoints to flag immune responses.',
+          outcomeSummary: 'Provides a practical runbook for pre-clinical teams replicating Cas9 studies.'
+        }
+      },
+      {
+        id: 'crispr-theory-grounding',
+        title: 'Governance and reproducibility frameworks for gene editing',
+        authors: 'Baltimore et al.',
+        venue: 'Science Policy Forum',
+        year: '2015',
+        citationCount: 360,
+        clusterLabel: 'Insight primers',
+        summary: 'Summarises reproducibility checklists and reporting templates that emerged as labs scaled CRISPR studies.',
+        highlight: 'Signal from editorial or summary in Science Policy Forum',
+        matrix: {
+          sampleModel: 'Policy review drawing on human cell and animal case studies.',
+          materialsRatios: 'Not reported.',
+          equipmentSetup: 'Not reported.',
+          procedureSteps: 'Collect community standards, compile checklists, publish guidance.',
+          controls: 'Not reported.',
+          outputsMetrics: 'Adoption of standard operating procedures across labs.',
+          qualityChecks: 'Peer-reviewed reproducibility checklists and disclosure templates.',
+          outcomeSummary: 'Offers practical governance steps to support repeatable gene editing work.'
+        }
+      }
+    ]
+  },
+  abd1c342495432171beb7ca8fd9551ef13cbd0ff: {
+    papers: [
+      {
+        id: 'alexnet-architecture-evolution',
+        title: 'From AlexNet to deeper convolutional stacks',
+        authors: 'Simonyan & Zisserman',
+        venue: 'ICLR',
+        year: '2014',
+        citationCount: 9500,
+        clusterLabel: 'Sample and model',
+        summary: 'Breaks down layer layouts, activation choices, and training routines that build directly on the ImageNet reference pipeline.',
+        highlight: 'Signal from abstract: details deeper stacks improving ImageNet accuracy',
+        matrix: {
+          sampleModel: 'ImageNet training and validation splits prepared for convolutional nets.',
+          materialsRatios: 'Convolutional layer widths and depths balanced for single GPU memory.',
+          equipmentSetup: 'Single and multi-GPU nodes with CUDA acceleration.',
+          procedureSteps: 'Stage data, configure network, train with SGD, evaluate top-1 and top-5 accuracy.',
+          controls: 'Baseline AlexNet configuration rerun for comparison.',
+          outputsMetrics: 'Top-1 and top-5 accuracy tracked per epoch.',
+          qualityChecks: 'Learning curve monitoring and gradient norm checks.',
+          outcomeSummary: 'Shows how deeper but efficient stacks replicate and extend AlexNet results.'
+        }
+      },
+      {
+        id: 'alexnet-systems-optimisation',
+        title: 'Systems engineering for large-scale vision models',
+        authors: 'Jia et al.',
+        venue: 'NIPS Workshop',
+        year: '2014',
+        citationCount: 410,
+        clusterLabel: 'Field deployments',
+        summary: 'Documents the practical data pipelines, mixed-precision training, and kernel fusion tactics used to keep runs stable.',
+        highlight: 'Signal from abstract: reports throughput gains from mixed-precision pipelines',
+        matrix: {
+          sampleModel: 'Image classification workloads across large image corpora.',
+          materialsRatios: 'Mini-batch sizes tuned to memory bandwidth on commodity GPUs.',
+          equipmentSetup: 'Distributed GPU clusters with fast storage and pre-fetch queues.',
+          procedureSteps: 'Shard data, spin up loaders, train with mixed precision, log metrics.',
+          controls: 'Single-node training sessions to benchmark improvements.',
+          outputsMetrics: 'Training time per epoch and accuracy parity checks.',
+          qualityChecks: 'Gradient overflow guards and checksum validation on sharded batches.',
+          outcomeSummary: 'Provides a checklist for engineering teams reproducing ImageNet-scale runs.'
+        }
+      },
+      {
+        id: 'alexnet-transfer-primers',
+        title: 'Transfer and fine-tuning strategies after ImageNet',
+        authors: 'Donahue et al.',
+        venue: 'CVPR',
+        year: '2014',
+        citationCount: 5200,
+        clusterLabel: 'Insight primers',
+        summary: 'Explains how to fine-tune ImageNet backbones for downstream tasks using straightforward schedules.',
+        highlight: 'Signal from abstract: notes best-practice fine-tuning schedules for new tasks',
+        matrix: {
+          sampleModel: 'ImageNet pre-trained networks adapted to varied vision datasets.',
+          materialsRatios: 'Learning rate and weight decay schedules tuned for transfer.',
+          equipmentSetup: 'Single GPU workstations with standard deep learning frameworks.',
+          procedureSteps: 'Initialise with pre-trained weights, freeze early layers, fine-tune heads, run evaluation.',
+          controls: 'Randomly initialised models trained with identical schedules.',
+          outputsMetrics: 'Accuracy and loss on downstream validation sets.',
+          qualityChecks: 'Overfitting checks through validation gap monitoring.',
+          outcomeSummary: 'Gives practitioners a direct recipe for fine-tuning legacy ImageNet models.'
+        }
+      }
+    ]
+  },
+  c92bd747a97eeafdb164985b0d044caa1dc6e73e: {
+    papers: [
+      {
+        id: 'graphene-production-basics',
+        title: 'Scaling graphene exfoliation and growth',
+        authors: 'Li et al.',
+        venue: 'Science',
+        year: '2009',
+        citationCount: 2100,
+        clusterLabel: 'Sample and model',
+        summary: 'Lays out furnace settings and substrate preparation steps to reproduce wafer-scale graphene films.',
+        highlight: 'Signal from abstract: sets chemical vapour deposition conditions for graphene films',
+        matrix: {
+          sampleModel: 'Copper and nickel substrates prepared for graphene growth.',
+          materialsRatios: 'Methane and hydrogen flows balanced for monolayer formation.',
+          equipmentSetup: 'Tube furnace with gas flow controllers and vacuum pumps.',
+          procedureSteps: 'Clean substrate, anneal, introduce gas mix, cool under inert flow.',
+          controls: 'Blank substrate runs to confirm no graphite residue.',
+          outputsMetrics: 'Layer thickness checked by Raman spectroscopy and microscopy.',
+          qualityChecks: 'Gas composition monitoring and furnace temperature calibration.',
+          outcomeSummary: 'Shows how labs can reproduce high-quality graphene sheets with standard furnaces.'
+        }
+      },
+      {
+        id: 'graphene-characterisation',
+        title: 'Quantifying electronic behaviour in 2D carbon',
+        authors: 'Zhang et al.',
+        venue: 'Nature Physics',
+        year: '2005',
+        citationCount: 5600,
+        clusterLabel: 'Field deployments',
+        summary: 'Provides step-by-step measurement routines for mobility, carrier type, and quantum Hall signatures.',
+        highlight: 'Signal from abstract: details magnetotransport measurements for graphene samples',
+        matrix: {
+          sampleModel: 'Few-layer graphene devices patterned on insulating substrates.',
+          materialsRatios: 'Electrode metals deposited with nanometre thickness control.',
+          equipmentSetup: 'Cryostat, magnet, and low-noise electrical measurement stack.',
+          procedureSteps: 'Pattern device, wire bond, cool sample, sweep field, record resistance.',
+          controls: 'Reference samples with known mobility for calibration.',
+          outputsMetrics: 'Sheet resistance and Hall plateaus plotted against field strength.',
+          qualityChecks: 'Contact resistance checks and instrument calibration before each run.',
+          outcomeSummary: 'Gives reproducible measurement steps for graphene transport studies.'
+        }
+      },
+      {
+        id: 'graphene-application-primers',
+        title: 'Device concepts leveraging graphene properties',
+        authors: 'Schedin et al.',
+        venue: 'Nature Materials',
+        year: '2007',
+        citationCount: 3200,
+        clusterLabel: 'Insight primers',
+        summary: 'Highlights straightforward device fabrication steps for sensors and flexible electronics built on graphene films.',
+        highlight: 'Signal from abstract: describes gas sensing and flexible electrode demonstrations',
+        matrix: {
+          sampleModel: 'Graphene films transferred onto flexible and rigid substrates.',
+          materialsRatios: 'Polymer support films and etchants balanced for clean transfer.',
+          equipmentSetup: 'Spin coater, vacuum oven, and standard photolithography line.',
+          procedureSteps: 'Grow graphene, transfer to substrate, pattern electrodes, package device.',
+          controls: 'Reference devices without graphene layer to baseline response.',
+          outputsMetrics: 'Sensor response curves and sheet resistance trends.',
+          qualityChecks: 'Optical inspection and Raman checks after transfer.',
+          outcomeSummary: 'Provides a pragmatic blueprint for reproducing early graphene devices.'
+        }
+      }
+    ]
+  }
+};
 
 const SAMPLE_PAPER_IDS = new Set(SAMPLE_PAPERS.map(paper => paper.id))
 
@@ -494,6 +767,7 @@ interface VerificationRequestRecord {
   completed_at: string | null
   result_summary: unknown
   request_payload: unknown
+  similar_papers_data: unknown
 }
 
 interface CommunityReviewRequestRecord {
@@ -510,7 +784,8 @@ interface CommunityReviewRequestRecord {
 interface VerificationSummaryPayload {
   requests: VerificationRequestRecord[]
   communityReviewRequests: CommunityReviewRequestRecord[]
-  reproducibilityReport: ResearchPaperAnalysis | null
+  reproducibilityReport: unknown
+  methodFindingCrosswalk: MethodFindingCrosswalkPayload | null
 }
 
 const SHELL_CLASSES = 'min-h-screen bg-slate-50 text-slate-900 flex flex-col xl:h-screen xl:overflow-hidden';
@@ -2322,130 +2597,61 @@ export default function Home() {
     ? communityReviewRequests.find(request => request.user_id === user.id)
     : null;
   const hasCommunityReviewRequest = Boolean(activeCommunityReviewRequest);
-  const reproducibilityReport = (verificationSummary?.reproducibilityReport as ResearchPaperAnalysis | null) ?? null;
+  const reproducibilityReport = useMemo<ResearchPaperAnalysis | null>(() => (
+    adaptReproducibilityReport(verificationSummary?.reproducibilityReport ?? null, selectedPaper)
+  ), [verificationSummary?.reproducibilityReport, selectedPaper]);
   const hasReproReport = Boolean(reproducibilityReport);
   const shouldDisableVerification = !hasSelectedPaper || isVerificationSending || verificationSummaryLoading;
 
-  const isTrackReportAvailable = (track: VerificationTrack) =>
-    track === 'reproducibility' ? hasReproReport : false;
+  const isTrackReportAvailable = (track: VerificationTrack) => {
+    if (track === 'reproducibility') return hasReproReport;
+    if (track === 'similar') {
+      return Boolean(
+        verificationSummary?.methodFindingCrosswalk?.papers &&
+        Array.isArray(verificationSummary.methodFindingCrosswalk.papers) &&
+        verificationSummary.methodFindingCrosswalk.papers.length > 0
+      );
+    }
+    return false;
+  };
 
-  const compiledSimilarPapers = useMemo<MockSimilarPaper[]>(() => {
-    if (!selectedPaper) {
+  const compiledSimilarPapers = useMemo<CrosswalkDisplayPaper[]>(() => {
+    if (!verificationSummary?.methodFindingCrosswalk) {
       return [];
     }
 
-    const leadAuthor = selectedPaper.authors[0] ?? 'Lead research team';
-    const venueLabel = selectedPaper.venue ?? 'Leading venues';
-    const baseYear = typeof selectedPaper.year === 'number' ? selectedPaper.year : new Date().getFullYear();
-    const publicationWindow = baseYear.toString();
-    const translationalYear = (baseYear + 1).toString();
-    const conceptualYear = (baseYear - 1).toString();
-    const focusAreaRaw = selectedPaper.title.split(/[–—:\-]/)[0]?.trim() ?? selectedPaper.title;
-    const focusArea = focusAreaRaw.length > 0 ? focusAreaRaw : selectedPaper.title;
-    const conciseFocusArea = focusArea.length > 80 ? `${focusArea.slice(0, 77)}…` : focusArea;
-    const displayFocusArea = conciseFocusArea.length > 0 ? conciseFocusArea : 'this study';
-    const abstractContext = selectedPaper.abstract
-      ? selectedPaper.abstract.length > 140
-        ? `${selectedPaper.abstract.slice(0, 137)}…`
-        : selectedPaper.abstract
-      : '';
-    const contextLine = abstractContext
-      ? `Signal extracted from abstract: ${abstractContext}`
-      : `Signal extracted from editorial summaries in ${venueLabel}.`;
+    const papers = verificationSummary.methodFindingCrosswalk.papers;
 
-    return [
-      {
-        id: `${selectedPaper.id}-methodology-cluster`,
-        title: `${displayFocusArea} — methodology echoes`,
-        authors: `${leadAuthor} et al.`,
-        venue: venueLabel,
-        year: publicationWindow,
-        citationCount: 112,
-        clusterLabel: 'Sample and model',
-        summary:
-          'Focuses on teams mirroring the experimental setup to stress-test reproducibility across laboratories and instrumentation.',
-        highlight:
-          'Pay attention to calibration notes and cohort selection—they show how peers reconcile small deviations from the original protocol.',
-        matrix: {
-          sampleModel:
-            'Pulmonary mRNA-LNP aerosol batches mirroring Zhang et al.; factorial replicates across helper lipid ratios.',
-          reagentsRatios:
-            'Helper lipid blends swept alongside charge-balancing excipients (0.5-2x baseline charge).',
-          instrumentSetup:
-            'High-throughput nebuliser stress rigs plus cryo-TEM and dynamic light scattering stations.',
-          procedureSteps:
-            'Factorial mixing -> nebuliser stress profiling -> cryo-TEM morphology readout.',
-          controls: 'Baseline Zhang formulation and placebo aerosols anchoring pressure curves.',
-          readoutsMetrics:
-            '>85% encapsulation efficiency, aerosol pressure traces, particle morphology panels.',
-          qcCalibration:
-            'Shared worksheet for plume density and cross-lab aerosol pressure alignment.',
-          outcomeSummary:
-            'Surfaced helper lipid blend delivering stable aerosols with reproducible encapsulation.'
-        }
-      },
-      {
-        id: `${selectedPaper.id}-application-bridge`,
-        title: `Translational takes on ${displayFocusArea}`,
-        authors: `Applied research groups referencing ${leadAuthor}`,
-        venue: 'Pharmaceutics',
-        year: translationalYear,
-        citationCount: 106,
-        clusterLabel: 'Field deployments',
-        summary:
-          'Tracked for practitioners adapting the core method to production-scale datasets, instrumentation upgrades, and cross-domain collaborations.',
-        highlight:
-          'Use this cluster when drafting collaboration briefs or benchmarking how the approach behaves under real-world constraints.',
-        matrix: {
-          sampleModel:
-            'cGMP-bound spray-dried mRNA-LNP lots scaled for field pilots with patient cohort metadata.',
-          reagentsRatios:
-            'Scaled excipient additions tuned via inline humidity and particle-sizing feedback.',
-          instrumentSetup:
-            'Spray-drying line with inline particle sizing, humidity control, and PAT dashboards.',
-          procedureSteps:
-            'Batch prep -> spray-dry run -> real-time PAT monitoring -> release testing with deposition models.',
-          controls: 'Legacy process lots and stability retains used as lot-release comparators.',
-          readoutsMetrics:
-            'Turnaround time, potency retention, respiratory deposition simulations, patient tolerance logs.',
-          qcCalibration:
-            'PAT alarms tied to QA checkpoints capturing shear-induced RNA degradation.',
-          outcomeSummary:
-            'Delivered GMP-ready batches 20% faster while holding potency and adherence signals.'
-        }
-      },
-      {
-        id: `${selectedPaper.id}-theory-thread`,
-        title: `Conceptual framings aligned with ${displayFocusArea}`,
-        authors: 'Theory & methods consortiums',
-        venue: 'Journal of Aerosol Research',
-        year: conceptualYear,
-        citationCount: 98,
-        clusterLabel: 'Insight primers',
-        summary:
-          'Highlights the theoretical through-lines that anchor the study, surfacing foundational citations and interpretability discussions.',
-        highlight: contextLine,
-        matrix: {
-          sampleModel:
-            'Computational surrogates mirroring pulmonary delivery physics and lipid polymorph transitions.',
-          reagentsRatios:
-            'Parameterised lipid polymorph libraries and excipient ratios explored in silico.',
-          instrumentSetup:
-            'CFD modelling suites linked with statistical DOE tooling for stability envelope mapping.',
-          procedureSteps:
-            'Set stability hypotheses -> run CFD and DOE simulations -> stress-test thermal scenarios.',
-          controls:
-            'Baseline theoretical models from Zhang et al. referenced as priors in comparative runs.',
-          readoutsMetrics:
-            'Residence time predictions, stability envelopes, polymorph phase diagrams.',
-          qcCalibration:
-            'Model validation against published nebuliser harmonics and empirical aerosol data.',
-          outcomeSummary:
-            'Explained how lipid polymorphs extend airway residence and guide DOE template selection.'
-        }
+    if (!Array.isArray(papers)) {
+      return [];
+    }
+
+    return papers.map((paper) => {
+      const matrix: Record<LifeSciencesMatrixRowKey, string> = {
+        sampleModel: paper.matrix?.sampleModel ?? 'Not reported',
+        materialsRatios: paper.matrix?.materialsRatios ?? 'Not reported',
+        equipmentSetup: paper.matrix?.equipmentSetup ?? 'Not reported',
+        procedureSteps: paper.matrix?.procedureSteps ?? 'Not reported',
+        controls: paper.matrix?.controls ?? 'Not reported',
+        outputsMetrics: paper.matrix?.outputsMetrics ?? 'Not reported',
+        qualityChecks: paper.matrix?.qualityChecks ?? 'Not reported',
+        outcomeSummary: paper.matrix?.outcomeSummary ?? 'Not reported'
       }
-    ];
-  }, [selectedPaper]);
+
+      return {
+        id: paper.id,
+        title: paper.title,
+        authors: paper.authors,
+        venue: paper.venue,
+        year: paper.year,
+        citationCount: typeof paper.citationCount === 'number' ? paper.citationCount : null,
+        clusterLabel: paper.clusterLabel,
+        summary: paper.summary,
+        highlight: paper.highlight,
+        matrix
+      }
+    })
+  }, [verificationSummary?.methodFindingCrosswalk]);
 
   const lifeSciencesMatrixRows = useMemo(
     () => buildLifeSciencesMatrixRows(compiledSimilarPapers),
@@ -2482,7 +2688,8 @@ export default function Home() {
       setVerificationSummary({
         requests: [],
         communityReviewRequests: [],
-        reproducibilityReport: sampleReport
+        reproducibilityReport: sampleReport,
+        methodFindingCrosswalk: SAMPLE_METHOD_FINDING_CROSSWALK[selectedPaperId] ?? null
       });
       return;
     }
@@ -2499,7 +2706,8 @@ export default function Home() {
         communityReviewRequests: Array.isArray(data.communityReviewRequests)
           ? data.communityReviewRequests
           : [],
-        reproducibilityReport: data.reproducibilityReport ?? null
+        reproducibilityReport: data.reproducibilityReport ?? null,
+        methodFindingCrosswalk: data.methodFindingCrosswalk ?? null
       });
     } catch (error) {
       console.error('Failed to load verification summary:', error);
@@ -2662,11 +2870,13 @@ export default function Home() {
             updated_at: now,
             completed_at: now,
             result_summary: sampleReport,
-            request_payload: null
+            request_payload: null,
+            similar_papers_data: SAMPLE_METHOD_FINDING_CROSSWALK[selectedPaper.id] ?? null
           }
         ],
         communityReviewRequests: [],
-        reproducibilityReport: sampleReport
+        reproducibilityReport: sampleReport,
+        methodFindingCrosswalk: SAMPLE_METHOD_FINDING_CROSSWALK[selectedPaper.id] ?? null
       });
       requestAnimationFrame(() => {
         document.getElementById('verification-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2901,13 +3111,13 @@ export default function Home() {
   const BASE_LABELS: Record<VerificationTrack, string> = {
     reproducibility: 'CAN I REPRODUCE THIS?',
     paper: 'SHOW THIS PAPER',
-    similar: 'COMPILE SIMILAR PAPERS'
+    similar: 'SIMILAR PAPERS'
   };
 
   const VIEW_LABELS: Record<VerificationTrack, string> = {
     reproducibility: 'CAN I REPRODUCE THIS?',
     paper: 'SHOW THIS PAPER',
-    similar: 'COMPILE SIMILAR PAPERS'
+    similar: 'SIMILAR PAPERS'
   };
 
   const getVerificationButtonLabel = (track: VerificationTrack): string => {
@@ -2988,7 +3198,7 @@ export default function Home() {
       <div className="flex flex-col items-center gap-1">
         <button
           type="button"
-          onClick={() => updateVerificationView('similar')}
+          onClick={() => handleVerificationRequest('similar')}
           className={getVerificationButtonClasses('similar')}
           aria-pressed={verificationView === 'similar'}
           title={getVerificationButtonTitle('similar')}
@@ -3004,7 +3214,7 @@ export default function Home() {
       </div>
       <div className="flex flex-col items-center gap-1">
         <button type="button" className={DETAIL_PATENT_BUTTON_CLASSES} disabled>
-          <span className="flex items-center gap-2">COMPILE SIMILAR PATENTS</span>
+          <span className="flex items-center gap-2">SIMILAR PATENTS</span>
         </button>
         <span className="h-1 w-full rounded-full bg-slate-200 opacity-0" aria-hidden="true" />
       </div>
@@ -3026,24 +3236,11 @@ export default function Home() {
           className={`h-1 w-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-sky-600 transition-all duration-200 ease-out ${verificationView === 'reproducibility' ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
         />
       </div>
-      <div className="flex flex-col items-center gap-1 text-center">
-        <button
-          type="button"
-          onClick={handleCommunityReviewButtonClick}
-          className={DETAIL_COMMUNITY_BUTTON_CLASSES}
-          disabled={communityReviewButtonDisabled}
-        >
-          <span className="flex items-center gap-2">{communityReviewButtonLabel}</span>
+      <div className="flex flex-col items-center gap-1">
+        <button type="button" className={DETAIL_PATENT_BUTTON_CLASSES} disabled>
+          <span className="flex items-center gap-2">COMMUNITY REVIEW</span>
         </button>
-        <span
-          className={`h-1 w-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-indigo-500 transition-all duration-200 ease-out ${communityReviewIsComplete ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
-        />
-        {communityReviewErrorMessage ? (
-          <p className="mt-2 max-w-[180px] text-[11px] leading-snug text-rose-600">{communityReviewErrorMessage}</p>
-        ) : null}
-        {!communityReviewErrorMessage && communityReviewSuccessMessage ? (
-          <p className="mt-2 max-w-[180px] text-[11px] leading-snug text-slate-500">{communityReviewSuccessMessage}</p>
-        ) : null}
+        <span className="h-1 w-full rounded-full bg-slate-200 opacity-0" aria-hidden="true" />
       </div>
     </div>
   );

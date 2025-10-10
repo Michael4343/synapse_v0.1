@@ -1,6 +1,5 @@
 TODO
-compile similar literature
-automate ORCID fill and search user for keywords - fix ORCID config given it is not needed for othre search understand this 
+make personal feed semantic scholar time based
 update tuturiall
 optimise user tracking
 
