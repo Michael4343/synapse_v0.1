@@ -1064,14 +1064,15 @@ const SHELL_CLASSES = 'min-h-screen bg-slate-50 text-slate-900 flex flex-col xl:
 const FEED_CARD_CLASSES = 'flex h-full min-h-0 flex-col space-y-6 px-2 pt-4 pb-12 xl:px-4 xl:pb-16';
 const DETAIL_SHELL_CLASSES = 'flex h-full min-h-0 flex-col space-y-6 px-2 pt-4 pb-12 xl:px-4 xl:pb-16';
 const DETAIL_HERO_CLASSES = 'rounded-3xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-4 shadow-inner';
-const TILE_BASE_CLASSES = 'group relative flex cursor-pointer flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 transition duration-150 hover:border-slate-300 hover:bg-slate-50 max-h-[400px] overflow-y-auto';
+const TILE_BASE_CLASSES = 'group relative flex cursor-pointer flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 transition duration-150 hover:border-slate-300 hover:bg-slate-50 xl:max-h-[400px] xl:overflow-y-auto';
 const TILE_SELECTED_CLASSES = 'border-sky-400 bg-sky-50 ring-1 ring-sky-100';
 const FEED_LOADING_WRAPPER_CLASSES = 'relative flex flex-col gap-3';
 const FEED_SPINNER_CLASSES = 'inline-block h-5 w-5 animate-spin rounded-full border-2 border-sky-500 border-t-transparent';
 const FEED_LOADING_PILL_CLASSES = 'inline-flex items-center gap-2 self-start rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-600 shadow-sm';
-const SEARCH_CONTAINER_CLASSES = 'relative flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm';
-const SEARCH_INPUT_CLASSES = 'w-full bg-transparent px-5 py-3.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none';
-const SEARCH_BUTTON_CLASSES = 'mr-2 inline-flex items-center rounded-xl bg-sky-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-sky-400';
+const SEARCH_CONTAINER_CLASSES = 'relative flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:gap-0 sm:p-0 sm:overflow-hidden';
+const SEARCH_INPUT_CLASSES = 'w-full bg-transparent px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none sm:px-5 sm:py-3.5';
+const SEARCH_BUTTON_CLASSES = 'inline-flex w-full items-center justify-center rounded-xl bg-sky-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-sky-400 sm:w-auto';
+const SEARCH_YEAR_INPUT_CLASSES = 'w-full bg-transparent px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-100 sm:w-24 sm:px-3 sm:py-3.5 sm:text-center sm:focus:ring-0';
 const FILTER_BAR_CLASSES = 'flex flex-wrap gap-2 pt-4';
 const FILTER_CHECKBOX_LABEL_CLASSES = 'inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 whitespace-nowrap';
 const FILTER_CHECKBOX_DISABLED_LABEL_CLASSES = 'inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-100 px-2 py-1.5 text-xs font-medium text-slate-400 opacity-80 cursor-not-allowed whitespace-nowrap';
@@ -1082,23 +1083,23 @@ const DETAIL_METADATA_CLASSES = 'space-y-3 text-sm text-slate-600';
 const DETAIL_LINK_CLASSES = 'text-lg font-semibold text-sky-600 underline decoration-sky-300 underline-offset-4 transition hover:text-sky-700';
 const TILE_LINK_CLASSES = 'inline-flex items-center text-xs font-semibold text-sky-600 underline decoration-sky-300 underline-offset-4 transition hover:text-sky-700';
 const SIDEBAR_CARD_CLASSES = 'flex flex-col gap-6 px-2 pt-4 pb-10 xl:px-3 xl:pt-6 xl:pb-12';
-const SIDEBAR_PRIMARY_BUTTON_CLASSES = 'flex items-center justify-center rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(56,189,248,0.2)] transition hover:-translate-y-0.5 hover:bg-sky-400';
-const SIDEBAR_SECONDARY_BUTTON_CLASSES = 'flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900';
+const SIDEBAR_PRIMARY_BUTTON_CLASSES = 'flex w-full items-center justify-center rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(56,189,248,0.2)] transition hover:-translate-y-0.5 hover:bg-sky-400 sm:w-auto';
+const SIDEBAR_SECONDARY_BUTTON_CLASSES = 'flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 sm:w-auto';
 const SEARCH_SPINNER_CLASSES = 'inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent';
-const DETAIL_SAVE_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-lg border border-sky-200 px-6 sm:px-8 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50';
-const DETAIL_REPRO_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-lg border border-sky-200 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50';
-const DETAIL_SIMILAR_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-lg border border-emerald-200 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-emerald-700 transition hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50';
+const DETAIL_SAVE_BUTTON_CLASSES = 'inline-flex w-full items-center justify-center rounded-lg border border-sky-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 sm:w-auto sm:px-8';
+const DETAIL_REPRO_BUTTON_CLASSES = 'inline-flex w-full items-center justify-center rounded-lg border border-sky-200 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 sm:w-auto';
+const DETAIL_SIMILAR_BUTTON_CLASSES = 'inline-flex w-full items-center justify-center rounded-lg border border-emerald-200 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-emerald-700 transition hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50 sm:w-auto';
 const DETAIL_VERIFY_BUTTON_ACTIVE_CLASSES = 'border-sky-400 bg-sky-50 text-sky-900 shadow-[0_12px_28px_rgba(56,189,248,0.25)] ring-2 ring-offset-2 ring-sky-200';
 const DETAIL_SIMILAR_BUTTON_ACTIVE_CLASSES = 'border-emerald-400 bg-emerald-50 text-emerald-900 shadow-[0_12px_28px_rgba(16,185,129,0.25)] ring-2 ring-offset-2 ring-emerald-200';
-const DETAIL_PATENT_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-lg border border-slate-200 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400 bg-white cursor-not-allowed opacity-60';
-const DETAIL_COMMUNITY_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-lg border border-sky-200 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-60';
+const DETAIL_PATENT_BUTTON_CLASSES = 'inline-flex w-full items-center justify-center rounded-lg border border-slate-200 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400 bg-white cursor-not-allowed opacity-60 sm:w-auto';
+const DETAIL_COMMUNITY_BUTTON_CLASSES = 'inline-flex w-full items-center justify-center rounded-lg border border-sky-200 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-sky-700 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto';
 const PROFILE_CARD_CLASSES = 'rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_25px_60px_rgba(15,23,42,0.08)]';
 const ACCOUNT_ICON_BUTTON_CLASSES = 'inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-900';
 const PROFILE_LABEL_CLASSES = 'text-sm font-medium text-slate-700';
 const PROFILE_INPUT_CLASSES = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100';
-const PROFILE_PRIMARY_BUTTON_CLASSES = 'inline-flex items-center justify-center rounded-lg bg-sky-500 px-3 py-2 text-sm font-medium text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60';
+const PROFILE_PRIMARY_BUTTON_CLASSES = 'inline-flex w-full items-center justify-center rounded-lg bg-sky-500 px-3 py-2 text-sm font-medium text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto';
 const PROFILE_COMING_SOON_HINT_CLASSES = 'text-xs font-medium text-slate-400';
-const PROFILE_DISABLED_UPLOAD_BUTTON_CLASSES = 'flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-400 cursor-not-allowed';
+const PROFILE_DISABLED_UPLOAD_BUTTON_CLASSES = 'flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-400 cursor-not-allowed sm:w-auto';
 
 const RELATIVE_TIME_FORMATTER = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
 const RELATIVE_TIME_DIVISIONS: { amount: number; unit: Intl.RelativeTimeFormatUnit }[] = [
@@ -2626,12 +2627,12 @@ export default function Home() {
     return (
       <form id={formId} onSubmit={handleProfileSave} className="space-y-5">
         <div className="space-y-2">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <label htmlFor="profile-orcid" className={PROFILE_LABEL_CLASSES}>
               ORCID ID <span className="text-xs font-normal text-slate-500">(keywords auto-generated)</span>
             </label>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <input
               id="profile-orcid"
               type="text"
@@ -2646,7 +2647,7 @@ export default function Home() {
               type="button"
               onClick={handleOrcidSave}
               disabled={profileEnrichmentLoading}
-              className="px-4 py-2 text-sm font-medium text-white bg-sky-600 border border-sky-600 rounded-lg hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full rounded-lg border border-sky-600 bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
             >
               {profileEnrichmentLoading ? 'Saving…' : 'Save'}
             </button>
@@ -2654,7 +2655,7 @@ export default function Home() {
         </div>
 
         <div className="space-y-2">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className={PROFILE_LABEL_CLASSES}>Academic website</span>
             <span className={PROFILE_COMING_SOON_HINT_CLASSES}>Coming soon</span>
           </div>
@@ -2670,7 +2671,7 @@ export default function Home() {
         </div>
 
         <div className="space-y-2">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className={PROFILE_LABEL_CLASSES}>Bibliography</span>
             <span className={PROFILE_COMING_SOON_HINT_CLASSES}>Coming soon</span>
           </div>
@@ -2687,7 +2688,7 @@ export default function Home() {
         {personalizationInputs(includePersonalizationInputs)}
 
         {!includePersonalizationInputs && (
-          <div className="flex justify-end">
+          <div className="flex w-full sm:justify-end">
             <button type="submit" className={PROFILE_PRIMARY_BUTTON_CLASSES} disabled={profileSaving}>
               {profileSaving ? 'Saving…' : 'Save'}
             </button>
@@ -4272,15 +4273,15 @@ export default function Home() {
             >
               {user ? (
                 <>
-                  <div className="flex items-center justify-between w-full gap-4">
+                  <div className="flex w-full flex-wrap items-center gap-3 sm:flex-nowrap sm:justify-between">
                     <div className="flex-shrink-0">
                       <span className="text-sm font-bold uppercase tracking-[0.2em] text-slate-600">Evidentia</span>
                     </div>
-                    <div className="relative flex-shrink-0" ref={accountDropdownRef}>
+                    <div className="relative w-full sm:w-auto" ref={accountDropdownRef}>
                       <button
                         type="button"
                         onClick={handleAccountDropdownToggle}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                        className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 sm:w-auto"
                         aria-expanded={accountDropdownVisible}
                       >
                         <User className="h-4 w-4" />
@@ -4349,7 +4350,7 @@ export default function Home() {
                               onClick={isLoadingList ? undefined : () => handleListClick(list.id)}
                               disabled={isLoadingList}
                               aria-busy={isLoadingList}
-                              className={`w-full flex items-center justify-between rounded-lg border p-3 text-sm transition ${
+                              className={`flex w-full flex-col gap-2 rounded-lg border p-3 text-left text-sm transition sm:flex-row sm:items-center sm:justify-between ${
                                 isSelected
                                   ? 'border-sky-400 bg-sky-100 ring-2 ring-sky-300 shadow-sm'
                                   : isLoadingList
@@ -4360,7 +4361,7 @@ export default function Home() {
                               <span className={`font-medium ${isSelected ? 'text-sky-900' : isLoadingList ? 'text-sky-800' : 'text-slate-900'}`}>
                                 {list.name}
                               </span>
-                              <span className={`text-xs ${isSelected ? 'text-sky-700' : 'text-slate-500'}`}>
+                              <span className={`text-xs ${isSelected ? 'text-sky-700' : 'text-slate-500'} sm:text-right`}>
                                 {isLoadingList ? (
                                   <span className="flex items-center gap-2 text-sky-700 font-medium">
                                     <span
@@ -4386,15 +4387,15 @@ export default function Home() {
                 </>
               ) : (
                 <>
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-3 sm:justify-between">
                     <div className="space-y-1">
                       <span className="text-sm font-bold uppercase tracking-[0.2em] text-slate-600">Evidentia</span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                       <button
                         type="button"
                         onClick={authModal.openLogin}
-                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 sm:w-auto"
                         aria-label="Sign in"
                       >
                         <User className="h-4 w-4" />
@@ -4421,51 +4422,58 @@ export default function Home() {
               </div>
 
               <form id="keyword-search-form" onSubmit={handleKeywordSearch} className="relative">
-                <div className="relative flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                  <input
-                    type="text"
-                    value={keywordQuery}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setKeywordQuery(value);
-                      // Clear year when search input is completely cleared
-                      if (!value.trim()) {
-                        setYearQuery('');
-                      }
-                    }}
-                    placeholder="Find the knowledge the papers leave out"
-                    className="flex-1 bg-transparent px-5 py-3.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                  />
-                  <div className="h-6 w-px bg-slate-200"></div>
-                  <input
-                    type="number"
-                    value={yearQuery}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      // Only allow 4-digit years or empty
-                      if (value === '' || (value.length <= 4 && /^\d+$/.test(value))) {
-                        setYearQuery(value);
-                      }
-                    }}
-                    placeholder="Year"
-                    min="1900"
-                    max={new Date().getFullYear() + 2}
-                    className="w-20 bg-transparent px-3 py-3.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none text-center"
-                  />
-                  <button
-                    type="submit"
-                    className={`mr-2 inline-flex items-center rounded-xl bg-sky-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-sky-400 ${keywordLoading ? 'cursor-not-allowed opacity-70' : ''}`}
-                    disabled={keywordLoading}
-                  >
-                    {keywordLoading ? (
-                      <span className="flex items-center gap-2">
-                        <span className={SEARCH_SPINNER_CLASSES} aria-hidden="true" />
-                        <span>Loading</span>
-                      </span>
-                    ) : (
-                      'Search'
-                    )}
-                  </button>
+                <div className={SEARCH_CONTAINER_CLASSES}>
+                  <div className="flex w-full items-center sm:flex-1">
+                    <input
+                      type="text"
+                      value={keywordQuery}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setKeywordQuery(value);
+                        // Clear year when search input is completely cleared
+                        if (!value.trim()) {
+                          setYearQuery('');
+                        }
+                      }}
+                      placeholder="Find the knowledge the papers leave out"
+                      className={SEARCH_INPUT_CLASSES}
+                    />
+                  </div>
+                  <div className="hidden h-10 w-px bg-slate-200 sm:block" />
+                  <div className="h-px w-full bg-slate-200 sm:hidden" />
+                  <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-0">
+                    <input
+                      type="number"
+                      value={yearQuery}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        // Only allow 4-digit years or empty
+                        if (value === '' || (value.length <= 4 && /^\d+$/.test(value))) {
+                          setYearQuery(value);
+                        }
+                      }}
+                      placeholder="Year"
+                      min="1900"
+                      max={new Date().getFullYear() + 2}
+                      className={`${SEARCH_YEAR_INPUT_CLASSES} rounded-xl border border-slate-200 text-center sm:rounded-none sm:border-0`}
+                    />
+                    <div className="hidden h-10 w-px bg-slate-200 sm:block" />
+                    <div className="h-px w-full bg-slate-200 sm:hidden" />
+                    <button
+                      type="submit"
+                      className={`${SEARCH_BUTTON_CLASSES} ${keywordLoading ? 'cursor-not-allowed opacity-70' : ''}`}
+                      disabled={keywordLoading}
+                    >
+                      {keywordLoading ? (
+                        <span className="flex items-center gap-2">
+                          <span className={SEARCH_SPINNER_CLASSES} aria-hidden="true" />
+                          <span>Loading</span>
+                        </span>
+                      ) : (
+                        'Search'
+                      )}
+                    </button>
+                  </div>
                 </div>
               </form>
 
@@ -4579,18 +4587,21 @@ export default function Home() {
               <>
                 {/* Share Discovery */}
                 <div className="px-4 pb-3">
-                  <div className="relative flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                    <input
-                      type="text"
-                      disabled
-                      placeholder="Share your wisdom to help science"
-                      className="flex-1 bg-transparent px-5 py-3.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none disabled:cursor-not-allowed disabled:text-slate-500"
-                    />
-                    <div className="h-6 w-px bg-slate-200" />
+                  <div className={SEARCH_CONTAINER_CLASSES}>
+                    <div className="flex w-full items-center">
+                      <input
+                        type="text"
+                        disabled
+                        placeholder="Share your wisdom to help science"
+                        className={`${SEARCH_INPUT_CLASSES} disabled:cursor-not-allowed disabled:text-slate-500`}
+                      />
+                    </div>
+                    <div className="hidden h-10 w-px bg-slate-200 sm:block" />
+                    <div className="h-px w-full bg-slate-200 sm:hidden" />
                     <button
                       type="button"
                       disabled
-                      className="mr-2 inline-flex items-center rounded-xl bg-sky-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-70"
+                      className={`${SEARCH_BUTTON_CLASSES} disabled:cursor-not-allowed disabled:opacity-70`}
                     >
                       Share
                     </button>
@@ -4600,7 +4611,7 @@ export default function Home() {
                 <div className="flex flex-col space-y-6 px-4 pb-6 flex-1 min-h-0">
                   <div className={`${DETAIL_HERO_CLASSES} flex flex-col gap-4`} data-tutorial="paper-hero">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:gap-3">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-sky-600">Paper details</p>
                         {metaSummary && (
                           <p className="text-xs text-slate-600">{metaSummary}</p>
@@ -4615,7 +4626,7 @@ export default function Home() {
                       </button>
                     </div>
                     <h2 className="text-2xl font-semibold text-slate-900" data-tutorial="paper-title">{selectedPaper.title}</h2>
-                    <div className="flex justify-end">
+                    <div className="flex justify-center sm:justify-end">
                       {verificationButtons}
                     </div>
                   </div>
@@ -4694,7 +4705,7 @@ export default function Home() {
                                         <button
                                           type="button"
                                           onClick={() => handleCrosswalkRowToggle(row.key)}
-                                          className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition hover:bg-slate-50"
+                                          className="flex w-full flex-wrap items-center justify-between gap-2 px-5 py-4 text-left transition hover:bg-slate-50 sm:flex-nowrap sm:gap-4"
                                           aria-expanded={isOpen}
                                           aria-controls={panelId}
                                         >
@@ -4845,7 +4856,7 @@ export default function Home() {
 
                         return (
                           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm text-sm text-slate-700">
-                            <div className="flex items-center justify-between">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
                               <div>
                                 <p className="text-sm font-semibold text-slate-900">Verification briefing in progress</p>
                                 <p className="mt-1 text-xs text-slate-500">
@@ -5001,12 +5012,12 @@ export default function Home() {
           <div
             className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl"
           >
-            <header className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+            <header className="flex flex-col gap-3 border-b border-slate-200 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-base font-semibold text-slate-900">Profile settings</h2>
                 <p className="text-xs text-slate-500">Keep your recommendations current.</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap sm:justify-end">
                 <button
                   type="submit"
                   form="profile-editor-form"

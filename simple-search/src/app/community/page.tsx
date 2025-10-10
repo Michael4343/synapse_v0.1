@@ -86,12 +86,12 @@ export default function CommunityFeedPage() {
               return (
                 <article key={entry.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex flex-col gap-3">
-                    <div className="flex items-center justify-between text-xs uppercase tracking-wide text-slate-500">
-                      <span className={`inline-flex items-center rounded-full px-3 py-1 font-semibold ${badgeClass}`}>
-                        {entry.entryType === 'share' ? 'Community share' : 'Open question'}
-                      </span>
-                      <span>{formatRelativeTime(entry.createdAt)}</span>
-                    </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs uppercase tracking-wide text-slate-500">
+                    <span className={`inline-flex items-center rounded-full px-3 py-1 font-semibold ${badgeClass}`}>
+                      {entry.entryType === 'share' ? 'Community share' : 'Open question'}
+                    </span>
+                    <span>{formatRelativeTime(entry.createdAt)}</span>
+                  </div>
                     <Link href={`/papers/${entry.paperLookupId}`} className="text-lg font-semibold text-slate-900 transition hover:text-slate-600">
                       {entry.paperTitle}
                     </Link>
@@ -101,7 +101,7 @@ export default function CommunityFeedPage() {
                     <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
                       {entry.content}
                     </div>
-                    <div className="flex items-center justify-between text-sm text-slate-500">
+                    <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
                       <Link
                         href={`/papers/${entry.paperLookupId}`}
                         className="font-medium text-sky-600 transition hover:text-sky-500"

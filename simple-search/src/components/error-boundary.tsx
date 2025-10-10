@@ -106,7 +106,7 @@ class ErrorBoundaryClass extends Component<
                 lineHeight: '1.6',
               }}
             >
-              We've encountered an unexpected error. Our team has been notified and will look into it.
+              We&apos;ve encountered an unexpected error. Our team has been notified and will look into it.
             </p>
             {process.env.NODE_ENV === 'development' && this.state.error && (
               <details
