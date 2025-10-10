@@ -2096,8 +2096,10 @@ export default function Home() {
         setProfile((prev) => {
           if (!prev) {
             return {
+              first_name: null,
+              last_name: null,
               orcid_id: effectiveOrcid,
-              academic_website: prev?.academic_website ?? null,
+              academic_website: null,
               profile_personalization: result.personalization,
               last_profile_enriched_at: result.last_profile_enriched_at,
               profile_enrichment_version: result.profile_enrichment_version,
