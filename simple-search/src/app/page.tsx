@@ -16,6 +16,7 @@ import { OnboardingTutorial } from '../components/onboarding-tutorial';
 import type { ProfilePersonalization, UserProfile } from '../lib/profile-types';
 import { SaveToListModal } from '../components/save-to-list-modal';
 import { buildVerifyListName, savePaperToNamedList } from '../lib/list-actions';
+import type { ListPaperPayload } from '../lib/list-actions';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -134,6 +135,11 @@ interface CrosswalkDisplayPaper {
   highlight: string;
   matrix: Record<LifeSciencesMatrixRowKey, string>;
 }
+
+type SimilarPaperSaveState = {
+  status: 'idle' | 'saving' | 'success' | 'already' | 'error';
+  message?: string;
+};
 
 const formatCitationCount = (count: number | null): string => {
   if (count === null) {
@@ -1370,6 +1376,7 @@ export default function Home() {
   const [websiteScrapingLoading, setWebsiteScrapingLoading] = useState(false);
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [paperToSave, setPaperToSave] = useState<ApiSearchResult | null>(null);
+  const [similarPaperSaveState, setSimilarPaperSaveState] = useState<Record<string, SimilarPaperSaveState>>({});
   const [userLists, setUserLists] = useState<UserListSummary[]>([]);
   const [listsLoading, setListsLoading] = useState(false);
   const [selectedListId, setSelectedListId] = useState<number | null>(null);
@@ -2798,16 +2805,194 @@ export default function Home() {
     }
   }, [selectedPaper, user, authModal, isSamplePaper, communityReviewStatus, hasCommunityReviewRequest, refreshVerificationSummary]);
 
+  const handlePaperSaved = useCallback((listId?: number) => {
+    const startTime = Date.now();
+    console.log('📝 [PERF] handlePaperSaved started');
+
+    if (user) {
+      const listCacheKey = `${LIST_METADATA_CACHE_KEY}-${user.id}`;
+      clearCachedData(listCacheKey);
+
+      if (listId) {
+        const listItemsCacheKey = `${LIST_ITEMS_CACHE_KEY}-${user.id}-${listId}`;
+        clearCachedData(listItemsCacheKey);
+
+        setCachedListItems(prev => {
+          const newCache = new Map(prev);
+          newCache.delete(listId);
+          return newCache;
+        });
+      }
+
+      console.log('📝 [PERF] Refreshing user lists after save');
+      fetchUserLists(true);
+
+      if (listId && selectedListId === listId) {
+        fetchListItems(listId, true);
+      }
+    }
+
+    console.log(`📝 [PERF] handlePaperSaved completed in ${Date.now() - startTime}ms`);
+  }, [user, fetchUserLists, selectedListId, fetchListItems]);
+
   const handleCommunityReviewButtonClick = useCallback(() => {
     handleCommunityReviewRequest('reproducibility');
   }, [handleCommunityReviewRequest]);
 
-  const handleSimilarPaperSaveClick = useCallback(() => {
+  const handleSimilarPaperSaveClick = useCallback(async (crosswalkPaper: CrosswalkDisplayPaper) => {
     if (!user) {
       authModal.openSignup();
       return;
     }
-  }, [authModal, user]);
+
+    if (!selectedPaper) {
+      setSimilarPaperSaveState((prev) => ({
+        ...prev,
+        [crosswalkPaper.id]: {
+          status: 'error',
+          message: 'Select a paper to save related literature.'
+        }
+      }));
+      return;
+    }
+
+    if (isSamplePaper) {
+      setSimilarPaperSaveState((prev) => ({
+        ...prev,
+        [crosswalkPaper.id]: {
+          status: 'error',
+          message: 'Open a live paper to save related literature.'
+        }
+      }));
+      return;
+    }
+
+    setSimilarPaperSaveState((prev) => ({
+      ...prev,
+      [crosswalkPaper.id]: {
+        status: 'saving'
+      }
+    }));
+
+    try {
+      const searchBody: { query: string; limit: number; year?: number } = {
+        query: crosswalkPaper.title,
+        limit: 1
+      };
+
+      const parsedYear = Number.parseInt(crosswalkPaper.year, 10);
+      if (!Number.isNaN(parsedYear)) {
+        searchBody.year = parsedYear;
+      }
+
+      const searchResponse = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(searchBody)
+      });
+
+      if (!searchResponse.ok) {
+        const errorPayload = await searchResponse.json().catch(() => ({}));
+        const message = typeof errorPayload?.error === 'string'
+          ? errorPayload.error
+          : 'Unable to reach Semantic Scholar right now.';
+        throw new Error(message);
+      }
+
+      const searchData = await searchResponse.json();
+      const [matchedPaper] = Array.isArray(searchData?.results) ? searchData.results : [];
+
+      if (!matchedPaper?.id) {
+        throw new Error('Could not find this paper on Semantic Scholar.');
+      }
+
+      const listPayload: ListPaperPayload = {
+        id: String(matchedPaper.id),
+        title: matchedPaper.title ?? crosswalkPaper.title,
+        abstract: matchedPaper.abstract ?? null,
+        authors: Array.isArray(matchedPaper.authors) ? matchedPaper.authors : [],
+        year: typeof matchedPaper.year === 'number' ? matchedPaper.year : null,
+        venue: matchedPaper.venue ?? null,
+        citationCount: typeof matchedPaper.citationCount === 'number' ? matchedPaper.citationCount : null,
+        semanticScholarId: matchedPaper.semanticScholarId ?? null,
+        arxivId: matchedPaper.arxivId ?? null,
+        doi: matchedPaper.doi ?? null,
+        url: matchedPaper.url ?? null,
+        source: matchedPaper.source ?? 'semantic_scholar',
+        publicationDate: matchedPaper.publicationDate ?? null
+      };
+
+      const listName = buildVerifyListName(selectedPaper.title);
+      const existingLists = userLists.map((list) => ({ id: list.id, name: list.name }));
+
+      const saveResult = await savePaperToNamedList({
+        listName,
+        paper: listPayload,
+        existingLists
+      });
+
+      if (saveResult.listId) {
+        handlePaperSaved(saveResult.listId);
+      }
+
+      if (saveResult.status === 'saved') {
+        setSimilarPaperSaveState((prev) => ({
+          ...prev,
+          [crosswalkPaper.id]: {
+            status: 'success',
+            message: `Added to ${listName}.`
+          }
+        }));
+
+        // Optimistically update the list items if viewing the saved list
+        if (saveResult.listId && selectedListId === saveResult.listId) {
+          setListItems(prevItems => {
+            // Check if paper already exists to avoid duplicates
+            const exists = prevItems.some(item => item.id === listPayload.id);
+            if (exists) return prevItems;
+
+            // Add new paper to the end of the list
+            return [...prevItems, matchedPaper as ApiSearchResult];
+          });
+        }
+
+        trackEvent({
+          name: 'similar_paper_saved',
+          properties: {
+            paper_id: matchedPaper.id,
+            list_name: listName,
+            source: matchedPaper.source ?? 'semantic_scholar'
+          }
+        });
+        return;
+      }
+
+      if (saveResult.status === 'already-in-list') {
+        setSimilarPaperSaveState((prev) => ({
+          ...prev,
+          [crosswalkPaper.id]: {
+            status: 'already',
+            message: 'This paper is already in the VERIFY list.'
+          }
+        }));
+        return;
+      }
+
+      const failureMessage = saveResult.error ?? 'Unable to save this paper right now.';
+      throw new Error(failureMessage);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unexpected error saving paper.';
+      console.error('Similar paper save failed:', error);
+      setSimilarPaperSaveState((prev) => ({
+        ...prev,
+        [crosswalkPaper.id]: {
+          status: 'error',
+          message
+        }
+      }));
+      trackError('similar_paper_save', message, 'handleSimilarPaperSaveClick');
+    }
+  }, [authModal, user, selectedPaper, isSamplePaper, userLists, selectedListId, handlePaperSaved, trackEvent, trackError]);
 
   const updateVerificationView = (track: VerificationTrack) => {
     if (selectedPaper) {
@@ -3262,36 +3447,6 @@ export default function Home() {
     setPaperToSave(null);
   };
 
-  const handlePaperSaved = (listId?: number) => {
-    const startTime = Date.now();
-    console.log('📝 [PERF] handlePaperSaved started');
-
-    // Invalidate list metadata cache to reflect updated item counts
-    if (user) {
-
-      const listCacheKey = `${LIST_METADATA_CACHE_KEY}-${user.id}`;
-      clearCachedData(listCacheKey);
-
-      // Invalidate specific list items cache if we know which list was updated
-      if (listId) {
-        const listItemsCacheKey = `${LIST_ITEMS_CACHE_KEY}-${user.id}-${listId}`;
-        clearCachedData(listItemsCacheKey);
-
-        // Also clear from memory cache
-        setCachedListItems(prev => {
-          const newCache = new Map(prev);
-          newCache.delete(listId);
-          return newCache;
-        });
-      }
-
-      // Refresh list metadata to show updated counts
-      console.log('📝 [PERF] Refreshing user lists after save');
-      fetchUserLists(true);
-    }
-
-    console.log(`📝 [PERF] handlePaperSaved completed in ${Date.now() - startTime}ms`);
-  };
   const handleTutorialClose = () => {
     setTutorialOpen(false);
   };
@@ -3636,20 +3791,35 @@ export default function Home() {
         },
       };
 
-      const { error } = await supabase
+      // Use upsert for safer, cleaner profile save
+      const { error: profileError } = await supabase
         .from('profiles')
-        .update({
+        .upsert({
+          id: user.id,
           orcid_id: normalizedOrcid,
           academic_website: normalizedWebsite || null,
           profile_personalization: simplePersonalization,
           last_profile_enriched_at: new Date().toISOString(),
           profile_enrichment_version: 'manual-v1',
-        })
-        .eq('id', user.id);
+        }, {
+          onConflict: 'id'
+        });
 
-      if (error) {
-        console.error('Profile update failed', error);
-        setProfileSaveError('We could not save your research profile. Please try again.');
+      if (profileError) {
+        console.error('Profile update failed:', {
+          error: profileError,
+          errorMessage: profileError.message,
+          errorCode: profileError.code,
+          errorDetails: profileError.details,
+          errorHint: profileError.hint,
+        });
+
+        // Check for ORCID unique constraint violation
+        if (profileError.code === '23505' && profileError.message?.includes('profiles_orcid_unique')) {
+          setProfileSaveError('This ORCID ID is already registered to another account. Please verify your ORCID ID.');
+        } else {
+          setProfileSaveError('We could not save your research profile. Please try again.');
+        }
         return;
       }
 
@@ -4287,34 +4457,54 @@ export default function Home() {
                             </div>
 
                             <div className="space-y-4">
-                              {compiledSimilarPapers.map(paper => (
-                                <article
-                                  key={paper.id}
-                                  className="rounded-2xl border border-slate-200/70 bg-white/80 p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
-                                >
-                                  <div className="space-y-2">
-                                    <h4 className="text-lg font-semibold text-slate-900">{paper.title}</h4>
-                                    <p className="text-sm text-slate-600">{paper.authors}</p>
-                                    <p className="text-xs font-medium text-slate-500">
-                                      {paper.venue} • {paper.year} • {formatCitationCount(paper.citationCount)}
-                                    </p>
-                                  </div>
-                                  <p className="mt-4 text-sm leading-relaxed text-slate-600">{paper.summary}</p>
-                                  <div className="mt-4 rounded-2xl bg-emerald-50/70 p-4 text-sm text-emerald-800 shadow-inner">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Why it matters</p>
-                                    <p className="mt-2 leading-relaxed">{paper.highlight}</p>
-                                  </div>
-                                  <div className="mt-4 flex flex-wrap items-center gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={handleSimilarPaperSaveClick}
-                                      className="inline-flex items-center justify-center rounded-lg border border-transparent bg-emerald-500 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2"
-                                    >
-                                      Save to reading list
-                                    </button>
-                                  </div>
-                                </article>
-                              ))}
+                              {compiledSimilarPapers.map((paper) => {
+                                const saveState = similarPaperSaveState[paper.id];
+                                const saveStatus = saveState?.status ?? 'idle';
+                                const isSaving = saveStatus === 'saving';
+                                const message = saveState?.message;
+
+                                return (
+                                  <article
+                                    key={paper.id}
+                                    className="rounded-2xl border border-slate-200/70 bg-white/80 p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
+                                  >
+                                    <div className="space-y-2">
+                                      <h4 className="text-lg font-semibold text-slate-900">{paper.title}</h4>
+                                      <p className="text-sm text-slate-600">{paper.authors}</p>
+                                      <p className="text-xs font-medium text-slate-500">
+                                        {paper.venue} • {paper.year} • {formatCitationCount(paper.citationCount)}
+                                      </p>
+                                    </div>
+                                    <p className="mt-4 text-sm leading-relaxed text-slate-600">{paper.summary}</p>
+                                    <div className="mt-4 rounded-2xl bg-emerald-50/70 p-4 text-sm text-emerald-800 shadow-inner">
+                                      <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Why it matters</p>
+                                      <p className="mt-2 leading-relaxed">{paper.highlight}</p>
+                                    </div>
+                                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSimilarPaperSaveClick(paper)}
+                                        className="inline-flex items-center justify-center rounded-lg border border-transparent bg-emerald-500 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                                        disabled={isSaving}
+                                      >
+                                        {isSaving ? 'Saving…' : 'Save to reading list'}
+                                      </button>
+                                    </div>
+                                    {saveStatus === 'saving' && (
+                                      <p className="mt-2 text-xs text-slate-500">Saving to VERIFY list…</p>
+                                    )}
+                                    {saveStatus === 'success' && message && (
+                                      <p className="mt-2 text-xs font-medium text-emerald-600">{message}</p>
+                                    )}
+                                    {saveStatus === 'already' && message && (
+                                      <p className="mt-2 text-xs font-medium text-emerald-600">{message}</p>
+                                    )}
+                                    {saveStatus === 'error' && message && (
+                                      <p className="mt-2 text-xs font-medium text-rose-600">{message}</p>
+                                    )}
+                                  </article>
+                                );
+                              })}
                             </div>
                           </div>
                         ) : (

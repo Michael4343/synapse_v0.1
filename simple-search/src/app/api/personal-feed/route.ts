@@ -34,13 +34,8 @@ interface ApiSearchResult {
 function parseAuthors(authorsString: string | null): string[] {
   if (!authorsString) return []
 
-  // Google Scholar format: "X Li, L Li, P Jiang - Journal, 2025 - Publisher"
-  // Extract just the author names before the first " - "
-  const authorsPart = authorsString.split(' - ')[0]
-
-  // Split by comma and clean up
-  return authorsPart
-    .split(',')
+  return authorsString
+    .split(/[,;|•]/)
     .map(author => author.trim())
     .filter(Boolean)
 }
@@ -73,7 +68,7 @@ function transformToApiSearchResult(paper: PersonalFeedPaper): ApiSearchResult {
     arxivId: null,
     doi: null,
     url: paper.paper_url,
-    source: 'google_scholar',
+    source: 'semantic_scholar',
     publicationDate: paper.publication_date
   }
 }

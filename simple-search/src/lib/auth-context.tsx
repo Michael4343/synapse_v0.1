@@ -45,7 +45,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const { data: profile } = await supabase
         .from('profiles')
         .select('orcid_id, profile_personalization, created_at')
-        .eq('user_id', userId)
+        .eq('id', userId)
         .single()
 
       const personalization = profile?.profile_personalization as any

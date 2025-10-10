@@ -138,7 +138,7 @@ npm run lint     # Check code quality
 Building a Next.js + Supabase academic research aggregation platform that allows researchers to search across multiple academic repositories and view results in a unified feed.
 
 **✅ Recent Updates:**
-- **Integrated Scholar Feed Scraping (v0.4.0)**: Integrated Google Scholar scraping directly into the app - no more external scripts:
+- **Integrated Personal Feed (v0.4.0)**: Wired Semantic Scholar fetching directly into the app - no more external scripts:
   - **Smart keyword detection**: Only runs scraping when keywords actually change (normalized comparison ignoring case, whitespace, and order)
   - **Progressive loading**: Papers appear in feed as each keyword is processed (3 seconds per keyword)
   - **Clean architecture**: Extracted reusable functions into `lib/scholar-scraper.ts`, new API endpoint `/api/personal-feed/populate`
@@ -364,7 +364,7 @@ Building a Next.js + Supabase academic research aggregation platform that allows
         │   │   │   └── [id]/items/route.ts  # Add/remove papers from lists
         │   │   ├── personal-feed/
         │   │   │   ├── route.ts             # Personal feed API (reads from pre-populated database)
-        │   │   │   └── populate/route.ts    # Scrape Google Scholar and populate feed (v0.4.0)
+        │   │   │   └── populate/route.ts    # Fetch Semantic Scholar results and populate feed (v0.4.0)
         │   │   └── profile/                 # Profile personalization API
         │   │       ├── keywords-from-orcid/route.ts   # Extract keywords from ORCID publications
         │   │       └── keywords-from-website/route.ts # Extract keywords from academic websites
@@ -382,7 +382,7 @@ Building a Next.js + Supabase academic research aggregation platform that allows
             ├── auth-context.tsx             # Auth state management
             ├── auth-hooks.ts                # Auth utility hooks
             ├── cache-utils.ts               # Enhanced caching with TTL and background refresh
-            ├── scholar-scraper.ts           # Google Scholar scraping utilities (v0.4.0)
+            ├── scholar-scraper.ts           # Semantic Scholar helper utilities for feeds (v0.4.0)
             ├── website-scraper.ts           # Website content scraping utility for keyword extraction
             ├── profile-enrichment.ts        # Profile personalization generation with Gemini LLM
             ├── supabase.ts                  # Browser client
@@ -409,12 +409,12 @@ Building a Next.js + Supabase academic research aggregation platform that allows
 - Tile feed renders in `simple-search/src/app/search/page.tsx`, using `/api/search` to populate cards under the search bar.
 - Supabase schema lives in `simple-search/supabase/migrations/`; keep RLS policies aligned with user-specific access control.
 
-### Personal Feed Scraping Integration (v0.4.0)
-- `/api/personal-feed/populate` scrapes Google Scholar and populates the `personal_feed_papers` table when user keywords change.
-- Environment variable required: `SCRAPERAPI_KEY` from [ScraperAPI](https://www.scraperapi.com/) to bypass Google Scholar bot detection.
+### Personal Feed Semantic Scholar Integration (v0.4.0)
+- `/api/personal-feed/populate` queries Semantic Scholar for each saved keyword and stores structured papers in the `personal_feed_papers` table.
+- Environment variables required: `SEMANTIC_SCHOLAR_API_KEY` (plus optional `SEMANTIC_SCHOLAR_USER_AGENT`, falls back to an Evidentia contact string) to stay within per-key quotas.
 - Workflow: User saves profile → Keywords change detected → Populate API triggered → Papers inserted to DB → Frontend polls and displays progressively.
 - Frontend polling: Every 3 seconds for max 2 minutes (40 polls), stops automatically when complete or timeout.
-- Scraping constraints: Max 5 keywords, 3-second delay between keywords, 7-day publication window, 12 papers per keyword max.
+- Fetch constraints: Max 5 keywords, ~1 second delay between Semantic Scholar requests, 30-day publication window on first pass (90-day fallback), 12 papers per keyword max.
 - UI feedback: Shows "Populating your feed… (X papers found)" with real-time count as papers appear.
 
 ### Save to List Feature (v0.2)

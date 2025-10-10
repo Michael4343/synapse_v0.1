@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, supabaseAdmin } from '@/lib/supabase-server'
-import { fetchPapersForKeyword, delay, SCRAPER_DELAY_MS, uniqueKeywords } from '@/lib/scholar-scraper'
+import { fetchPapersForKeyword, delay, SEMANTIC_SCHOLAR_DELAY_MS, uniqueKeywords } from '@/lib/scholar-scraper'
 
 const MAX_RESULTS_PER_KEYWORD = 12
 
@@ -38,11 +38,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Maximum 5 keywords allowed' }, { status: 400 })
   }
 
-  // Check for ScraperAPI key
-  const scraperApiKey = process.env.SCRAPERAPI_KEY
-  if (!scraperApiKey) {
+  // Check for Semantic Scholar API key
+  const semanticScholarApiKey = process.env.SEMANTIC_SCHOLAR_API_KEY
+  if (!semanticScholarApiKey) {
     return NextResponse.json({
-      error: 'SCRAPERAPI_KEY not configured on server',
+      error: 'SEMANTIC_SCHOLAR_API_KEY not configured on server',
       processed: 0,
       papers_found: 0
     }, { status: 500 })
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
         })
 
         if (skippedKeywords.length > 0) {
-          console.log(`[populate] Skipping previously scraped keywords for user ${user.id}: ${skippedKeywords.join(', ')}`)
+          console.log(`[populate] Skipping previously fetched keywords for user ${user.id}: ${skippedKeywords.join(', ')}`)
         }
       }
     }
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
         console.log(`[populate] (${windowDays}d) Processing keyword ${i + 1}/${keywordsToProcess.length}: "${keyword}"`)
 
         try {
-          const papers = await fetchPapersForKeyword(keyword, scraperApiKey, windowDays)
+          const papers = await fetchPapersForKeyword(keyword, semanticScholarApiKey, windowDays)
 
           const papersToInsert = papers
             .filter(paper => {
@@ -154,15 +154,15 @@ export async function POST(request: NextRequest) {
           }
 
           if (i < keywordsToProcess.length - 1) {
-            console.log(`[populate] Waiting ${SCRAPER_DELAY_MS}ms before next keyword...`)
-            await delay(SCRAPER_DELAY_MS)
+            console.log(`[populate] Waiting ${SEMANTIC_SCHOLAR_DELAY_MS}ms before next keyword to respect rate limits...`)
+            await delay(SEMANTIC_SCHOLAR_DELAY_MS)
           }
 
         } catch (error) {
           console.error(`[populate] Error processing keyword "${keyword}" (${windowDays}d):`, error)
 
           if (i < keywordsToProcess.length - 1) {
-            await delay(SCRAPER_DELAY_MS)
+            await delay(SEMANTIC_SCHOLAR_DELAY_MS)
           }
         }
       }

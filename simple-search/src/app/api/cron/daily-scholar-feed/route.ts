@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-server'
-import { fetchPapersForKeyword, delay, SCRAPER_DELAY_MS, uniqueKeywords } from '@/lib/scholar-scraper'
+import { fetchPapersForKeyword, delay, SEMANTIC_SCHOLAR_DELAY_MS, uniqueKeywords } from '@/lib/scholar-scraper'
 import { Resend } from 'resend'
 
 const MAX_RESULTS_PER_KEYWORD = 12
@@ -220,11 +220,11 @@ export async function GET(request: NextRequest) {
   }
 
   // Check for required API keys
-  const scraperApiKey = process.env.SCRAPERAPI_KEY
-  if (!scraperApiKey) {
-    console.error('[daily-scholar-feed] SCRAPERAPI_KEY not configured')
+  const semanticScholarApiKey = process.env.SEMANTIC_SCHOLAR_API_KEY
+  if (!semanticScholarApiKey) {
+    console.error('[daily-scholar-feed] SEMANTIC_SCHOLAR_API_KEY not configured')
     return NextResponse.json({
-      error: 'SCRAPERAPI_KEY not configured',
+      error: 'SEMANTIC_SCHOLAR_API_KEY not configured',
       processed: 0,
       papers_found: 0
     }, { status: 500 })
@@ -330,7 +330,7 @@ export async function GET(request: NextRequest) {
             console.log(`[daily-scholar-feed] (${windowDays}d) Processing keyword ${i + 1}/${limitedKeywords.length} for ${researcher.display_name}: "${keyword}"`)
 
             try {
-              const papers = await fetchPapersForKeyword(keyword, scraperApiKey, windowDays)
+              const papers = await fetchPapersForKeyword(keyword, semanticScholarApiKey, windowDays)
 
               const papersToInsert = papers
                 .filter(paper => {
@@ -370,7 +370,7 @@ export async function GET(request: NextRequest) {
               }
 
               if (i < limitedKeywords.length - 1) {
-                await delay(SCRAPER_DELAY_MS)
+                await delay(SEMANTIC_SCHOLAR_DELAY_MS)
               }
 
             } catch (error) {
@@ -378,7 +378,7 @@ export async function GET(request: NextRequest) {
               counts.set(keyword, 0)
 
               if (i < limitedKeywords.length - 1) {
-                await delay(SCRAPER_DELAY_MS)
+                await delay(SEMANTIC_SCHOLAR_DELAY_MS)
               }
             }
           }
