@@ -121,6 +121,15 @@ type AppEvent =
         source?: string | null
       }
     }
+  | {
+      name: 'similar_paper_saved'
+      properties: {
+        paper_id: string
+        list_name: string
+        source?: string | null
+        match_strategy?: string
+      }
+    }
 
 export function usePostHogTracking() {
   const { posthog, restartSessionRecording } = usePostHog()

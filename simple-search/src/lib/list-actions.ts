@@ -28,7 +28,6 @@ export interface SavePaperResult {
 }
 
 const VERIFY_LIST_PREFIX = 'VERIFY - '
-const COMPILE_LIST_PREFIX = 'COMPILE - '
 const MAX_LIST_NAME_LENGTH = 120
 
 function buildPrefixedListName(prefix: string, title: string): string {
@@ -45,7 +44,12 @@ export function buildVerifyListName(title: string): string {
 }
 
 export function buildCompileListName(title: string): string {
-  return buildPrefixedListName(COMPILE_LIST_PREFIX, title)
+  const trimmed = title.trim()
+  if (!trimmed) {
+    return 'Untitled Research List'
+  }
+  const maxLength = Math.max(MAX_LIST_NAME_LENGTH, 16)
+  return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength - 3)}...` : trimmed
 }
 
 interface SavePaperToNamedListOptions {

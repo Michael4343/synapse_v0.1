@@ -1,6 +1,6 @@
 TODO
-make personal feed semantic scholar time based
 update tuturiall
+fix mobile styling
 optimise user tracking
 
 compile similar patents
