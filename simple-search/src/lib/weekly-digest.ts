@@ -346,7 +346,8 @@ async function buildProfileDescriptor(
 
 function mapGeminiDigestPayload(
   enriched: EnrichedWeeklyPaper[],
-  payload: GeminiDigest
+  payload: GeminiDigest,
+  userDescription: string
 ): DigestSections {
   const summary =
     typeof payload.summary === 'string' && payload.summary.trim()
@@ -372,11 +373,11 @@ function mapGeminiDigestPayload(
       usedIndexes.add(index)
 
       const paper = enriched[index]
-      const explanationParts = [entry.why_critical, entry.connection]
-        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
-      const explanation =
-        explanationParts.join(' ').trim() ||
-        'Highlighted as critical for your stated research interests.'
+      const fallbackBlurb = `Included based on available metadata (citations: ${paper.citationCount ?? 0}). Consider skimming to assess fit for ${userDescription}.`
+      const whyBlurb =
+        typeof entry.why === 'string' && entry.why.trim().length > 0
+          ? entry.why.trim()
+          : fallbackBlurb
 
       mustReadPapers.push({
         title: paper.title,
@@ -385,7 +386,7 @@ function mapGeminiDigestPayload(
         venue: paper.venue,
         citationCount: paper.citationCount,
         url: paper.url,
-        explanation,
+        explanation: whyBlurb,
       })
     })
   }
@@ -600,7 +601,7 @@ export async function getWeeklyDigest(userId: string, existingTraceId?: string):
       }))
     )
     llmDurationMs = Date.now() - llmStartedAt
-    digestPayload = mapGeminiDigestPayload(enriched, aiResult)
+    digestPayload = mapGeminiDigestPayload(enriched, aiResult, profileDescriptor.description)
     log.info('digest_llm_success', { llm_ms: llmDurationMs, papers: enriched.length })
   } catch (error) {
     log.warn('digest_llm_failed', {

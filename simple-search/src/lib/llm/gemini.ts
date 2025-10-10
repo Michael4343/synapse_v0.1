@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
+// No SDK import needed — we call the OpenAI-compatible Gemini endpoint directly.
 
 type Paper = {
   title: string
@@ -22,43 +22,153 @@ export async function generateDigestWithGemini(
     throw new Error('GEMINI_API_KEY not configured')
   }
 
-  const trimmed = papers.slice(0, 12).map((paper, index) => ({
-    idx: index + 1,
-    title: paper.title,
-    abstract: (paper.abstract ?? '').slice(0, 700),
-    venue: paper.venue ?? undefined,
-    citations: paper.citationCount ?? undefined,
+  // Trim + normalize paper payload
+  const trimmed = papers.slice(0, 12).map((p, i) => ({
+    idx: i + 1,
+    title: p.title,
+    abstract: (p.abstract ?? '').slice(0, 800),
+    venue: p.venue ?? undefined,
+    citations: p.citationCount ?? undefined,
   }))
 
-  const prompt = [
-    'You generate a weekly research digest for a scientist.',
-    `User profile description: "${profileDescription}".`,
-    'You will receive up to 12 papers with title, abstract (<=700 chars), venue, citations.',
-    'Return VALID JSON ONLY (no markdown fences). Shape:',
-    '{"summary": string (<=180 words, address the user as "you"),',
-    '"must_read":[{"idx": number, "why_critical": string, "connection": string}],',
-    '"worth_reading":[{"idx": number, "note": string}]}',
-    '',
-    'PAPERS:',
-    JSON.stringify(trimmed),
-  ].join('\n')
+  // Strong schema so we always get the fields your UI expects
+  const response = await fetch(
+    'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        // Reuse the model family that already works in your profile code
+        model: process.env.DIGEST_MODEL || 'gemini-2.5-flash',
+        temperature: 0.3,
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'weekly_research_digest',
+            schema: {
+              type: 'object',
+              properties: {
+                summary: { type: 'string' },
+                must_read: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      idx: { type: 'integer' },
+                      why_critical: { type: 'string' },
+                      connection: { type: 'string' },
+                    },
+                    required: ['idx', 'why_critical', 'connection'],
+                  },
+                  maxItems: 6,
+                },
+                worth_reading: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      idx: { type: 'integer' },
+                      note: { type: 'string' },
+                    },
+                    required: ['idx', 'note'],
+                  },
+                  maxItems: 10,
+                },
+              },
+              required: ['summary', 'must_read', 'worth_reading'],
+            },
+          },
+        },
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are an expert research curator. Produce crisp, useful insights, not generic filler. Tailor strictly to the user profile.',
+          },
+          {
+            role: 'user',
+            content:
+              [
+                `User profile: ${JSON.stringify(profileDescription)}`,
+                'Papers (idx, title, abstract<=800, venue, citations):',
+                JSON.stringify(trimmed),
+                '',
+                'Instructions:',
+                '- Write a short narrative summary tying the papers to the profile.',
+                '- Choose up to 6 must_read items with: why_critical (1–2 sentences) and connection (how it ties to the profile).',
+                '- Put the rest (or none) in worth_reading with a brief note.',
+                '- Return ONLY JSON matching the provided schema.',
+              ].join('\n'),
+          },
+        ],
+      }),
+    }
+  )
 
-  const genAI = new GoogleGenerativeAI(apiKey)
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' })
-  const response = await model.generateContent(prompt)
-  const text = response.response.text().trim()
+  if (!response.ok) {
+    const err = await response.text()
+    throw new Error(`Gemini digest request failed: ${response.status} ${err}`)
+  }
+
+  const payload = await response.json()
+  let content = payload?.choices?.[0]?.message?.content
+
+  // Some responses may already be objects; others are JSON strings (or fenced).
+  if (typeof content === 'string') {
+    content = content.replace(/```json|```/gi, '').trim()
+  } else if (content && typeof content !== 'string') {
+    // Convert object -> string for uniform parsing path
+    content = JSON.stringify(content)
+  } else {
+    content = ''
+  }
 
   try {
-    return JSON.parse(text)
-  } catch {
-    return {
-      summary:
-        'Here are this week’s most relevant papers for your interests. I couldn’t generate a tailored narrative, but the selected items are filtered to match your profile. You can still scan the list below and mark what’s relevant to improve future digests.',
-      must_read: [],
-      worth_reading: [],
+    const parsed = JSON.parse(content)
+
+    // Light normalization to guarantee the shape your UI expects
+    const digest: GeminiDigest = {
+      summary: typeof parsed.summary === 'string' ? parsed.summary : '',
+      must_read: Array.isArray(parsed.must_read)
+        ? parsed.must_read
+            .filter((x: any) => Number.isFinite(x?.idx))
+            .map((x: any) => ({
+              idx: Number(x.idx),
+              why_critical: String(x.why_critical ?? ''),
+              connection: String(x.connection ?? ''),
+            }))
+        : [],
+      worth_reading: Array.isArray(parsed.worth_reading)
+        ? parsed.worth_reading
+            .filter((x: any) => Number.isFinite(x?.idx))
+            .map((x: any) => ({
+              idx: Number(x.idx),
+              note: String(x.note ?? ''),
+            }))
+        : [],
     }
+
+    // If model returned empty arrays, keep UX-friendly fallback summary
+    if (!digest.summary || (digest.must_read.length === 0 && digest.worth_reading.length === 0)) {
+      return fallbackDigest()
+    }
+
+    return digest
+  } catch {
+    return fallbackDigest()
+  }
+}
+
+function fallbackDigest(): GeminiDigest {
+  return {
+    summary:
+      'Here are this week’s most relevant papers for your interests. I couldn’t generate a tailored narrative right now, but the list is filtered to match your profile.',
+    must_read: [],
+    worth_reading: [],
   }
 }
 
 export type { GeminiDigest }
-
