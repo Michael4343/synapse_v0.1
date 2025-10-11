@@ -70,6 +70,9 @@ export function AuthModal({ isOpen, mode, onClose, onSwitchMode }: AuthModalProp
           <div className="mb-4">
             <span className="text-sm font-bold uppercase tracking-[0.2em] text-slate-600">Evidentia</span>
           </div>
+          <p className="mb-4 text-xs text-slate-500">
+            Evidentia works best on a computer. Please continue on desktop for the full experience.
+          </p>
           {/* Tabs */}
           <div className={TABS_CONTAINER_CLASSES}>
             <button
