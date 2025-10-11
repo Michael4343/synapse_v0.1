@@ -1576,7 +1576,7 @@ function StaticReproReport({
 }
 
 export default function Home() {
-  const { user, signOut } = useAuth();
+  const { user, loading, signOut } = useAuth();
   const authModal = useAuthModal();
   const { trackEvent, trackError } = usePostHogTracking();
 
@@ -1648,6 +1648,7 @@ export default function Home() {
 
   const profileManualKeywordsRef = useRef('');
   const isMountedRef = useRef(true);
+  const initialAuthPromptedRef = useRef(false);
   const accountDropdownRef = useRef<HTMLDivElement | null>(null);
   const feedPollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const feedPollCountRef = useRef(0);
@@ -1764,21 +1765,31 @@ export default function Home() {
     };
   }, []);
 
-  // Show auth modal only on initial page load for non-logged-in users
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Show auth modal once auth state has resolved; first-time visitors default to signup
   useEffect(() => {
-    const hasSeenAuth = localStorage.getItem('evidentia_seen_initial_auth');
-    const isInitialLoad = !user && authModal.isOpen === false;
-
-    // Only show on first render when user is not logged in
-    if (isInitialLoad && !hasSeenAuth) {
-      setTimeout(() => {
-        authModal.openLogin();
-        setHasSeenInitialAuth(true);
-      }, 500);
+    if (initialAuthPromptedRef.current || loading) {
+      return;
     }
-    // Run only once on mount
-  }, []);
+
+    if (user || authModal.isOpen) {
+      initialAuthPromptedRef.current = true;
+      return;
+    }
+
+    const hasSeenAuth = localStorage.getItem('evidentia_seen_initial_auth') === 'true';
+    initialAuthPromptedRef.current = true;
+
+    const timer = setTimeout(() => {
+      if (hasSeenAuth) {
+        authModal.openLogin();
+      } else {
+        authModal.openSignup();
+        setHasSeenInitialAuth(true);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [authModal.isOpen, authModal.openLogin, authModal.openSignup, loading, user]);
 
   // Legacy tutorial logic (kept for backward compatibility)
   // eslint-disable-next-line react-hooks/exhaustive-deps
