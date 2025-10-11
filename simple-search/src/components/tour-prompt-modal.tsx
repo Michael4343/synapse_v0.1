@@ -61,7 +61,7 @@ export function TourPromptModal({ isOpen, onYes, onNo }: TourPromptModalProps) {
             Would you like a tour?
           </h2>
           <p className={MODAL_SUBTITLE_CLASSES}>
-            Take a quick guided tour to explore Evidentia's features
+            Take a quick guided tour to explore Evidentia&apos;s features
           </p>
         </div>
 

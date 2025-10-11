@@ -138,6 +138,30 @@ npm run lint     # Check code quality
 Building a Next.js + Supabase academic research aggregation platform that allows researchers to search across multiple academic repositories and view results in a unified feed.
 
 **✅ Recent Updates:**
+- **ORCID Auto-Submit Enhancement (v0.4.3)**: Implemented automatic ORCID keyword extraction when users select from autofill:
+  - **Auto-save detection**: Added debounced auto-save that triggers 1.5 seconds after a valid ORCID is entered
+  - **Autofill support**: Enhanced input with `onInput` handler to reliably capture browser autofill events
+  - **Smart validation**: Only auto-saves valid, non-duplicate ORCID IDs
+  - **Debouncing**: Timer resets on each keystroke, waits for user to finish typing
+  - **Prevents duplicates**: Tracks last auto-saved ORCID to avoid re-saving the same ID
+  - **Initial load handling**: Sets reference when profile loads to prevent auto-saving existing ORCIDs
+  - **Manual override**: Users can still click "Save" button for immediate action
+  - **Clean UX**: Eliminates confusion of filling input but forgetting to click save
+  - **Files modified**: `page.tsx` (lines 1663-1664 new refs, 1710-1756 auto-save useEffect, 2512-2545 init handling, 2718-2722 input enhancement)
+- **Auth Modal Behavior Update (v0.4.2)**: Improved login modal and tutorial behavior for better user experience:
+  - **Login modal always shows**: Auth modal now appears every time a non-logged-in user visits (not just first visit)
+  - **Tutorial only on first visit**: Tour prompt and tutorial only appear on the very first visit to the site
+  - **Clean separation**: Auth modal is for returning users, tutorial is for first-time visitors
+  - **Better onboarding**: First-time visitors see auth modal → tour prompt (optional) → tutorial (if accepted)
+  - **Returning visitors**: See auth modal immediately, no tutorial interruption
+  - **Files modified**: `page.tsx` (lines 1717-1731 - auth modal useEffect)
+- **Selected Tile Styling Enhancement (v0.4.1)**: Improved visual feedback for selected papers in feed to match list styling:
+  - **Darker background**: Changed from `bg-sky-50` to `bg-sky-100` for more prominent selection
+  - **Thicker ring**: Updated from `ring-1 ring-sky-100` to `ring-2 ring-sky-300` for bolder outline
+  - **Added shadow**: New `shadow-sm` provides subtle depth to selected tiles
+  - **Consistent design**: Now matches the exact styling used for selected list items in sidebar
+  - **Better UX**: Users can immediately see which paper is active with clear, elegant visual distinction
+  - **Files modified**: `page.tsx` (line 1069 - `TILE_SELECTED_CLASSES` constant)
 - **Integrated Personal Feed (v0.4.0)**: Wired Semantic Scholar fetching directly into the app - no more external scripts:
   - **Smart keyword detection**: Only runs scraping when keywords actually change (normalized comparison ignoring case, whitespace, and order)
   - **Progressive loading**: Papers appear in feed as each keyword is processed (3 seconds per keyword)

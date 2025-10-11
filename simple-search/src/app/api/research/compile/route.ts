@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Resend } from 'resend'
+
 import { createClient } from '@/lib/supabase-server'
 import { hydrateSemanticScholarAbstracts } from '@/lib/semantic-scholar-abstract'
 
@@ -120,7 +122,36 @@ export async function POST(request: NextRequest): Promise<NextResponse<CompileRe
     const researchQuery = generateResearchQuery(paper, goal, maxResults)
 
     // Call Perplexity Sonar Deep Research API
-    const researchResults = await callPerplexityDeepResearch(researchQuery, goal, maxResults, apiKey)
+    let researchResults: string
+    try {
+      researchResults = await callPerplexityDeepResearch(researchQuery, goal, maxResults, apiKey)
+    } catch (error) {
+      if (isPerplexityCreditError(error)) {
+        console.warn('Perplexity credits exhausted, sending fallback email')
+
+        const fallback = await handlePerplexityFallback({
+          researcherEmail: user.email ?? undefined,
+          researcherName: user.user_metadata?.full_name ?? undefined,
+          prompt: researchQuery,
+          paperTitle: paper.title
+        })
+
+        if (fallback.emailSent) {
+          return NextResponse.json({
+            success: false,
+            message: 'Perplexity credits are exhausted. The deep research prompt has been emailed to you for manual execution.'
+          }, { status: 503 })
+        }
+
+        return NextResponse.json({
+          success: false,
+          message: 'Perplexity credits are exhausted. Run the prompt manually to continue.',
+          fallbackPrompt: fallback.prompt
+        }, { status: 503 })
+      }
+
+      throw error
+    }
 
     console.debug('Deep research raw length', researchResults.length)
     console.debug('Deep research preview', researchResults.slice(0, 400))
@@ -258,6 +289,11 @@ interface PerplexityRequestBody {
   response_format?: Record<string, unknown>
 }
 
+interface PerplexityError extends Error {
+  status?: number
+  body?: string
+}
+
 async function performPerplexityRequest(body: PerplexityRequestBody, apiKey: string): Promise<string> {
   const response = await fetch('https://api.perplexity.ai/chat/completions', {
     method: 'POST',
@@ -270,14 +306,19 @@ async function performPerplexityRequest(body: PerplexityRequestBody, apiKey: str
 
   if (!response.ok) {
     const errorText = await response.text()
-    throw new Error(`Perplexity API error: ${response.status} ${errorText}`)
+    const error = new Error(`Perplexity API error: ${response.status} ${errorText}`)
+    ;(error as PerplexityError).status = response.status
+    ;(error as PerplexityError).body = errorText
+    throw error
   }
 
   const result = await response.json()
   const content = result.choices?.[0]?.message?.content
 
   if (!content) {
-    throw new Error('No content in Perplexity API response')
+    const error = new Error('No content in Perplexity API response')
+    ;(error as PerplexityError).status = 500
+    throw error
   }
 
   return content
@@ -375,6 +416,93 @@ function parseResearchResults(researchText: string, maxResults: number): { paper
     papers: parseResearchResultsFallback(researchText, maxResults),
     summary: null
   }
+}
+
+function isPerplexityCreditError(error: unknown): boolean {
+  if (!error) {
+    return false
+  }
+
+  const status = typeof error === 'object' && error !== null && 'status' in error && typeof (error as { status?: number }).status === 'number'
+    ? (error as { status?: number }).status
+    : undefined
+
+  if (status === 402) {
+    return true
+  }
+
+  const message = error instanceof Error
+    ? error.message
+    : typeof error === 'string'
+      ? error
+      : ''
+
+  const lowered = message.toLowerCase()
+  return lowered.includes('402') || lowered.includes('insufficient credit') || lowered.includes('payment required')
+}
+
+async function handlePerplexityFallback({
+  researcherEmail,
+  researcherName,
+  prompt,
+  paperTitle
+}: {
+  researcherEmail?: string
+  researcherName?: string
+  prompt: string
+  paperTitle: string
+}): Promise<{ emailSent: boolean; prompt: string }> {
+  const resendApiKey = process.env.RESEND_API_KEY
+  const fromEmail = process.env.RESEND_FROM_EMAIL
+
+  if (!resendApiKey || !fromEmail || !researcherEmail) {
+    console.warn('Resend not configured or user email missing; unable to send fallback prompt email')
+    return { emailSent: false, prompt }
+  }
+
+  const resend = new Resend(resendApiKey)
+  const greeting = researcherName ? `Hi ${researcherName.split(' ')[0]},` : 'Hello,'
+  const subject = `Deep research prompt: ${paperTitle}`
+  const html = [
+    `<p>${escapeHtml(greeting)}</p>`,
+    '<p>Perplexity credits are exhausted, so here is the deep-research prompt to run manually.</p>',
+    `<pre style="white-space:pre-wrap;font-family:monospace;background:#f4f4f4;padding:12px;border-radius:4px;">${escapeHtml(prompt)}</pre>`,
+    '<p>Once you have the analysis, paste it into Evidentia to continue the workflow.</p>'
+  ].join('')
+
+  const text = `${greeting}
+
+Perplexity credits are exhausted, so here is the deep-research prompt to run manually:
+
+${prompt}
+
+Once you have the analysis, paste it into Evidentia to continue the workflow.`
+
+  try {
+    await resend.emails.send({
+      to: researcherEmail,
+      from: fromEmail,
+      subject,
+      html,
+      text
+    })
+    return { emailSent: true, prompt }
+  } catch (error) {
+    console.error('Failed to send Perplexity fallback email:', error)
+    return { emailSent: false, prompt }
+  }
+}
+
+function escapeHtml(value?: string): string {
+  if (!value) {
+    return ''
+  }
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
 
 async function enrichPapersWithSemanticScholar(papers: ApiSearchResult[]): Promise<ApiSearchResult[]> {
