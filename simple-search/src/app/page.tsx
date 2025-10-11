@@ -4704,7 +4704,7 @@ export default function Home() {
             {selectedPaper ? (
               <>
                 {/* Share Discovery */}
-                <div className="px-4 pb-3">
+                <div className="hidden px-4 pb-3 sm:block">
                   <div className={SEARCH_CONTAINER_CLASSES}>
                     <div className="flex w-full items-center">
                       <input

@@ -61,7 +61,7 @@ export function TourPromptModal({ isOpen, onYes, onNo }: TourPromptModalProps) {
             Would you like a tour?
           </h2>
           <p className={MODAL_SUBTITLE_CLASSES}>
-            Take a quick guided tour to explore Evidentia&apos;s features
+            Evidentia is best experienced on a laptop or desktop—the app and tour shine on a larger screen.
           </p>
         </div>
 

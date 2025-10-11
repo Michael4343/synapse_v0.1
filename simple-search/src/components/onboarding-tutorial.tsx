@@ -62,9 +62,30 @@ export function OnboardingTutorial({ isOpen, onClose, onSignUp, onStepChange }: 
   const [currentStep, setCurrentStep] = React.useState(0)
   const [highlightElement, setHighlightElement] = React.useState<HTMLElement | null>(null)
   const previousHighlightRef = React.useRef<HTMLElement | null>(null)
+  const guidancePanelRef = React.useRef<HTMLDivElement | null>(null)
 
   const step = TUTORIAL_STEPS[currentStep]
   const isFirstStep = step.id === 0
+
+  // Lock page scroll when the tutorial is active so mobile users don't fight the viewport
+  React.useEffect(() => {
+    if (!isOpen || typeof window === 'undefined') return
+
+    const originalOverflow = document.body.style.overflow
+    const originalPadding = document.body.style.paddingRight
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
+
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`
+    }
+
+    document.body.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = originalOverflow
+      document.body.style.paddingRight = originalPadding
+    }
+  }, [isOpen])
 
   // Update highlighted element when step changes
   React.useEffect(() => {
@@ -75,12 +96,6 @@ export function OnboardingTutorial({ isOpen, onClose, onSignUp, onStepChange }: 
 
     const element = document.querySelector(step.highlightSelector) as HTMLElement | null
     setHighlightElement(element)
-
-    if (element) {
-      setTimeout(() => {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      }, 100)
-    }
   }, [currentStep, isOpen, step.highlightSelector])
 
   // Apply visual treatment to highlighted element
@@ -113,6 +128,40 @@ export function OnboardingTutorial({ isOpen, onClose, onSignUp, onStepChange }: 
         highlightElement.classList.remove('tutorial-highlight-ring')
       }
     }
+  }, [highlightElement, isOpen])
+
+  // Keep highlighted section in view on mobile by nudging the page scroll
+  React.useEffect(() => {
+    if (!isOpen || !highlightElement || typeof window === 'undefined') return
+
+    const ensureVisibility = () => {
+      if (window.innerWidth >= 640) {
+        highlightElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+        return
+      }
+
+      const rect = highlightElement.getBoundingClientRect()
+      const panelTop = guidancePanelRef.current?.getBoundingClientRect().top ?? window.innerHeight
+      const bottomGuard = Math.max(window.innerHeight - panelTop + 16, 120)
+      const topGuard = 96
+      const currentScrollY = window.scrollY
+
+      if (rect.top < topGuard) {
+        window.scrollTo({ top: Math.max(currentScrollY + rect.top - topGuard, 0), behavior: 'smooth' })
+        return
+      }
+
+      if (rect.bottom > window.innerHeight - bottomGuard) {
+        window.scrollTo({
+          top: Math.max(currentScrollY + rect.bottom - (window.innerHeight - bottomGuard), 0),
+          behavior: 'smooth'
+        })
+      }
+    }
+
+    const timeout = window.setTimeout(ensureVisibility, 140)
+
+    return () => window.clearTimeout(timeout)
   }, [highlightElement, isOpen])
 
   // Notify parent when the step changes so it can sync the UI state
@@ -181,23 +230,32 @@ export function OnboardingTutorial({ isOpen, onClose, onSignUp, onStepChange }: 
       {/* Skip button */}
       <button
         onClick={handleSkip}
-        className="pointer-events-auto fixed top-6 right-6 z-[60] flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-4 py-1.5 text-xs font-medium text-slate-600 shadow-lg transition hover:bg-white"
+        className="pointer-events-auto fixed right-4 z-[60] flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/95 px-4 py-1.5 text-xs font-medium text-slate-600 shadow-lg shadow-slate-900/15 transition hover:bg-white sm:right-6"
+        style={{ top: 'calc(1rem + env(safe-area-inset-top, 0px))' }}
       >
         <X className="h-3.5 w-3.5" />
         Skip tour
       </button>
 
       {/* Guidance panel */}
-      <div className="pointer-events-auto fixed inset-x-0 bottom-8 z-[55] flex justify-center px-4">
-        <div className={`w-full max-w-xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.18)] ${isFirstStep ? 'translate-y-0' : ''}`}>
-          <div className="border-b border-slate-100 bg-slate-900/90 px-6 py-4 text-center text-white">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-sky-300">Welcome to Evidentia</p>
-            <h2 className="mt-2 text-xl font-semibold">Personalised literature in minutes</h2>
+      <div
+        className="pointer-events-auto fixed inset-x-0 bottom-0 z-[55] flex justify-center px-3 sm:bottom-8 sm:px-4"
+        style={{ paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}
+      >
+        <div
+          ref={guidancePanelRef}
+          className={`w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-[0_16px_40px_rgba(15,23,42,0.22)] backdrop-blur sm:max-w-xl sm:rounded-3xl ${isFirstStep ? 'translate-y-0' : ''}`}
+        >
+          <div className="border-b border-slate-100 bg-slate-900/90 px-5 py-3.5 text-center text-white sm:px-6 sm:py-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.32em] text-sky-300/90 sm:text-[11px]">Welcome to Evidentia</p>
+            <h2 className="mt-1 text-lg font-semibold sm:mt-2 sm:text-xl">Personalised literature in minutes</h2>
           </div>
-          <div className="px-6 py-5 text-center">
-            <h3 className="text-base font-semibold text-slate-900">{step.title}</h3>
+          <div className="px-5 py-4 text-center sm:px-6 sm:py-5">
+            <h3 className="text-sm font-semibold text-slate-900 sm:text-base">{step.title}</h3>
             {step.description ? (
-              <p className="mt-2 text-sm leading-relaxed text-slate-600">{step.description}</p>
+              <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                {step.description}
+              </p>
             ) : null}
             {step.action === 'cta' && (
               <div className="mt-5 flex flex-col gap-2">
@@ -217,18 +275,20 @@ export function OnboardingTutorial({ isOpen, onClose, onSignUp, onStepChange }: 
               </div>
             )}
           </div>
-          <div className="flex items-center justify-between bg-slate-50/80 px-6 py-3">
+          <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50/90 px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <button
               onClick={handleBack}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-white ${isFirstStep ? 'invisible pointer-events-none' : ''}`}
+              className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-white sm:justify-start ${isFirstStep ? 'invisible pointer-events-none' : ''}`}
             >
               <ArrowLeft className="h-3.5 w-3.5" />
               Back
             </button>
-            {renderProgressDots()}
+            <div className="flex justify-center sm:order-none">
+              {renderProgressDots()}
+            </div>
             <button
               onClick={primaryActionHandler}
-              className="flex items-center gap-1.5 rounded-lg bg-sky-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-sky-400"
+              className="flex items-center justify-center gap-1.5 rounded-lg bg-sky-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-sky-400"
             >
               {primaryActionLabel}
               <ArrowRight className="h-3.5 w-3.5" />
