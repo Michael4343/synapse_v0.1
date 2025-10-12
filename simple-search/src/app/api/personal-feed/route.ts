@@ -55,11 +55,18 @@ function generatePaperId(url: string | null, title: string): string {
   return crypto.createHash('sha256').update(source).digest('hex').substring(0, 40)
 }
 
-function transformToApiSearchResult(paper: PersonalFeedPaper): ApiSearchResult {
+function normaliseTitle(value: string | null): string | null {
+  if (!value) {
+    return null
+  }
+  return value.replace(/\s+/g, ' ').trim().toLowerCase()
+}
+
+function transformToApiSearchResult(paper: PersonalFeedPaper, overrideAbstract?: string | null): ApiSearchResult {
   return {
     id: generatePaperId(paper.paper_url, paper.paper_title),
     title: paper.paper_title,
-    abstract: paper.paper_snippet,
+    abstract: overrideAbstract ?? paper.paper_snippet,
     authors: parseAuthors(paper.paper_authors),
     year: extractYear(paper.publication_date),
     venue: null,
@@ -100,8 +107,74 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Failed to load personal feed' }, { status: 500 })
   }
 
+  const papersList = papers ?? []
+  const urlMap = new Map<string, string>()
+  const titleMap = new Map<string, string>()
+
+  if (papersList.length) {
+    const urls = Array.from(
+      new Set(
+        papersList
+          .map((paper) => paper.paper_url)
+          .filter((url): url is string => Boolean(url && url.trim()))
+      )
+    )
+
+    if (urls.length) {
+      const { data: urlMatches } = await supabase
+        .from('search_results')
+        .select('url, abstract')
+        .in('url', urls)
+
+      urlMatches
+        ?.filter((row): row is { url: string; abstract: string | null } => Boolean(row?.url && row.abstract))
+        .forEach((row) => {
+          if (row.abstract) {
+            urlMap.set(row.url, row.abstract)
+          }
+        })
+    }
+
+    const titleEntries = papersList
+      .map((paper) => {
+        const normalised = normaliseTitle(paper.paper_title)
+        if (!normalised) {
+          return null
+        }
+        return {
+          normalised,
+          raw: paper.paper_title,
+        }
+      })
+      .filter((entry): entry is { normalised: string; raw: string } => Boolean(entry))
+
+    const uniqueRawTitles = Array.from(new Set(titleEntries.map((entry) => entry.raw)))
+
+    if (uniqueRawTitles.length) {
+      const { data: titleMatches } = await supabase
+        .from('search_results')
+        .select('title, abstract')
+        .in('title', uniqueRawTitles)
+
+      titleMatches
+        ?.filter((row): row is { title: string; abstract: string | null } => Boolean(row?.title && row.abstract))
+        .forEach((row) => {
+          const normalised = normaliseTitle(row.title)
+          if (normalised && row.abstract && !titleMap.has(normalised)) {
+            titleMap.set(normalised, row.abstract)
+          }
+        })
+    }
+  }
+
   // Transform to ApiSearchResult format
-  const results = (papers || []).map(transformToApiSearchResult)
+  const results = papersList.map((paper) => {
+    const overrideAbstract =
+      (paper.paper_url && urlMap.get(paper.paper_url)) ||
+      titleMap.get(normaliseTitle(paper.paper_title))
+
+    return transformToApiSearchResult(paper, overrideAbstract)
+  })
   const hasMore = results.length === limit
 
   return NextResponse.json({
