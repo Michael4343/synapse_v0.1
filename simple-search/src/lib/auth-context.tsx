@@ -40,7 +40,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const { trackEvent, trackError, identifyUser, resetUser } = usePostHogTracking()
 
   // Helper to identify user with person properties
-  const identifyUserWithProperties = useCallback(async (userId: string) => {
+  const identifyUserWithProperties = useCallback(async (userId: string, userEmail?: string) => {
     try {
       const { data: profile } = await supabase
         .from('profiles')
@@ -51,16 +51,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const personalization = profile?.profile_personalization as any
       const manualKeywords = personalization?.manual_keywords || []
 
-      const userProperties = {
+      const userProperties: Record<string, any> = {
         keyword_count: manualKeywords.length,
         has_orcid: !!profile?.orcid_id,
         signup_date: profile?.created_at || new Date().toISOString()
       }
 
+      // Add email if available - PostHog uses $email to display in dashboard
+      if (userEmail) {
+        userProperties.$email = userEmail
+        userProperties.email = userEmail
+      }
+
       identifyUser(userId, userProperties)
     } catch (error) {
       // Fallback to basic identification if profile fetch fails
-      identifyUser(userId)
+      const fallbackProperties: Record<string, any> = {}
+      if (userEmail) {
+        fallbackProperties.$email = userEmail
+        fallbackProperties.email = userEmail
+      }
+      identifyUser(userId, Object.keys(fallbackProperties).length > 0 ? fallbackProperties : undefined)
     }
   }, [identifyUser, supabase])
 
@@ -103,7 +114,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
               user_id: session.user.id,
             },
           })
-          identifyUserWithProperties(session.user.id)
+          identifyUserWithProperties(session.user.id, session.user.email)
         }
 
         // Handle sign out
@@ -141,7 +152,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           properties: { method: 'email', user_id: userId },
         })
         if (data?.user?.id) {
-          identifyUserWithProperties(data.user.id)
+          identifyUserWithProperties(data.user.id, data.user.email)
         }
       } else {
         trackError('auth_signup', error.message, 'email_signup')
@@ -172,7 +183,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           name: 'auth_login_completed',
           properties: { method: 'email', user_id: data.user.id },
         })
-        identifyUserWithProperties(data.user.id)
+        identifyUserWithProperties(data.user.id, data.user.email)
       } else if (error) {
         trackError('auth_login', error.message, 'email_login')
       }

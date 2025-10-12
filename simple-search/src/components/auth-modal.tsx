@@ -16,10 +16,11 @@ const MODAL_CONTAINER_CLASSES = 'fixed inset-0 z-50 flex items-center justify-ce
 const MODAL_BACKDROP_CLASSES = 'absolute inset-0 bg-slate-900/40 backdrop-blur-sm'
 const MODAL_PANEL_CLASSES = 'relative z-10 w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_30px_80px_rgba(15,23,42,0.25)] my-4 max-h-[90vh] overflow-y-auto'
 const MODAL_HEADER_CLASSES = 'text-center'
-const MODAL_TITLE_CLASSES = 'text-2xl font-semibold text-slate-900'
 const MODAL_SUBTITLE_CLASSES = 'mt-2 text-sm text-slate-600'
-const SWITCH_CONTAINER_CLASSES = 'mt-6 text-center text-sm text-slate-600'
-const SWITCH_BUTTON_CLASSES = 'font-semibold text-sky-600 transition hover:text-sky-700'
+const TABS_CONTAINER_CLASSES = 'flex gap-2 mb-4 bg-slate-100 rounded-lg p-1'
+const TAB_CLASSES = 'flex-1 py-2 px-4 text-sm font-medium rounded-md transition-all duration-200'
+const TAB_ACTIVE_CLASSES = 'bg-white text-slate-900 shadow-sm'
+const TAB_INACTIVE_CLASSES = 'text-slate-600 hover:text-slate-900'
 
 export function AuthModal({ isOpen, mode, onClose, onSwitchMode }: AuthModalProps) {
   // Handle escape key to close modal
@@ -69,15 +70,26 @@ export function AuthModal({ isOpen, mode, onClose, onSwitchMode }: AuthModalProp
           <div className="mb-4">
             <span className="text-sm font-bold uppercase tracking-[0.2em] text-slate-600">Evidentia</span>
           </div>
-          <h2 className={MODAL_TITLE_CLASSES}>
-            {mode === 'login' ? 'Login' : 'Create account'}
-          </h2>
-          <p className={MODAL_SUBTITLE_CLASSES}>
-            {mode === 'login'
-              ? 'Sign in to access your saved research and preferences'
-              : 'Create your account to get started'
-            }
+          <p className="mb-4 text-xs text-slate-500">
+            Evidentia works best on a computer. Please continue on desktop for the full experience.
           </p>
+          {/* Tabs */}
+          <div className={TABS_CONTAINER_CLASSES}>
+            <button
+              type="button"
+              onClick={() => mode === 'signup' && onSwitchMode()}
+              className={`${TAB_CLASSES} ${mode === 'login' ? TAB_ACTIVE_CLASSES : TAB_INACTIVE_CLASSES}`}
+            >
+              Login
+            </button>
+            <button
+              type="button"
+              onClick={() => mode === 'login' && onSwitchMode()}
+              className={`${TAB_CLASSES} ${mode === 'signup' ? TAB_ACTIVE_CLASSES : TAB_INACTIVE_CLASSES}`}
+            >
+              Sign up
+            </button>
+          </div>
         </div>
 
         {/* Form */}
@@ -86,33 +98,6 @@ export function AuthModal({ isOpen, mode, onClose, onSwitchMode }: AuthModalProp
             <LoginForm onSuccess={onClose} onSwitchToSignup={onSwitchMode} />
           ) : (
             <RegisterForm onSuccess={onClose} />
-          )}
-        </div>
-
-        {/* Switch mode */}
-        <div className={SWITCH_CONTAINER_CLASSES}>
-          {mode === 'login' ? (
-            <>
-              Don&apos;t have an account?{' '}
-              <button
-                type="button"
-                onClick={onSwitchMode}
-                className={SWITCH_BUTTON_CLASSES}
-              >
-                Sign up
-              </button>
-            </>
-          ) : (
-            <>
-              Already have an account?{' '}
-              <button
-                type="button"
-                onClick={onSwitchMode}
-                className={SWITCH_BUTTON_CLASSES}
-              >
-                Sign in
-              </button>
-            </>
           )}
         </div>
       </div>

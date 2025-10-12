@@ -1,8 +1,4 @@
 TODO
-update tuturiall
-fix mobile styling
-optimise user tracking
-
 compile similar patents
 
 make ask a questoin feature in paper details page
@@ -10,10 +6,6 @@ add upload button next to checkboxes for user to upload pdf - public or private 
 
 implement share button to ocmmunity - keep this fixed at top of paper details and implement backend
 share tile to community with your comments X style which other people can comment on so its a new tile with the paper tile in subsection in community
-
-
-
-speed up processing
 
 COMMUNITY - NOT URGENT
 share to other platfroms and email

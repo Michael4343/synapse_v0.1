@@ -158,13 +158,18 @@ Person properties are set when a user is identified (login/signup) and provide c
 
 ```typescript
 {
-  keyword_count: number,      // Number of research keywords saved
-  has_orcid: boolean,         // Whether user has connected ORCID
-  signup_date: string         // ISO timestamp of account creation
+  $email: string,            // User's email address (displays in PostHog dashboard)
+  email: string,             // User's email address (backup property)
+  keyword_count: number,     // Number of research keywords saved
+  has_orcid: boolean,        // Whether user has connected ORCID
+  signup_date: string        // ISO timestamp of account creation
 }
 ```
 
+**Email Display:** PostHog uses the `$email` property to display user emails in the dashboard Activity view instead of user IDs, making it easier to identify users.
+
 These properties allow you to:
+- **Identify users** by email address in dashboard (via `$email` property)
 - **Segment users** by engagement level (keyword_count)
 - **Analyze cohorts** by signup date
 - **Track feature adoption** (has_orcid)

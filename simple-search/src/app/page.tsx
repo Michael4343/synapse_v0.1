@@ -13,6 +13,7 @@ import { WelcomeModal } from '../components/welcome-modal';
 import { OrcidSearchModal } from '../components/orcid-search-modal';
 import { VerificationModal } from '../components/verification-modal';
 import { OnboardingTutorial } from '../components/onboarding-tutorial';
+import { TourPromptModal } from '../components/tour-prompt-modal';
 import type { ProfilePersonalization, UserProfile } from '../lib/profile-types';
 import { SaveToListModal } from '../components/save-to-list-modal';
 import { buildVerifyListName, buildCompileListName, savePaperToNamedList } from '../lib/list-actions';
@@ -1066,7 +1067,7 @@ const FEED_CARD_CLASSES = 'flex h-full min-h-0 flex-col space-y-6 px-2 pt-4 pb-1
 const DETAIL_SHELL_CLASSES = 'flex h-full min-h-0 flex-col space-y-6 px-2 pt-4 pb-12 xl:px-4 xl:pb-16';
 const DETAIL_HERO_CLASSES = 'rounded-3xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-4 shadow-inner';
 const TILE_BASE_CLASSES = 'group relative flex cursor-pointer flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 transition duration-150 hover:border-slate-300 hover:bg-slate-50 xl:max-h-[400px] xl:overflow-y-auto';
-const TILE_SELECTED_CLASSES = 'border-sky-400 bg-sky-50 ring-1 ring-sky-100';
+const TILE_SELECTED_CLASSES = 'border-sky-400 bg-sky-100 ring-2 ring-sky-300 shadow-sm';
 const FEED_LOADING_WRAPPER_CLASSES = 'relative flex flex-col gap-3';
 const FEED_SPINNER_CLASSES = 'inline-block h-5 w-5 animate-spin rounded-full border-2 border-sky-500 border-t-transparent';
 const FEED_LOADING_PILL_CLASSES = 'inline-flex items-center gap-2 self-start rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-600 shadow-sm';
@@ -1576,7 +1577,7 @@ function StaticReproReport({
 }
 
 export default function Home() {
-  const { user, signOut } = useAuth();
+  const { user, loading, signOut } = useAuth();
   const authModal = useAuthModal();
   const { trackEvent, trackError } = usePostHogTracking();
 
@@ -1647,12 +1648,15 @@ export default function Home() {
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [showOrcidSearchModal, setShowOrcidSearchModal] = useState(false);
+  const [showTourPrompt, setShowTourPrompt] = useState(false);
+  const [hasSeenInitialAuth, setHasSeenInitialAuth] = useState(false);
   const [openCrosswalkRowKey, setOpenCrosswalkRowKey] =
     useState<LifeSciencesMatrixRowKey | null>(null);
   const [isCrosswalkModalOpen, setIsCrosswalkModalOpen] = useState(false);
 
   const profileManualKeywordsRef = useRef('');
   const isMountedRef = useRef(true);
+  const initialAuthPromptedRef = useRef(false);
   const accountDropdownRef = useRef<HTMLDivElement | null>(null);
   const feedPollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const feedPollCountRef = useRef(0);
@@ -1673,6 +1677,8 @@ export default function Home() {
     previousUserRef.current = user;
     setActiveTab(user ? 'digest' : 'papers');
   }, [user]);
+  const orcidAutoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastAutoSavedOrcidRef = useRef<string>('');
 
   useEffect(() => {
     if (!accountDropdownVisible) {
@@ -1718,6 +1724,54 @@ export default function Home() {
     }
   }, [user]);
 
+  // Auto-save ORCID when a valid ID is entered (handles both typing and autofill)
+  useEffect(() => {
+    // Clear any existing timer
+    if (orcidAutoSaveTimerRef.current) {
+      clearTimeout(orcidAutoSaveTimerRef.current);
+      orcidAutoSaveTimerRef.current = null;
+    }
+
+    const trimmedOrcid = profileFormOrcid.trim();
+
+    // Only auto-save if:
+    // 1. User is logged in
+    // 2. ORCID is not empty
+    // 3. ORCID is valid
+    // 4. ORCID hasn't been auto-saved already
+    // 5. Not currently loading
+    if (!user || !trimmedOrcid || profileEnrichmentLoading) {
+      return;
+    }
+
+    const orcidValidation = validateOrcidId(trimmedOrcid);
+    if (!orcidValidation.isValid) {
+      return;
+    }
+
+    const normalizedOrcid = normalizeOrcidId(trimmedOrcid);
+
+    // Don't auto-save if we already auto-saved this exact ORCID
+    if (normalizedOrcid === lastAutoSavedOrcidRef.current) {
+      return;
+    }
+
+    // Set a timer to auto-save after 1.5 seconds of no changes
+    orcidAutoSaveTimerRef.current = setTimeout(() => {
+      lastAutoSavedOrcidRef.current = normalizedOrcid;
+      handleOrcidSave();
+    }, 1500);
+
+    // Cleanup function
+    return () => {
+      if (orcidAutoSaveTimerRef.current) {
+        clearTimeout(orcidAutoSaveTimerRef.current);
+        orcidAutoSaveTimerRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileFormOrcid, user, profileEnrichmentLoading]);
+
   // Removed getAuthHeaders - now inlined to avoid dependency issues
 
   useEffect(() => {
@@ -1727,17 +1781,43 @@ export default function Home() {
     };
   }, []);
 
-  // Show tutorial for first-time visitors
+  // Show auth modal once auth state has resolved; first-time visitors default to signup
+  useEffect(() => {
+    if (initialAuthPromptedRef.current || loading) {
+      return;
+    }
+
+    if (user || authModal.isOpen) {
+      initialAuthPromptedRef.current = true;
+      return;
+    }
+
+    const hasSeenAuth = localStorage.getItem('evidentia_seen_initial_auth') === 'true';
+    initialAuthPromptedRef.current = true;
+
+    const timer = setTimeout(() => {
+      if (hasSeenAuth) {
+        authModal.openLogin();
+      } else {
+        authModal.openSignup();
+        setHasSeenInitialAuth(true);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [authModal.isOpen, authModal.openLogin, authModal.openSignup, loading, user]);
+
+  // Legacy tutorial logic (kept for backward compatibility)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const tutorialCompleted = localStorage.getItem('evidentia_tutorial_completed');
-    if (!tutorialCompleted && !user) {
+    const hasSeenAuth = localStorage.getItem('evidentia_seen_initial_auth');
+
+    // Only auto-show tutorial if they've already seen the auth flow
+    if (!tutorialCompleted && !user && hasSeenAuth && !tutorialOpen && !showTourPrompt) {
       // Auto-select CRISPR paper for demo
       setSelectedPaper(SAMPLE_PAPERS[0]);
       setVerificationView('paper');
-      // Delay showing tutorial to allow UI to render
-      setTimeout(() => {
-        setTutorialOpen(true);
-      }, 500);
     }
   }, [user]);
 
@@ -2459,10 +2539,16 @@ export default function Home() {
 
   useEffect(() => {
     if (profile) {
-      setProfileFormOrcid(formatOrcidId(profile.orcid_id ?? ''));
+      const formattedOrcid = formatOrcidId(profile.orcid_id ?? '');
+      setProfileFormOrcid(formattedOrcid);
       setProfileFormWebsite(profile.academic_website ?? '');
       setOrcidEditingMode(false);
       setWebsiteEditingMode(false);
+
+      // Set the last auto-saved ORCID to the current profile ORCID to prevent auto-saving on modal open
+      if (formattedOrcid.trim()) {
+        lastAutoSavedOrcidRef.current = normalizeOrcidId(formattedOrcid.trim());
+      }
 
       const currentVersion = profile.profile_enrichment_version ?? 'initial';
       if (manualKeywordsSeededVersion !== currentVersion) {
@@ -2482,6 +2568,7 @@ export default function Home() {
       setProfileFormWebsite('');
       setProfileManualKeywords('');
       setManualKeywordsSeededVersion(null);
+      lastAutoSavedOrcidRef.current = '';
     }
   }, [profile, manualKeywordsSeededVersion]);
 
@@ -2663,6 +2750,11 @@ export default function Home() {
               placeholder="Enter ORCID ID (e.g., 0000-0002-1825-0097)"
               value={profileFormOrcid}
               onChange={(event) => setProfileFormOrcid(formatOrcidId(event.target.value))}
+              onInput={(event) => {
+                // Ensure autofill is captured (some browsers only trigger input, not change)
+                const target = event.target as HTMLInputElement;
+                setProfileFormOrcid(formatOrcidId(target.value));
+              }}
               className={`flex-1 ${PROFILE_INPUT_CLASSES}`}
             />
             <button
@@ -3759,6 +3851,32 @@ export default function Home() {
     authModal.openSignup();
   };
 
+  const handleAuthModalClose = () => {
+    authModal.close();
+
+    // If this is the first time seeing auth and user is not logged in, show tour prompt
+    if (hasSeenInitialAuth && !localStorage.getItem('evidentia_seen_initial_auth') && !user) {
+      localStorage.setItem('evidentia_seen_initial_auth', 'true');
+      setShowTourPrompt(true);
+    }
+  };
+
+  const handleTourPromptYes = () => {
+    setShowTourPrompt(false);
+    // Auto-select CRISPR paper for demo
+    setSelectedPaper(SAMPLE_PAPERS[0]);
+    setVerificationView('paper');
+    // Show tutorial after a brief delay
+    setTimeout(() => {
+      setTutorialOpen(true);
+    }, 300);
+  };
+
+  const handleTourPromptNo = () => {
+    setShowTourPrompt(false);
+    localStorage.setItem('evidentia_tutorial_completed', 'true');
+  };
+
   const handleTutorialStepChange = useCallback((step: number) => {
     const demoPaper = SAMPLE_PAPERS[0];
 
@@ -4664,7 +4782,7 @@ export default function Home() {
             {selectedPaper ? (
               <>
                 {/* Share Discovery */}
-                <div className="px-4 pb-3">
+                <div className="hidden px-4 pb-3 sm:block">
                   <div className={SEARCH_CONTAINER_CLASSES}>
                     <div className="flex w-full items-center">
                       <input
@@ -5056,8 +5174,14 @@ export default function Home() {
       <AuthModal
         isOpen={authModal.isOpen}
         mode={authModal.mode}
-        onClose={authModal.close}
+        onClose={handleAuthModalClose}
         onSwitchMode={authModal.switchMode}
+      />
+      {/* Tour Prompt Modal */}
+      <TourPromptModal
+        isOpen={showTourPrompt}
+        onYes={handleTourPromptYes}
+        onNo={handleTourPromptNo}
       />
       {/* Welcome Modal */}
       <WelcomeModal
